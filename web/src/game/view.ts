@@ -125,11 +125,25 @@ export function canSee(card: CardState, viewer: string): boolean {
   return true;
 }
 
-/** The card as `viewer` sees it. A hidden card keeps only public facts. */
+/**
+ * The card as `viewer` sees it. A hidden card keeps only public facts. On the battlefield,
+ * `power` / `toughness` are the current values with +1/+1 and -1/-1 counters included, which is how
+ * the game server (Forge) reports them.
+ */
 export function redact(card: CardState, viewer: string): CardView {
+  const v = redactFace(card, viewer);
+  const n = (card.counters?.["+1/+1"] ?? 0) - (card.counters?.["-1/-1"] ?? 0);
+  if (v.zone === "battlefield" && v.power !== undefined && n) {
+    v.power += n;
+    v.toughness = (v.toughness ?? 0) + n;
+  }
+  return v;
+}
+
+function redactFace(card: CardState, viewer: string): CardView {
   if (canSee(card, viewer)) {
     const { visibleTo, ...rest } = card;
-    return card.faceDown ? { ...rest, visibleTo } : rest;
+    return card.faceDown ? { ...rest, visibleTo } : { ...rest };
   }
   const v: CardView = { id: card.id, owner: card.owner, controller: card.controller, zone: card.zone, hidden: true };
   if (card.faceDown) {

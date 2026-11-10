@@ -1,6 +1,6 @@
 // Your hand: upright cards in a row from the left. Drag one onto your board or double-click it to
 // play it. While choosing cards to put on the bottom after a mulligan, clicking selects instead.
-import { CardFace, previewFor, usePreview } from "./cards";
+import { CardFace, CostOverlay, PTOverlay, previewFor, usePreview } from "./cards";
 import { DRAG_TYPE, setDrag, type DragData } from "./SeatBoard";
 import type { CardView } from "./view";
 
@@ -45,6 +45,8 @@ export function HandBar(props: {
               onMouseLeave={() => setPreview(null)}
             >
               <CardFace card={c} />
+              <CostOverlay card={c} />
+              <PTOverlay card={c} />
             </button>
           );
         })}

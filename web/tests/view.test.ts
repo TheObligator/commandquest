@@ -45,7 +45,7 @@ test("face-down exile: everyone sees it's there and who may look, only they see 
 
 test("face-down permanents show as 2/2 creatures with their public state only", () => {
   const v = redact(card(1, "Den Protector", { faceDown: true, tapped: true, counters: { "+1/+1": 1 } }), "o1");
-  assert.deepEqual(v, { id: 1, owner: "me", controller: "me", zone: "battlefield", hidden: true, faceDown: true, types: ["Creature"], power: 2, toughness: 2, tapped: true, counters: { "+1/+1": 1 } });
+  assert.deepEqual(v, { id: 1, owner: "me", controller: "me", zone: "battlefield", hidden: true, faceDown: true, types: ["Creature"], power: 3, toughness: 3, tapped: true, counters: { "+1/+1": 1 } });
 });
 
 test("battlefield rows: creatures, other permanents, lands; identical cards pile up", () => {

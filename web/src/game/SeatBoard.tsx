@@ -1,5 +1,6 @@
-// One player's area: header (life, commander damage, counts), their public zones (commander,
-// top of graveyard, top of exile, library) and the battlefield in three rows.
+// One player's area: header (life, poison, commander damage), the battlefield in three rows, and
+// along the bottom-left their zones as card tiles: library (a card back), top of graveyard, top of
+// exile and the commander, each labelled with its count, plus how many cards they hold.
 //
 // Cards shrink to fit the seat so a board never scrolls until cards would get unreadably small.
 // You can drag cards to another row or position on any board; that only changes your own view.
@@ -111,7 +112,6 @@ export function SeatBoard(props: {
           </span>
         ))}
         <span className="sb-spacer" />
-        <span className="sb-count" title="Cards in hand">✋ {p.handCount}</span>
         {props.onFocus && (
           <button className="sb-focus" onClick={props.onFocus} title={props.focused ? "Back to the table (Esc)" : "Enlarge this board"} aria-pressed={props.focused}>
             {props.focused ? "✕" : "⤢"}
@@ -120,16 +120,21 @@ export function SeatBoard(props: {
       </header>
 
       <div className="sb-body">
-        <div className="sb-zones">
-          <ZoneTile label={`Cmdr · +${2 * p.commanderCasts}`} card={top(p.command)} empty="On battlefield" hover={hover} hint="Command zone · commander tax"
-            onClick={isMe && p.command.length ? props.onCastCommander : undefined} title={isMe && p.command.length ? "Cast your commander" : undefined} />
-          <ZoneTile label={`GY · ${p.graveyard.length}`} card={top(p.graveyard)} hover={hover}
-            onClick={() => props.onOpenZone(p.id, "graveyard")} title="See the graveyard" />
-          <ZoneTile label={`Exile · ${p.exile.length}`} card={top(p.exile)} hover={hover}
-            onClick={() => props.onOpenZone(p.id, "exile")} title="See exiled cards" />
-          <ZoneTile label={`Lib · ${p.libraryCount}`} back={p.libraryCount > 0} />
-        </div>
         <Battlefield {...props} hover={hover} isMe={isMe} />
+        <div className="sb-zones">
+          <span className="sb-hand" title={`${p.handCount} card${p.handCount === 1 ? "" : "s"} in hand`}>
+            <i className="mini-card" aria-hidden />
+            {p.handCount}
+          </span>
+          <ZoneTile label="Lib" count={p.libraryCount} back={p.libraryCount > 0} hint={`Library: ${p.libraryCount} cards`} />
+          <ZoneTile label="GY" count={p.graveyard.length} card={top(p.graveyard)} hover={hover}
+            onClick={() => props.onOpenZone(p.id, "graveyard")} title="See the graveyard" />
+          <ZoneTile label="Exile" count={p.exile.length} card={top(p.exile)} hover={hover}
+            onClick={() => props.onOpenZone(p.id, "exile")} title="See exiled cards" />
+          <ZoneTile label="Cmd" extra={p.commanderCasts ? `+${2 * p.commanderCasts}` : undefined} card={top(p.command)} empty="In play" hover={hover}
+            hint={`Command zone${p.commanderCasts ? ` · commander tax +${2 * p.commanderCasts}` : ""}`}
+            onClick={isMe && p.command.length ? props.onCastCommander : undefined} title={isMe && p.command.length ? "Cast your commander" : undefined} />
+        </div>
       </div>
     </section>
   );
@@ -137,6 +142,9 @@ export function SeatBoard(props: {
 
 function ZoneTile(props: {
   label: string;
+  count?: number;
+  /** Shown after the label, e.g. commander tax. */
+  extra?: string;
   card?: CardView;
   back?: boolean;
   empty?: string;
@@ -149,6 +157,12 @@ function ZoneTile(props: {
   const Tag = props.onClick ? "button" : "div";
   return (
     <Tag className="zone-tile" onClick={props.onClick} title={props.title ?? props.hint} {...(card && props.hover ? props.hover(card) : {})}>
+      <span className="zt-label">
+        {props.label}
+        {props.count !== undefined && <b>{props.count}</b>}
+        {props.extra && <b className="zt-extra">{props.extra}</b>}
+        {props.onClick && props.label !== "Cmd" && <i aria-hidden>⌄</i>}
+      </span>
       <div className="zt-card">
         {card ? (
           <>
@@ -161,7 +175,6 @@ function ZoneTile(props: {
           <div className="zt-empty">{props.empty ?? ""}</div>
         )}
       </div>
-      <span className="zt-label">{props.label}</span>
     </Tag>
   );
 }

@@ -1,6 +1,7 @@
 // Card tiles for the game table: Scryfall images, card backs for hidden cards, styled tiles for
 // tokens, and the hover preview shared across the table.
 import { createContext, useContext, useEffect, useState } from "react";
+import { ManaCost } from "../components/ManaCost";
 import { cached, imageUrl, resolve } from "../scryfall";
 import type { CardView } from "./view";
 
@@ -67,17 +68,54 @@ export function CardFace({ card, size = "normal", knownFaceDown }: { card: CardV
 
 const plus = (c: CardView) => c.counters?.["+1/+1"] ?? 0;
 
-export function CardBadges({ card, showPT }: { card: CardView; showPT?: boolean }) {
-  const pt = card.power !== undefined && card.types?.includes("Creature");
+/** What's printed on the card (front face), from Scryfall: mana cost and P/T. */
+function printed(name: string | undefined) {
+  const sc = name ? cached({ name, quantity: 1, board: "main" }) : undefined;
+  if (!sc) return undefined;
+  const face = sc.card_faces?.[0];
+  return { cost: sc.mana_cost || face?.mana_cost, power: sc.power ?? face?.power, toughness: sc.toughness ?? face?.toughness };
+}
+
+/** The mana cost, large, over the printed one (cards in hand), so it reads at a glance. */
+export function CostOverlay({ card }: { card: CardView }) {
+  if (card.hidden || card.token) return null;
+  const cost = printed(card.name)?.cost;
+  if (!cost) return null;
+  return (
+    <span className="cost-ov" aria-label={`Mana cost ${cost}`}>
+      <ManaCost cost={cost} />
+    </span>
+  );
+}
+
+/**
+ * Power / toughness, large, over the printed P/T box. On the battlefield it's the current value
+ * (counters and effects included), green when above what's printed and red when below.
+ */
+export function PTOverlay({ card }: { card: CardView }) {
+  const p = card.hidden ? undefined : printed(card.name);
+  const inPlay = card.zone === "battlefield";
+  const power = inPlay ? card.power : p?.power;
+  const toughness = inPlay ? card.toughness : p?.toughness;
+  if (power === undefined || toughness === undefined) return null;
+  if (inPlay && !card.types?.includes("Creature")) return null; // an uncrewed vehicle's P/T isn't in play
+  const base = (v: string | undefined) => (v !== undefined && /^\d+$/.test(v) ? Number(v) : undefined);
+  const cmp = (now: number | string, was: number | undefined) =>
+    typeof now !== "number" || was === undefined || card.hidden ? "" : now > was ? " up" : now < was ? " down" : "";
+  const flag = inPlay ? cmp(power, base(p?.power)) || cmp(toughness, base(p?.toughness)) : "";
+  return (
+    <span className={`pt-ov${flag}${card.token || card.hidden ? " tile" : ""}`} title={inPlay && p?.power !== undefined ? `Printed ${p.power}/${p.toughness}` : undefined}>
+      {power}/{toughness}
+    </span>
+  );
+}
+
+export function CardBadges({ card }: { card: CardView }) {
   const boosted = plus(card) !== 0;
   const others = Object.entries(card.counters ?? {}).filter(([k]) => k !== "+1/+1");
   return (
     <>
-      {pt && (showPT || boosted || card.token || card.hidden) && (
-        <span className={`pt${boosted ? " boosted" : ""}`}>
-          {(card.power ?? 0) + plus(card)}/{(card.toughness ?? 0) + plus(card)}
-        </span>
-      )}
+      <PTOverlay card={card} />
       {boosted && <span className="ctr">+{plus(card)}</span>}
       {others.map(([k, n]) => (
         <span key={k} className="ctr other">{n} {k}</span>

@@ -35,13 +35,17 @@ The game screen. The board itself is `web/src/game/TableBoard.tsx`, shared by tw
 
 ## A seat
 
-- Header: name, life, commander damage taken (♛, in the attacking commander's color), cards in hand.
-- Public zones, always visible: commander (with tax), top of graveyard, top of exile, library
-  count. Click graveyard or exile to see every card in it.
+- Header: name, life, poison, commander damage taken (♛, in the attacking commander's color).
+- Along the bottom-left (on the left in the stacked layout), the zones as card tiles, each with a
+  label and count: library (a card back), top of graveyard, top of exile, the commander (with its
+  tax), and how many cards are in hand. Click graveyard or exile to see every card in it.
 - Battlefield in three rows: creatures, other permanents, lands. Identical cards pile up with a ×N
   badge. Cards shrink to fit the seat. Drag cards to another row or position to arrange a board;
   that's only your view and never goes to the server.
 - Your hand: upright cards from the left. Drag one onto your board, or double-click it, to play it.
+- Big overlays sit over the printed boxes so they read at a glance: the mana cost on cards in hand,
+  and P/T on creatures. On the battlefield P/T is the current value (counters and effects
+  included), green when above what's printed and red when below.
 
 ## Hidden information
 
