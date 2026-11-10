@@ -56,10 +56,13 @@ jobs:
   frontend:
     runs-on: ubuntu-latest
     steps:
-      # Only web/ is needed, which skips checking out Forge's ~30k card scripts.
+      # Only web/ is needed, which skips checking out Forge's ~30k card scripts, plus
+      # PhaseType.java, which tests/phases.test.ts checks the client's step ids against.
       - uses: actions/checkout@v5
         with:
-          sparse-checkout: web
+          sparse-checkout: |
+            web
+            forge-game/src/main/java/forge/game/phase
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
