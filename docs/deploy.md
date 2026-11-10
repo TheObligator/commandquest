@@ -74,28 +74,6 @@ Add both addresses as authorized redirect URIs in the Google and Discord OAuth a
 Optionally, on the `production` environment restrict deployment branches to `live` and add a
 required reviewer, so nothing reaches the public site without a click.
 
-### Human check (Cloudflare Turnstile)
-
-The Worker (`web/worker/`) shows first-time visitors a Turnstile check before the site loads. Passing it
-sets a signed `cq_human` cookie for 30 days, so they aren't asked again. Until both keys below are
-set for a Worker, it serves the site with no check.
-
-1. Cloudflare dashboard → **Turnstile → Add widget**: hostnames `commandquest.app` and
-   `staging.commandquest.app`, mode **Managed**. Note the site key and the secret key.
-2. Put the site key (public) in both `"vars"` blocks of `web/wrangler.jsonc` and commit it.
-3. Set the secret on each Worker once (it survives deploys):
-
-   ```sh
-   cd web
-   npx wrangler@4.149.0 secret put TURNSTILE_SECRET               # commandquest
-   npx wrangler@4.149.0 secret put TURNSTILE_SECRET --env staging # commandquest-staging
-   ```
-
-Changing the secret logs everyone out of the check (their cookies stop verifying), which is also how
-to reset it. Only page loads are checked, so CI's `curl` smoke test still passes. To try it locally,
-use Turnstile's test keys (site key `1x00000000000000000000AA`, secret
-`1x0000000000000000000000000000000AA`) with `wrangler dev` after a build.
-
 ## Not covered yet
 
 The Java game server runs on the Mac (docs/game-host.md) and is deployed there by hand with
