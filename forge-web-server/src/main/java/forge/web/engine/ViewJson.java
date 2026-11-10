@@ -89,7 +89,7 @@ public final class ViewJson {
         ObjectNode cmdDmg = o.putObject("commanderDamage");
         for (PlayerView owner : seating) {
             int total = 0;
-            for (CardView c : owner.getCommanders()) {
+            for (CardView c : commanders(owner)) {
                 total += p.getCommanderDamage(c);
             }
             if (total > 0) {
@@ -97,7 +97,7 @@ public final class ViewJson {
             }
         }
         int casts = 0;
-        for (CardView c : p.getCommanders()) {
+        for (CardView c : commanders(p)) {
             casts += p.getCommanderCast(c);
         }
         o.put("commanderCasts", casts);
@@ -109,6 +109,12 @@ public final class ViewJson {
         o.set("exile", cards(gv, p.getExile(), viewer));
         o.set("command", cards(gv, p.getCommand(), viewer));
         return o;
+    }
+
+    /** Empty (not null) before Forge has set up the commanders. */
+    private static List<CardView> commanders(PlayerView p) {
+        List<CardView> c = p.getCommanders();
+        return c == null ? List.of() : c;
     }
 
     private ArrayNode cards(GameView gv, Iterable<CardView> cards, PlayerView viewer) {

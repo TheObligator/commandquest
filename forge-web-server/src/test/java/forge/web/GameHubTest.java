@@ -147,36 +147,38 @@ public class GameHubTest {
                 }
             }
 
-            // The last land's state update may still be on its way.
-            long settle = System.currentTimeMillis() + 15_000;
-            while (state.path("players").get(0).path("battlefield").size() < 2 && System.currentTimeMillis() < settle) {
-                String s = b.inbox.poll(500, TimeUnit.MILLISECONDS);
-                if (s == null) {
-                    continue;
+            try {
+                // The last land's state update may still be on its way.
+                long settle = System.currentTimeMillis() + 15_000;
+                while (state.path("players").get(0).path("battlefield").size() < 2 && System.currentTimeMillis() < settle) {
+                    String s = b.inbox.poll(500, TimeUnit.MILLISECONDS);
+                    if (s == null) {
+                        continue;
+                    }
+                    JsonNode m = json.readTree(s);
+                    if (m.path("t").asText().equals("state")) {
+                        state = m.path("view");
+                    } else if (m.path("t").asText().equals("prompt") && m.path("ok").path("enabled").asBoolean()) {
+                        ws.sendText("{\"t\":\"ok\"}", true);
+                    }
                 }
-                JsonNode m = json.readTree(s);
-                if (m.path("t").asText().equals("state")) {
-                    state = m.path("view");
-                } else if (m.path("t").asText().equals("prompt") && m.path("ok").path("enabled").asBoolean()) {
-                    ws.sendText("{\"t\":\"ok\"}", true);
+                Assert.assertTrue(prompts > 3, "Forge's prompts reached the browser");
+                Assert.assertTrue(landsPlayed >= 2, "played lands: " + landsPlayed);
+                me = state.path("players").get(0);
+                Assert.assertTrue(me.path("battlefield").size() >= 2, "our lands are on the battlefield");
+                Assert.assertTrue(me.path("hand").size() > 0, "we see our own hand");
+                Assert.assertEquals(me.path("command").size() + countCommander(me.path("battlefield")), 1, "our commander is visible");
+                for (int i = 1; i < 4; i++) {
+                    JsonNode opp = state.path("players").get(i);
+                    Assert.assertEquals(opp.path("hand").size(), 0, "an opponent's hand is never sent");
+                    Assert.assertTrue(opp.path("handCount").asInt() > 0, "but its size is");
+                    Assert.assertTrue(opp.path("libraryCount").asInt() > 50, "library is a count");
+                    Assert.assertTrue(opp.path("name").asText().startsWith("AI "));
                 }
-            }
-            Assert.assertTrue(prompts > 3, "Forge's prompts reached the browser");
-            if (landsPlayed < 2) {
-                trace.subList(0, Math.max(0, trace.size() - 40)).clear();
+            } catch (AssertionError e) {
+                trace.subList(0, Math.max(0, trace.size() - 60)).clear();
                 System.out.println("[hub-test] last messages:\n  " + String.join("\n  ", trace));
-            }
-            Assert.assertTrue(landsPlayed >= 2, "played lands: " + landsPlayed);
-            me = state.path("players").get(0);
-            Assert.assertTrue(me.path("battlefield").size() >= 2, "our lands are on the battlefield");
-            Assert.assertTrue(me.path("hand").size() > 0, "we see our own hand");
-            Assert.assertEquals(me.path("command").size() + countCommander(me.path("battlefield")), 1, "our commander is visible");
-            for (int i = 1; i < 4; i++) {
-                JsonNode opp = state.path("players").get(i);
-                Assert.assertEquals(opp.path("hand").size(), 0, "an opponent's hand is never sent");
-                Assert.assertTrue(opp.path("handCount").asInt() > 0, "but its size is");
-                Assert.assertTrue(opp.path("libraryCount").asInt() > 50, "library is a count");
-                Assert.assertTrue(opp.path("name").asText().startsWith("AI "));
+                throw e;
             }
         } finally {
             ws.sendClose(WebSocket.NORMAL_CLOSURE, "done");

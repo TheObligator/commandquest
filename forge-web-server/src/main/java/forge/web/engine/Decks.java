@@ -77,6 +77,7 @@ public final class Decks {
         if (files == null || files.length < count) {
             throw new IllegalStateException("No Commander precons in " + dir);
         }
+        Arrays.sort(files); // the same pool order on every OS, so a seeded game picks the same decks
         List<File> pool = new ArrayList<>(Arrays.asList(files));
         List<Deck> decks = new ArrayList<>();
         while (decks.size() < count && !pool.isEmpty()) {
