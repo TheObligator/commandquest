@@ -1,0 +1,23 @@
+// Cloudflare Workers config for the website: a static-assets-only Worker (no script).
+// CI deploys it (.github/workflows/web.yml, see docs/deploy.md):
+//   `wrangler deploy`               -> Worker "commandquest"         at commandquest.app
+//   `wrangler deploy --env staging` -> Worker "commandquest-staging" at staging.commandquest.app
+// Custom domains create their own DNS records on deploy (the zone is on Cloudflare).
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "commandquest",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    // The client uses a hash router, so every real request is for index.html or a file in dist.
+    "directory": "./dist"
+  },
+  // Only reachable at our own domains, not at an extra *.workers.dev address.
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "commandquest.app", "custom_domain": true }],
+  "env": {
+    "staging": {
+      "routes": [{ "pattern": "staging.commandquest.app", "custom_domain": true }]
+    }
+  }
+}
