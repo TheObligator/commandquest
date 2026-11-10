@@ -1,0 +1,508 @@
+{
+ "Badlands": {
+  "name": "Badlands",
+  "layout": "normal",
+  "type_line": "Land — Swamp Mountain",
+  "mana_cost": "",
+  "oracle_text": "({T}: Add {B} or {R}.)",
+  "color_identity": [
+   "B",
+   "R"
+  ],
+  "keywords": [],
+  "reserved": true,
+  "legalities": {
+   "vintage": "legal"
+  }
+ },
+ "Sol Ring": {
+  "name": "Sol Ring",
+  "layout": "normal",
+  "type_line": "Artifact",
+  "mana_cost": "{1}",
+  "oracle_text": "{T}: Add {C}{C}.",
+  "color_identity": [],
+  "keywords": [],
+  "reserved": false,
+  "legalities": {
+   "vintage": "restricted"
+  }
+ },
+ "Invoke Prejudice": {
+  "name": "Invoke Prejudice",
+  "layout": "normal",
+  "type_line": "Enchantment",
+  "mana_cost": "{U}{U}{U}{U}",
+  "oracle_text": "Whenever an opponent casts a creature spell that doesn't share a color with a creature you control, counter that spell unless that player pays {X}, where X is its mana value.",
+  "color_identity": [
+   "U"
+  ],
+  "keywords": [],
+  "reserved": true,
+  "legalities": {
+   "vintage": "banned"
+  }
+ },
+ "Brago's Favor": {
+  "name": "Brago's Favor",
+  "layout": "normal",
+  "type_line": "Conspiracy",
+  "mana_cost": "",
+  "oracle_text": "Hidden agenda (Start the game with this conspiracy face down in the command zone and secretly choose a card name. You may turn this conspiracy face up any time and reveal that name.)\nSpells with the chosen name you cast cost {1} less to cast.",
+  "color_identity": [],
+  "keywords": [
+   "Hidden agenda"
+  ],
+  "reserved": false,
+  "legalities": {
+   "vintage": "banned"
+  }
+ },
+ "Kitchen Finks": {
+  "name": "Kitchen Finks",
+  "layout": "normal",
+  "type_line": "Creature — Ouphe",
+  "mana_cost": "{1}{G/W}{G/W}",
+  "oracle_text": "When this creature enters, you gain 2 life.\nPersist (When this creature dies, if it had no -1/-1 counters on it, return it to the battlefield under its owner's control with a -1/-1 counter on it.)",
+  "color_identity": [
+   "G",
+   "W"
+  ],
+  "keywords": [
+   "Persist"
+  ],
+  "reserved": false,
+  "legalities": {
+   "vintage": "legal"
+  }
+ },
+ "Boros Reckoner": {
+  "name": "Boros Reckoner",
+  "layout": "normal",
+  "type_line": "Creature — Minotaur Wizard",
+  "mana_cost": "{R/W}{R/W}{R/W}",
+  "oracle_text": "Whenever this creature is dealt damage, it deals that much damage to any target.\n{R/W}: This creature gains first strike until end of turn.",
+  "color_identity": [
+   "R",
+   "W"
+  ],
+  "keywords": [],
+  "reserved": false,
+  "legalities": {
+   "vintage": "legal"
+  }
+ },
+ "Spectral Procession": {
+  "name": "Spectral Procession",
+  "layout": "normal",
+  "type_line": "Sorcery",
+  "mana_cost": "{2/W}{2/W}{2/W}",
+  "oracle_text": "Create three 1/1 white Spirit creature tokens with flying.",
+  "color_identity": [
+   "W"
+  ],
+  "keywords": [],
+  "reserved": false,
+  "legalities": {
+   "vintage": "legal"
+  }
+ },
+ "Delver of Secrets": {
+  "name": "Delver of Secrets // Insectile Aberration",
+  "layout": "transform",
+  "type_line": "Creature — Human Wizard // Creature — Human Insect",
+  "color_identity": [
+   "U"
+  ],
+  "keywords": [
+   "Flying",
+   "Transform"
+  ],
+  "reserved": false,
+  "legalities": {
+   "vintage": "legal"
+  },
+  "card_faces": [
+   {
+    "name": "Delver of Secrets",
+    "type_line": "Creature — Human Wizard",
+    "mana_cost": "{U}",
+    "oracle_text": "At the beginning of your upkeep, look at the top card of your library. You may reveal that card. If an instant or sorcery card is revealed this way, transform this creature."
+   },
+   {
+    "name": "Insectile Aberration",
+    "type_line": "Creature — Human Insect",
+    "mana_cost": "",
+    "oracle_text": "Flying",
+    "color_indicator": [
+     "U"
+    ]
+   }
+  ]
+ },
+ "Westvale Abbey": {
+  "name": "Westvale Abbey // Ormendahl, Profane Prince",
+  "layout": "transform",
+  "type_line": "Land // Legendary Creature — Demon",
+  "color_identity": [
+   "B"
+  ],
+  "keywords": [
+   "Flying",
+   "Lifelink",
+   "Indestructible",
+   "Transform",
+   "Haste"
+  ],
+  "reserved": false,
+  "legalities": {
+   "vintage": "legal"
+  },
+  "card_faces": [
+   {
+    "name": "Westvale Abbey",
+    "type_line": "Land",
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{5}, {T}, Pay 1 life: Create a 1/1 white and black Human Cleric creature token.\n{5}, {T}, Sacrifice five creatures: Transform this land, then untap it."
+   },
+   {
+    "name": "Ormendahl, Profane Prince",
+    "type_line": "Legendary Creature — Demon",
+    "mana_cost": "",
+    "oracle_text": "Flying, lifelink, indestructible, haste",
+    "color_indicator": [
+     "B"
+    ]
+   }
+  ]
+ },
+ "Agadeem's Awakening": {
+  "name": "Agadeem's Awakening // Agadeem, the Undercrypt",
+  "layout": "modal_dfc",
+  "type_line": "Sorcery // Land",
+  "color_identity": [
+   "B"
+  ],
+  "keywords": [],
+  "reserved": false,
+  "legalities": {
+   "vintage": "legal"
+  },
+  "card_faces": [
+   {
+    "name": "Agadeem's Awakening",
+    "type_line": "Sorcery",
+    "mana_cost": "{X}{B}{B}{B}",
+    "oracle_text": "Return from your graveyard to the battlefield any number of target creature cards that each have a different mana value X or less."
+   },
+   {
+    "name": "Agadeem, the Undercrypt",
+    "type_line": "Land",
+    "mana_cost": "",
+    "oracle_text": "As this land enters, you may pay 3 life. If you don't, it enters tapped.\n{T}: Add {B}."
+   }
+  ]
+ },
+ "Wyleth, Soul of Steel": {
+  "name": "Wyleth, Soul of Steel",
+  "layout": "normal",
+  "type_line": "Legendary Creature — Human Warrior",
+  "mana_cost": "{1}{R}{W}",
+  "oracle_text": "Trample\nWhenever Wyleth attacks, draw a card for each Aura and Equipment attached to it.",
+  "color_identity": [
+   "R",
+   "W"
+  ],
+  "keywords": [
+   "Trample"
+  ],
+  "reserved": false,
+  "legalities": {
+   "vintage": "legal"
+  }
+ },
+ "Raised by Giants": {
+  "name": "Raised by Giants",
+  "layout": "normal",
+  "type_line": "Legendary Enchantment — Background",
+  "mana_cost": "{5}{G}",
+  "oracle_text": "Commander creatures you own have base power and toughness 10/10 and are Giants in addition to their other types.",
+  "color_identity": [
+   "G"
+  ],
+  "keywords": [],
+  "reserved": false,
+  "legalities": {
+   "vintage": "legal"
+  }
+ },
+ "Faceless Haven": {
+  "name": "Faceless Haven",
+  "layout": "normal",
+  "type_line": "Snow Land",
+  "mana_cost": "",
+  "oracle_text": "{T}: Add {C}.\n{S}{S}{S}: This land becomes a 4/3 creature with vigilance and all creature types until end of turn. It's still a land. ({S} can be paid with one mana from a snow source.)",
+  "color_identity": [],
+  "keywords": [],
+  "reserved": false,
+  "legalities": {
+   "vintage": "legal"
+  }
+ },
+ "Relentless Rats": {
+  "name": "Relentless Rats",
+  "layout": "normal",
+  "type_line": "Creature — Rat",
+  "mana_cost": "{1}{B}{B}",
+  "oracle_text": "This creature gets +1/+1 for each other creature on the battlefield named Relentless Rats.\nA deck can have any number of cards named Relentless Rats.",
+  "color_identity": [
+   "B"
+  ],
+  "keywords": [],
+  "reserved": false,
+  "legalities": {
+   "vintage": "legal"
+  }
+ },
+ "Seven Dwarves": {
+  "name": "Seven Dwarves",
+  "layout": "normal",
+  "type_line": "Creature — Dwarf",
+  "mana_cost": "{1}{R}",
+  "oracle_text": "This creature gets +1/+1 for each other creature named Seven Dwarves you control.\nA deck can have up to seven cards named Seven Dwarves.",
+  "color_identity": [
+   "R"
+  ],
+  "keywords": [],
+  "reserved": false,
+  "legalities": {
+   "vintage": "legal"
+  }
+ },
+ "Kytheon, Hero of Akros": {
+  "name": "Kytheon, Hero of Akros // Gideon, Battle-Forged",
+  "layout": "transform",
+  "type_line": "Legendary Creature — Human Soldier // Legendary Planeswalker — Gideon",
+  "color_identity": [
+   "W"
+  ],
+  "keywords": [
+   "Transform"
+  ],
+  "reserved": false,
+  "legalities": {
+   "vintage": "legal"
+  },
+  "card_faces": [
+   {
+    "name": "Kytheon, Hero of Akros",
+    "type_line": "Legendary Creature — Human Soldier",
+    "mana_cost": "{W}",
+    "oracle_text": "At end of combat, if Kytheon and at least two other creatures attacked this combat, exile Kytheon, then return him to the battlefield transformed under his owner's control.\n{2}{W}: Kytheon gains indestructible until end of turn."
+   },
+   {
+    "name": "Gideon, Battle-Forged",
+    "type_line": "Legendary Planeswalker — Gideon",
+    "mana_cost": "",
+    "oracle_text": "+2: Up to one target creature an opponent controls attacks Gideon during its controller's next turn if able.\n+1: Until your next turn, target creature gains indestructible. Untap that creature.\n0: Until end of turn, Gideon becomes a 4/4 Human Soldier creature with indestructible that's still a planeswalker. Prevent all damage that would be dealt to him this turn.",
+    "color_indicator": [
+     "W"
+    ]
+   }
+  ]
+ },
+ "Smuggler's Copter": {
+  "name": "Smuggler's Copter",
+  "layout": "normal",
+  "type_line": "Artifact — Vehicle",
+  "mana_cost": "{2}",
+  "oracle_text": "Flying\nWhenever this Vehicle attacks or blocks, you may draw a card. If you do, discard a card.\nCrew 1 (Tap any number of creatures you control with total power 1 or more: This Vehicle becomes an artifact creature until end of turn.)",
+  "color_identity": [],
+  "keywords": [
+   "Flying",
+   "Crew"
+  ],
+  "reserved": false,
+  "legalities": {
+   "vintage": "legal"
+  }
+ },
+ "Shorikai, Genesis Engine": {
+  "name": "Shorikai, Genesis Engine",
+  "layout": "normal",
+  "type_line": "Legendary Artifact — Vehicle",
+  "mana_cost": "{2}{W}{U}",
+  "oracle_text": "{1}, {T}: Draw two cards, then discard a card. Create a 1/1 colorless Pilot creature token with \"This token crews Vehicles as though its power were 2 greater.\"\nCrew 8 (Tap any number of creatures you control with total power 8 or more: This Vehicle becomes an artifact creature until end of turn.)",
+  "color_identity": [
+   "U",
+   "W"
+  ],
+  "keywords": [
+   "Crew"
+  ],
+  "reserved": false,
+  "legalities": {
+   "vintage": "legal"
+  }
+ },
+ "Sensei's Divining Top": {
+  "name": "Sensei's Divining Top",
+  "layout": "normal",
+  "type_line": "Artifact",
+  "mana_cost": "{1}",
+  "oracle_text": "{1}: Look at the top three cards of your library, then put them back in any order.\n{T}: Draw a card, then put this artifact on top of its owner's library.",
+  "color_identity": [],
+  "keywords": [],
+  "reserved": false,
+  "legalities": {
+   "vintage": "legal"
+  }
+ },
+ "Tymna the Weaver": {
+  "name": "Tymna the Weaver",
+  "layout": "normal",
+  "type_line": "Legendary Creature — Human Cleric",
+  "mana_cost": "{1}{W}{B}",
+  "oracle_text": "Lifelink\nAt the beginning of each of your postcombat main phases, you may pay X life, where X is the number of opponents that were dealt combat damage this turn. If you do, draw X cards.\nPartner (You can have two commanders if both have partner.)",
+  "color_identity": [
+   "B",
+   "W"
+  ],
+  "keywords": [
+   "Lifelink",
+   "Partner"
+  ],
+  "reserved": false,
+  "legalities": {
+   "vintage": "legal"
+  }
+ },
+ "Kraum, Ludevic's Opus": {
+  "name": "Kraum, Ludevic's Opus",
+  "layout": "normal",
+  "type_line": "Legendary Creature — Zombie Horror",
+  "mana_cost": "{3}{U}{R}",
+  "oracle_text": "Flying, haste\nWhenever an opponent casts their second spell each turn, draw a card.\nPartner (You can have two commanders if both have partner.)",
+  "color_identity": [
+   "R",
+   "U"
+  ],
+  "keywords": [
+   "Flying",
+   "Haste",
+   "Partner"
+  ],
+  "reserved": false,
+  "legalities": {
+   "vintage": "legal"
+  }
+ },
+ "Transguild Courier": {
+  "name": "Transguild Courier",
+  "layout": "normal",
+  "type_line": "Artifact Creature — Golem",
+  "mana_cost": "{4}",
+  "oracle_text": "Transguild Courier is all colors.",
+  "color_identity": [
+   "B",
+   "G",
+   "R",
+   "U",
+   "W"
+  ],
+  "keywords": [],
+  "reserved": false,
+  "legalities": {
+   "vintage": "legal"
+  }
+ },
+ "Syndicate Enforcer": {
+  "name": "Syndicate Enforcer",
+  "layout": "normal",
+  "type_line": "Creature — Human Rogue",
+  "mana_cost": "{3}{B}",
+  "oracle_text": "Extort (Whenever you cast a spell, you may pay {W/B}. If you do, each opponent loses 1 life and you gain that much life.)",
+  "color_identity": [
+   "B"
+  ],
+  "keywords": [
+   "Extort"
+  ],
+  "reserved": false,
+  "legalities": {
+   "vintage": "legal"
+  }
+ },
+ "Atraxa, Praetors' Voice": {
+  "name": "Atraxa, Praetors' Voice",
+  "layout": "normal",
+  "type_line": "Legendary Creature — Phyrexian Angel Horror",
+  "mana_cost": "{G}{W}{U}{B}",
+  "oracle_text": "Flying, vigilance, deathtouch, lifelink\nAt the beginning of your end step, proliferate. (Choose any number of permanents and/or players, then give each another counter of each kind already there.)",
+  "color_identity": [
+   "B",
+   "G",
+   "U",
+   "W"
+  ],
+  "keywords": [
+   "Deathtouch",
+   "Flying",
+   "Lifelink",
+   "Vigilance",
+   "Proliferate"
+  ],
+  "reserved": false,
+  "legalities": {
+   "vintage": "legal"
+  }
+ },
+ "Kenrith's Transformation": {
+  "name": "Kenrith's Transformation",
+  "layout": "normal",
+  "type_line": "Enchantment — Aura",
+  "mana_cost": "{1}{G}",
+  "oracle_text": "Enchant creature\nWhen this Aura enters, draw a card.\nEnchanted creature loses all abilities and is a green Elk creature with base power and toughness 3/3. (It loses all other card types and creature types.)",
+  "color_identity": [
+   "G"
+  ],
+  "keywords": [
+   "Enchant"
+  ],
+  "reserved": false,
+  "legalities": {
+   "vintage": "legal"
+  }
+ },
+ "Plains": {
+  "name": "Plains",
+  "layout": "normal",
+  "type_line": "Basic Land — Plains",
+  "mana_cost": "",
+  "oracle_text": "({T}: Add {W}.)",
+  "color_identity": [
+   "W"
+  ],
+  "keywords": [],
+  "reserved": false,
+  "legalities": {
+   "vintage": "legal"
+  }
+ },
+ "Space Beleren": {
+  "name": "Space Beleren",
+  "layout": "normal",
+  "type_line": "Legendary Planeswalker — Jace",
+  "mana_cost": "{2}{W}{U}",
+  "oracle_text": "Space sculptor (Space Beleren divides the battlefield into alpha, beta, and gamma sectors. If a creature isn't assigned to a sector, its controller assigns it to one. Opponents assign first.)\n+1: Creatures in each sector can be blocked this turn only by creatures in the same sector.\n−1: Put a +1/+1 counter on each creature in the sector of your choice.\n−5: Destroy all creatures in the sector of your choice.",
+  "color_identity": [
+   "U",
+   "W"
+  ],
+  "keywords": [],
+  "reserved": false,
+  "legalities": {
+   "vintage": "legal"
+  }
+ }
+}

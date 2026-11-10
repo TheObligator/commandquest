@@ -1,0 +1,31 @@
+{
+  "name": "forge-web",
+  "private": true,
+  "version": "0.0.0",
+  "license": "GPL-3.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:all": "node scripts/dev-all.mjs",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"tests/**/*.test.ts\"",
+    "build:staging": "tsc && vite build --mode staging",
+    "convex:local": "CONVEX_AGENT_MODE=anonymous convex dev --env-file .env.convex.local"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "5.2.0",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.5"
+  },
+  "dependencies": {
+    "@auth/core": "0.41.3",
+    "@convex-dev/auth": "0.0.96",
+    "convex": "1.49.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  }
+}
