@@ -9,6 +9,8 @@ import { useCardData } from "../game/cards";
 import { LiveRail } from "../game/LiveRail";
 import { LayoutPicker, TableBoard, useStored, useTableStops, type LayoutId } from "../game/TableBoard";
 import { useLiveGame, type DeckPayload } from "../game/useLiveGame";
+import { tokenArtMap } from "../tokens";
+import { useDeckTokens } from "../useDeckTokens";
 import type { GameView } from "../game/view";
 
 export function LiveGame() {
@@ -20,6 +22,7 @@ export function LiveGame() {
   const [layout, setLayout] = useStored<LayoutId>("cq.table.layout", "pod");
   const [opponents, setOpponents] = useState(3);
   const game = useLiveGame();
+  const { tokens } = useDeckTokens(deck?.cards, deck?.tokenArt);
 
   useEffect(() => {
     if (game.error) {
@@ -30,7 +33,7 @@ export function LiveGame() {
 
   const start = () => {
     if (!deck) return;
-    const payload: DeckPayload = { name: deck.name, cards: deck.cards.map((c) => ({ name: c.name, quantity: c.quantity, board: c.board, set: c.set, collectorNumber: c.collectorNumber })) };
+    const payload: DeckPayload = { name: deck.name, cards: deck.cards.map((c) => ({ name: c.name, quantity: c.quantity, board: c.board, set: c.set, collectorNumber: c.collectorNumber })), tokens: tokenArtMap(tokens) };
     game.start(payload, me?.name ?? "You", opponents);
   };
 

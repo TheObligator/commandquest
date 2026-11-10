@@ -64,7 +64,7 @@ export function tokenImage(card: CardView): string | undefined {
   return card.token && card.name ? cachedTokenArt(tokenSpec(card)) ?? undefined : undefined;
 }
 
-const tokenSpec = (card: CardView) => ({ name: card.name ?? "Token", key: card.tokenKey, set: card.tokenSet, number: card.tokenNumber });
+const tokenSpec = (card: CardView) => ({ name: card.name ?? "Token", key: card.tokenKey, set: card.tokenSet, number: card.tokenNumber, art: card.tokenArt });
 
 /** A token: its Scryfall art once found, a styled tile until then (or if Scryfall has none). */
 function TokenFace({ card }: { card: CardView }) {
@@ -79,7 +79,7 @@ function TokenFace({ card }: { card: CardView }) {
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [card.name, card.tokenKey, card.tokenSet, card.tokenNumber]);
+  }, [card.name, card.tokenKey, card.tokenSet, card.tokenNumber, card.tokenArt]);
   if (url) {
     return (
       <div className="card-face">

@@ -43,11 +43,19 @@ The game screen. The board itself is `web/src/game/TableBoard.tsx`, shared by tw
   badge. Cards shrink to fit the seat. Drag cards to another row or position to arrange a board;
   that's only your view and never goes to the server.
 - Your hand: upright cards from the left. Drag one onto your board, or double-click it, to play it.
-- Tokens show their Scryfall art. In live games it's the token from the set of the card that made
-  it (Forge's token image key names the printing, e.g. Krenko's 10E Goblin is Scryfall's t10e #4);
-  otherwise a search by name, colors and base P/T, newest printing first. Lookups are cached in the
-  browser for 24 hours (`tokenArt` in `web/src/scryfall.ts`). Until the art loads, or if Scryfall has
-  none, a styled tile with the name and type stands in.
+- Tokens show Scryfall art, in this order:
+  1. **The deck's token list** (like Moxfield's): every token the deck's cards make, from Scryfall's
+     `all_parts`, one entry per kind of token (name, colors and P/T: `tokenIdentity` in
+     `web/src/tokens.ts`). The default printing is the commander's version if a commander makes it,
+     else the newest card's. You can pick another printing per deck in the deck editor's Tokens
+     section (Convex `decks.tokenArt`, only your picks are stored). The deck's list goes to the game
+     server at the start, and each player's tokens use their own deck's art.
+  2. Otherwise (e.g. AI precons), the token from the set of the card that made it: Forge's token
+     image key names the printing (10E's Goblin is Scryfall's t10e #4).
+  3. Otherwise a search by name, colors and base P/T, newest printing first.
+
+  Lookups are cached in the browser for 24 hours (`tokenArt` in `web/src/scryfall.ts`). Until the
+  art loads, or if Scryfall has none, a styled tile with the name and type stands in.
 - Big overlays sit over the printed boxes so they read at a glance: the mana cost on cards in hand,
   and P/T on creatures. On the battlefield P/T is the current value (counters and effects
   included), green when above what's printed and red when below.

@@ -30,7 +30,12 @@ import java.util.Objects;
 public final class GameSession {
 
     /** A seat. {@code remote} is null for an AI seat. */
-    public record Seat(String name, Deck deck, IRemote remote) {
+    /** A seat. {@code remote} is null for an AI seat. {@code tokenArt}: the deck's token art, identity -> Scryfall id. */
+    public record Seat(String name, Deck deck, IRemote remote, Map<String, String> tokenArt) {
+        public Seat(String name, Deck deck, IRemote remote) {
+            this(name, deck, remote, Map.of());
+        }
+
         public Seat {
             Objects.requireNonNull(name);
             Objects.requireNonNull(deck);
@@ -43,6 +48,8 @@ public final class GameSession {
 
     private final HostedMatch match = new HostedMatch();
     private final Map<String, ProtocolGuiGame> guis = new LinkedHashMap<>();
+    /** Each player's token art (by player name, which is the seat name). */
+    private final Map<String, Map<String, String>> tokenArt = new java.util.concurrent.ConcurrentHashMap<>();
 
     private GameSession() {
     }
@@ -57,13 +64,18 @@ public final class GameSession {
         List<RegisteredPlayer> players = new ArrayList<>();
         Map<RegisteredPlayer, IGuiGame> guiMap = new LinkedHashMap<>();
         for (Seat seat : seats) {
+            if (seat.tokenArt() != null && !seat.tokenArt().isEmpty()) {
+                s.tokenArt.put(seat.name(), Map.copyOf(seat.tokenArt()));
+            }
+        }
+        for (Seat seat : seats) {
             RegisteredPlayer rp = RegisteredPlayer.forCommander(seat.deck());
             if (seat.human()) {
                 rp.setPlayer(new LobbyPlayerHuman(seat.name()));
                 ProtocolGuiGame gui = new ProtocolGuiGame(seat.remote());
                 gui.setNetGame();
                 if (seat.remote() instanceof BrowserSeat browser) {
-                    browser.attach(gui);
+                    browser.attach(gui, s.tokenArt);
                 }
                 guiMap.put(rp, gui);
                 s.guis.put(seat.name(), gui);

@@ -52,6 +52,8 @@ export interface DeckPayload {
   name: string;
   /** `set` / `collectorNumber`: the printing you picked (Scryfall codes), so Forge uses it too. */
   cards: { name: string; quantity: number; board: string; set?: string; collectorNumber?: string }[];
+  /** The deck's token art: token identity (src/tokens.ts) -> Scryfall id. */
+  tokens?: Record<string, string>;
 }
 
 export function useLiveGame() {

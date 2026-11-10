@@ -169,7 +169,7 @@ public final class GameHub {
                 BrowserSeat seat = new BrowserSeat(json, s -> sendRaw(c, s));
                 String name = m.path("name").asText("You").trim();
                 name = name.isEmpty() || name.length() > 40 || name.startsWith("AI ") ? "You" : name;
-                seats.add(new GameSession.Seat(name, mine, seat));
+                seats.add(new GameSession.Seat(name, mine, seat, tokenArt(m.path("deck").path("tokens"))));
                 c.seatName = name;
                 List<Deck> ai = Decks.randomPrecons(opponents);
                 for (int i = 0; i < ai.size(); i++) {
@@ -185,6 +185,23 @@ public final class GameHub {
                 error(c, "Couldn't start the game: " + e.getMessage());
             }
         });
+    }
+
+    private static final java.util.regex.Pattern SCRYFALL_ID =
+            java.util.regex.Pattern.compile("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$");
+
+    /** The deck's token art from the browser: identity -> Scryfall id (checked, at most 200). */
+    private static Map<String, String> tokenArt(JsonNode tokens) {
+        Map<String, String> art = new java.util.HashMap<>();
+        if (tokens.isObject()) {
+            tokens.fields().forEachRemaining(e -> {
+                String id = e.getValue().asText("");
+                if (art.size() < 200 && e.getKey().length() <= 120 && e.getKey().contains("|") && SCRYFALL_ID.matcher(id).matches()) {
+                    art.put(e.getKey(), id);
+                }
+            });
+        }
+        return art;
     }
 
     /** Runs a player action on Forge's UI thread, where its input handling expects it. */

@@ -87,6 +87,8 @@ export interface CardView {
   tokenKey?: string;
   tokenSet?: string;
   tokenNumber?: string;
+  /** For a token: the printing its owner picked for their deck (Scryfall id). */
+  tokenArt?: string;
   power?: number;
   toughness?: number;
   counters?: Record<string, number>;

@@ -63,8 +63,9 @@ public final class BrowserSeat implements IRemote {
         this.sink = sink;
     }
 
-    void attach(ProtocolGuiGame gui) {
+    void attach(ProtocolGuiGame gui, Map<String, Map<String, String>> tokenArtByPlayer) {
         this.gui = gui;
+        views.setTokenArt(owner -> owner == null ? null : tokenArtByPlayer.get(owner.getName()));
     }
 
     public PlayerView player() {

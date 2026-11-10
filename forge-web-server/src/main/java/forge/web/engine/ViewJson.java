@@ -19,6 +19,7 @@ import forge.game.spellability.StackItemView;
 import forge.game.zone.ZoneType;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Forge's game view as one player sees it, in the JSON shape of the client's {@code GameView}
@@ -37,8 +38,15 @@ public final class ViewJson {
 
     private final ObjectMapper json;
 
+    /** A player's token art (identity -> Scryfall id), from their deck. */
+    private java.util.function.Function<PlayerView, Map<String, String>> tokenArt = p -> null;
+
     public ViewJson(ObjectMapper json) {
         this.json = json;
+    }
+
+    void setTokenArt(java.util.function.Function<PlayerView, Map<String, String>> tokenArt) {
+        this.tokenArt = tokenArt;
     }
 
     public static String id(PlayerView p) {
@@ -155,6 +163,10 @@ public final class ViewJson {
                 String key = face.getImageKey();
                 if (key != null) {
                     o.put("tokenKey", key);
+                    String art = pickedArt(tokenArt.apply(c.getOwner()), identity(face, key));
+                    if (art != null) {
+                        o.put("tokenArt", art);
+                    }
                     String[] print = tokenPrinting(key);
                     if (print != null) {
                         o.put("tokenSet", print[0]);
@@ -215,6 +227,41 @@ public final class ViewJson {
             o.set("card", card(gv, source, viewer));
         }
         return o;
+    }
+
+    /**
+     * A token's identity, matching the client's {@code tokenIdentity} (web/src/tokens.ts):
+     * "name|colors|power/toughness", e.g. "goblin|R|1/1", "treasure||-". The base P/T comes from
+     * Forge's token script name in the image key ("t:r_1_1_goblin|…"), so pumps don't change it.
+     */
+    static String identity(CardStateView face, String key) {
+        StringBuilder colors = new StringBuilder();
+        forge.card.ColorSet cs = face.getColors();
+        if (cs != null) {
+            if (cs.hasWhite()) colors.append('W');
+            if (cs.hasBlue()) colors.append('U');
+            if (cs.hasBlack()) colors.append('B');
+            if (cs.hasRed()) colors.append('R');
+            if (cs.hasGreen()) colors.append('G');
+        }
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("^t:[a-z]+_(\\d+|x)_(\\d+|x)_").matcher(key == null ? "" : key);
+        String pt = m.find() ? m.group(1) + "/" + m.group(2) : "-";
+        String name = face.getName().replaceAll("(?i) token$", "").trim().toLowerCase();
+        return name + "|" + colors + "|" + pt;
+    }
+
+    /** The owner's art for this token: an exact match, else the only one with the same name and colors. */
+    static String pickedArt(Map<String, String> art, String identity) {
+        if (art == null || art.isEmpty()) {
+            return null;
+        }
+        String exact = art.get(identity);
+        if (exact != null) {
+            return exact;
+        }
+        String nameColors = identity.substring(0, identity.lastIndexOf('|') + 1);
+        List<String> close = art.entrySet().stream().filter(e -> e.getKey().startsWith(nameColors)).map(Map.Entry::getValue).toList();
+        return close.size() == 1 ? close.get(0) : null;
     }
 
     /**

@@ -41,6 +41,13 @@ export interface CardFace {
   image_uris?: ImageUris;
 }
 
+export interface RelatedPart {
+  id: string;
+  component: string;
+  name: string;
+  type_line?: string;
+}
+
 export interface ScryCard {
   id: string;
   name: string;
@@ -56,6 +63,9 @@ export interface ScryCard {
   defense?: string;
   color_identity: string[];
   color_indicator?: string[];
+  colors?: string[];
+  /** Related cards; we keep only the tokens this printing makes (`component: "token"`). */
+  all_parts?: RelatedPart[];
   keywords?: string[];
   reserved?: boolean;
   set: string;
@@ -120,7 +130,7 @@ async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
 // ---- Cache (memory + localStorage, 24h) -----------------------------------------
 
 // Bump the version when `trim` keeps new fields, so old entries without them are dropped.
-const STORE_KEY = "cq.scryfall.cards.v2";
+const STORE_KEY = "cq.scryfall.cards.v3"; // v3 keeps colors and the tokens a card makes
 const TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_STORED = 1500;
 
@@ -132,7 +142,10 @@ const storedAt = new Map<string, number>();
 function trim(c: ScryCard): ScryCard {
   const pick = <O extends object>(o: O, keys: (keyof O)[]) =>
     Object.fromEntries(keys.filter((k) => o[k] !== undefined).map((k) => [k, o[k]])) as O;
-  const card = pick(c, ["id", "name", "layout", "mana_cost", "cmc", "type_line", "oracle_text", "flavor_text", "power", "toughness", "loyalty", "defense", "color_identity", "color_indicator", "keywords", "reserved", "set", "set_name", "collector_number", "rarity", "artist", "released_at", "scryfall_uri", "legalities", "image_uris"]);
+  const card = pick(c, ["id", "name", "layout", "mana_cost", "cmc", "type_line", "oracle_text", "flavor_text", "power", "toughness", "loyalty", "defense", "color_identity", "color_indicator", "colors", "keywords", "reserved", "set", "set_name", "collector_number", "rarity", "artist", "released_at", "scryfall_uri", "legalities", "image_uris"]);
+  const tokens = c.all_parts?.filter((p) => p.component === "token" && p.id !== c.id);
+  if (tokens?.length) card.all_parts = tokens.map((p) => ({ id: p.id, component: p.component, name: p.name, type_line: p.type_line }));
+  else delete card.all_parts;
   if (c.card_faces) {
     card.card_faces = c.card_faces.map((f) => pick(f, ["name", "mana_cost", "type_line", "oracle_text", "flavor_text", "power", "toughness", "loyalty", "defense", "artist", "color_indicator", "image_uris"]));
   }
@@ -148,6 +161,7 @@ function index(c: ScryCard) {
 function loadStore() {
   try {
     localStorage.removeItem("cq.scryfall.cards.v1");
+    localStorage.removeItem("cq.scryfall.cards.v2");
     const raw = localStorage.getItem(STORE_KEY);
     if (!raw) return;
     const now = Date.now();
@@ -340,6 +354,8 @@ export interface TokenSpec {
   /** The exact printing (Scryfall set code and collector number), from the card that made it. */
   set?: string;
   number?: string;
+  /** The printing the token's owner picked for their deck (Scryfall id): wins over everything. */
+  art?: string;
 }
 
 const TOKEN_STORE = "cq.scryfall.tokens.v1";
@@ -347,7 +363,7 @@ const tokenArtMem = new Map<string, { url: string | null; at: number }>();
 const tokenArtInflight = new Map<string, Promise<string | undefined>>();
 let tokenStoreLoaded = false;
 
-const tokenId = (s: TokenSpec) => `${s.name.toLowerCase()}|${s.key ?? ""}|${s.set ?? ""}|${s.number ?? ""}`;
+const tokenId = (s: TokenSpec) => (s.art ? `art|${s.art}` : `${s.name.toLowerCase()}|${s.key ?? ""}|${s.set ?? ""}|${s.number ?? ""}`);
 
 function loadTokenStore() {
   if (tokenStoreLoaded) return;
@@ -398,6 +414,11 @@ export function tokenArt(spec: TokenSpec): Promise<string | undefined> {
 }
 
 async function findTokenArt(spec: TokenSpec): Promise<string | undefined> {
+  if (spec.art) {
+    if (!cachedById(spec.art)) await cardsById([spec.art]);
+    const picked = cachedById(spec.art);
+    if (picked) return imageUrl(picked, "normal");
+  }
   const [script, forgeSet, forgeNumber] = (spec.key ?? "").replace(/^t:/, "").split("|");
   // The exact printing: the server's Scryfall code for it, then Forge's set code as Scryfall's token set.
   const prints: [string, string][] = [];

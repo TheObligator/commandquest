@@ -19,12 +19,14 @@ the staging and production Convex site URLs), audience `convex`, not expired, si
 
 ## Starting a game
 
-`{t:"start", deck: {name, cards: [{name, quantity, board, set?, collectorNumber?}]}, name, opponents}` starts a Commander
+`{t:"start", deck: {name, cards: [{name, quantity, board, set?, collectorNumber?}], tokens?}, name, opponents}` starts a Commander
 game against 1–3 Forge AI seats, each playing a random Commander precon that ships with Forge
 (`forge-gui/res/quest/commanderprecons`). `board` is `commander` or `main` (others are ignored).
 Card names are Scryfall's; double-faced cards resolve by their front face. `set` and
 `collectorNumber` (Scryfall's) pick the printing, so the card's set, and the tokens it makes, match
-the one in your deck; Forge's default printing is used when it doesn't have that one. If Forge doesn't know a
+the one in your deck; Forge's default printing is used when it doesn't have that one. `tokens` is
+the deck's token art, `{"<token identity>": "<Scryfall id>"}` (identity as in `web/src/tokens.ts`,
+e.g. `goblin|R|1/1`); your tokens are tagged with it. If Forge doesn't know a
 card, the answer is an `error` that lists them.
 
 One game per user: starting another (or from another tab, which gets `{t:"replaced"}`) ends the
@@ -34,7 +36,7 @@ old one, and so does closing the socket. `MAX_GAMES` (default 4) caps games on t
 
 | `t` | Meaning |
 |---|---|
-| `state` | `view`: the game as you see it, in the client's `GameView` shape (`web/src/game/view.ts`), plus `gameOver`. Sent whenever it changes. Hidden information is already removed (below). Tokens carry `tokenKey` (Forge's image key) and, when Forge knows the printing, `tokenSet` / `tokenNumber` (Scryfall's), for their art. |
+| `state` | `view`: the game as you see it, in the client's `GameView` shape (`web/src/game/view.ts`), plus `gameOver`. Sent whenever it changes. Hidden information is already removed (below). Tokens carry `tokenArt` (the Scryfall id from their owner's deck, when it has that kind of token), `tokenKey` (Forge's image key) and, when Forge knows the printing, `tokenSet` / `tokenNumber` (Scryfall's), for their art. |
 | `prompt` | Forge is waiting for you: `message`, and two buttons `ok` / `cancel`, each `{label, enabled}` with Forge's labels ("OK", "Keep", "Mulligan", "End Turn"…). Answer with a button or by clicking a card or player. |
 | `waiting` | No prompt for you right now (others are deciding). |
 | `ask` | A question that blocks the game: `{id, kind, title?, message, options?, selected?, min, max, card?}`. `kind` is `choose` (pick `min`–`max` of `options`, each `{label, cardId?, playerId?, card?}`), `info` (Forge reveals `options` to you: look, then answer with an empty `choice`), or `text` (`initial`, `numeric`). |

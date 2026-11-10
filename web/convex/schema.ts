@@ -22,6 +22,8 @@ export default defineSchema({
     name: v.string(),
     format: v.string(),
     cards: v.array(deckCard),
+    /** Token printings you picked for this deck, by token identity (web/src/tokens.ts). Defaults aren't stored. */
+    tokenArt: v.optional(v.array(v.object({ identity: v.string(), scryfallId: v.string() }))),
     updatedAt: v.number(),
   }).index("by_user_updated", ["userId", "updatedAt"]),
 

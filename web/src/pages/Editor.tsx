@@ -9,6 +9,7 @@ import { closeOnBackdrop, showCardDetails } from "../carddetails";
 import { mergeDuplicates, parseDecklist, writeDecklist } from "../decklist";
 import { toast } from "../dom";
 import { CardMenu } from "../components/CardMenu";
+import { DeckTokens } from "../components/DeckTokens";
 import { ManaCost } from "../components/ManaCost";
 import { Loading } from "../components/Spinner";
 import { CONQUEST, validateConquest } from "../formats/conquest";
@@ -678,6 +679,7 @@ function DeckView(props: {
           );
         });
       })()}
+      <DeckTokens deckId={deck.id} cards={deck.cards} />
       {preview.element}
       {printingsFor && <Printings card={printingsFor} onPick={(p) => props.onPrinting(printingsFor, p)} onClose={() => setPrintingsFor(null)} />}
     </section>
