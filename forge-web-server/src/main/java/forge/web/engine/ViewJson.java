@@ -3,6 +3,8 @@ package forge.web.engine;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import forge.StaticData;
+import forge.card.CardEdition;
 import forge.card.CardType.CoreType;
 import forge.game.GameEntityView;
 import forge.game.GameLogEntry;
@@ -148,6 +150,17 @@ public final class ViewJson {
             }
             if (c.isToken()) {
                 o.put("token", true);
+                // Forge's token image key, e.g. "t:r_1_1_goblin|M19|12": the token script (colors,
+                // base P/T, name) and, when known, the printing. The client finds its Scryfall art.
+                String key = face.getImageKey();
+                if (key != null) {
+                    o.put("tokenKey", key);
+                    String[] print = tokenPrinting(key);
+                    if (print != null) {
+                        o.put("tokenSet", print[0]);
+                        o.put("tokenNumber", print[1]);
+                    }
+                }
             }
             if (c.isCommander()) {
                 o.put("commander", true);
@@ -202,6 +215,21 @@ public final class ViewJson {
             o.set("card", card(gv, source, viewer));
         }
         return o;
+    }
+
+    /**
+     * A token's printing on Scryfall, {set code, collector number}, from Forge's token image key
+     * "t:<script>|<SET>|<number>|<n>", or null when Forge doesn't know the printing. The set is the
+     * one of the card that made the token (Forge lists a set's tokens with it), and Scryfall files
+     * those tokens under "t" + the set's code: Krenko's 10E Goblin is t10e #4.
+     */
+    public static String[] tokenPrinting(String key) {
+        String[] parts = key.substring(key.indexOf(':') + 1).split("\\|");
+        if (parts.length < 3 || parts[2].isEmpty()) {
+            return null;
+        }
+        CardEdition ed = StaticData.instance().getCardEdition(parts[1]);
+        return ed == null || ed == CardEdition.UNKNOWN ? null : new String[] {"t" + ed.getScryfallCode(), parts[2]};
     }
 
     static String zone(ZoneType z) {

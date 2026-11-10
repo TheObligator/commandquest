@@ -1,7 +1,7 @@
 // Left side of the table: the decision the game wants from you, quick auto-pass skips, the stack,
 // the hovered card and the game log.
 import { useEffect, useRef } from "react";
-import { CardBack, cardImage, usePreview, type Preview } from "./cards";
+import { CardBack, cardImage, tokenImage, usePreview, type Preview } from "./cards";
 import type { AutoPassMode } from "./phases";
 import { stepLabel } from "./sim";
 import type { SimGame } from "./useSimGame";
@@ -167,7 +167,7 @@ export function StackList({ view, nameOf, colorOf }: { view: GameView; nameOf: (
           onMouseEnter={() => s.card && setPreview({ card: s.card })}
           onMouseLeave={() => setPreview(null)}
         >
-          {s.card && cardImage(s.card.name, "small") && <img src={cardImage(s.card.name, "small")} alt="" />}
+          {s.card && (tokenImage(s.card) ?? cardImage(s.card.name, "small")) && <img src={tokenImage(s.card) ?? cardImage(s.card.name, "small")} alt="" />}
           <div>
             <strong>{s.name}</strong>
             <span>{s.kind} · {s.controller === view.viewer ? "you" : nameOf(s.controller)}</span>
@@ -179,7 +179,7 @@ export function StackList({ view, nameOf, colorOf }: { view: GameView; nameOf: (
 }
 
 export function PreviewCard({ p }: { p: Preview }) {
-  const src = !p.card.hidden && !p.card.token ? cardImage(p.card.name, "normal") : undefined;
+  const src = p.card.hidden ? undefined : p.card.token ? tokenImage(p.card) : cardImage(p.card.name, "normal");
   return (
     <figure>
       {p.card.hidden ? (

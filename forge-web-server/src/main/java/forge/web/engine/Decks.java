@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import forge.StaticData;
 import forge.deck.Deck;
 import forge.deck.DeckSection;
+import forge.card.CardEdition;
 import forge.deck.io.DeckSerializer;
+import forge.item.PaperCard;
 import forge.util.MyRandom;
 import java.io.File;
 import java.util.ArrayList;
@@ -36,7 +38,15 @@ public final class Decks {
                 unknown.add(name);
                 continue;
             }
-            d.getOrCreate(board.equals("commander") ? DeckSection.Commander : DeckSection.Main).add(forgeName, qty);
+            DeckSection section = board.equals("commander") ? DeckSection.Commander : DeckSection.Main;
+            // The printing you picked (Scryfall set + collector number), so the card's set, and the
+            // tokens it makes, match it. Forge's own choice if it doesn't have that printing.
+            PaperCard print = printing(forgeName, c.path("set").asText(""), c.path("collectorNumber").asText(""));
+            if (print != null) {
+                d.getOrCreate(section).add(print, qty);
+            } else {
+                d.getOrCreate(section).add(forgeName, qty);
+            }
             total += qty;
         }
         if (!unknown.isEmpty()) {
@@ -68,6 +78,35 @@ public final class Decks {
             }
         }
         return null;
+    }
+
+    /** Forge's edition for a Scryfall set code, or null. */
+    public static CardEdition editionForScryfall(String scryfallSet) {
+        if (scryfallSet == null || scryfallSet.isEmpty()) {
+            return null;
+        }
+        for (CardEdition e : StaticData.instance().getEditions()) {
+            if (scryfallSet.equalsIgnoreCase(e.getScryfallCode())) {
+                return e;
+            }
+        }
+        return null;
+    }
+
+    private static PaperCard printing(String name, String scryfallSet, String number) {
+        CardEdition ed = editionForScryfall(scryfallSet);
+        if (ed == null) {
+            return null;
+        }
+        StaticData data = StaticData.instance();
+        data.attemptToLoadCard(name, ed.getCode());
+        // Forge falls back to another printing when it lacks the one asked for, so check the set.
+        // Collector numbers can differ between Forge and Scryfall; the set is what matters most.
+        PaperCard pc = number.isEmpty() ? null : data.getCommonCards().getCard(name, ed.getCode(), number);
+        if (pc == null || !ed.getCode().equals(pc.getEdition())) {
+            pc = data.getCommonCards().getCard(name, ed.getCode());
+        }
+        return pc != null && ed.getCode().equals(pc.getEdition()) ? pc : null;
     }
 
     /** {@code count} different random Commander precons that ship with Forge (res/quest/commanderprecons). */

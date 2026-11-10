@@ -325,3 +325,106 @@ export function primaryType(c: ScryCard | undefined): string {
   }
   return "Other";
 }
+
+// ---- Token art -----------------------------------------------------------------------------------
+// Tokens are their own printings on Scryfall (set "t" + the set code, e.g. "tm19"). The game server
+// sends Forge's token image key, "t:<script>|<SET>|<collector number>|<n>" when Forge knows the
+// printing, else "t:<script>". The script name is "<colors>_<power>_<toughness>_<name>" (e.g.
+// "r_1_1_goblin"). Look up the exact printing first, then search by name, colors and base P/T.
+// Results (including "none found") are cached in localStorage for 24 hours.
+
+export interface TokenSpec {
+  name: string;
+  /** Forge's token image key, when the game server sent one. */
+  key?: string;
+  /** The exact printing (Scryfall set code and collector number), from the card that made it. */
+  set?: string;
+  number?: string;
+}
+
+const TOKEN_STORE = "cq.scryfall.tokens.v1";
+const tokenArtMem = new Map<string, { url: string | null; at: number }>();
+const tokenArtInflight = new Map<string, Promise<string | undefined>>();
+let tokenStoreLoaded = false;
+
+const tokenId = (s: TokenSpec) => `${s.name.toLowerCase()}|${s.key ?? ""}|${s.set ?? ""}|${s.number ?? ""}`;
+
+function loadTokenStore() {
+  if (tokenStoreLoaded) return;
+  tokenStoreLoaded = true;
+  try {
+    const raw = localStorage.getItem(TOKEN_STORE);
+    const now = Date.now();
+    for (const [k, v] of Object.entries(raw ? (JSON.parse(raw) as Record<string, { url: string | null; at: number }>) : {})) {
+      if (now - v.at < TTL_MS) tokenArtMem.set(k, v);
+    }
+  } catch {
+    // unreadable or blocked storage: start empty
+  }
+}
+
+function saveTokenStore() {
+  try {
+    localStorage.setItem(TOKEN_STORE, JSON.stringify(Object.fromEntries([...tokenArtMem].slice(-400))));
+  } catch {
+    // full or blocked: memory only
+  }
+}
+
+/** The token's art if already looked up: a URL, null (Scryfall has none), or undefined (not yet). */
+export function cachedTokenArt(spec: TokenSpec): string | null | undefined {
+  loadTokenStore();
+  return tokenArtMem.get(tokenId(spec))?.url;
+}
+
+/** Finds a token's art on Scryfall (rate-limited like every other call). */
+export function tokenArt(spec: TokenSpec): Promise<string | undefined> {
+  const id = tokenId(spec);
+  const known = cachedTokenArt(spec);
+  if (known !== undefined) return Promise.resolve(known ?? undefined);
+  let p = tokenArtInflight.get(id);
+  if (!p) {
+    p = findTokenArt(spec)
+      .catch(() => undefined)
+      .then((url) => {
+        tokenArtMem.set(id, { url: url ?? null, at: Date.now() });
+        saveTokenStore();
+        tokenArtInflight.delete(id);
+        return url;
+      });
+    tokenArtInflight.set(id, p);
+  }
+  return p;
+}
+
+async function findTokenArt(spec: TokenSpec): Promise<string | undefined> {
+  const [script, forgeSet, forgeNumber] = (spec.key ?? "").replace(/^t:/, "").split("|");
+  // The exact printing: the server's Scryfall code for it, then Forge's set code as Scryfall's token set.
+  const prints: [string, string][] = [];
+  if (spec.set && spec.number) prints.push([spec.set, spec.number]);
+  if (forgeSet && forgeNumber) prints.push([`t${forgeSet.toLowerCase()}`, forgeNumber]);
+  for (const [set, number] of prints) {
+    try {
+      const c = await getJson<ScryCard>(`${API}/cards/${encodeURIComponent(set)}/${encodeURIComponent(number)}`);
+      const url = imageUrl(c, "normal");
+      if (url && /token/i.test(c.type_line ?? c.card_faces?.[0]?.type_line ?? "")) return url;
+    } catch {
+      // not on Scryfall under that number: try the next, then search
+    }
+  }
+  const m = /^([a-z]+)_(\d+|x)_(\d+|x)_/.exec(script ?? "");
+  const name = spec.name.replace(/ token$/i, "").replace(/"/g, "");
+  const tries: string[] = [];
+  if (m) {
+    const colors = m[1] === "c" ? "c" : m[1] === "all" ? "wubrg" : m[1];
+    const pt = m[2] !== "x" && m[3] !== "x" ? ` pow=${m[2]} tou=${m[3]}` : "";
+    tries.push(`t:token !"${name}" c=${colors}${pt}`);
+  }
+  tries.push(`t:token !"${name}"`);
+  for (const q of tries) {
+    const page = await search(q, "prints");
+    const hit = page.cards.find((c) => imageUrl(c, "normal"));
+    if (hit) return imageUrl(hit, "normal");
+  }
+  return undefined;
+}

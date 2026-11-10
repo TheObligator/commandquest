@@ -30,7 +30,7 @@ export function LiveGame() {
 
   const start = () => {
     if (!deck) return;
-    const payload: DeckPayload = { name: deck.name, cards: deck.cards.map((c) => ({ name: c.name, quantity: c.quantity, board: c.board })) };
+    const payload: DeckPayload = { name: deck.name, cards: deck.cards.map((c) => ({ name: c.name, quantity: c.quantity, board: c.board, set: c.set, collectorNumber: c.collectorNumber })) };
     game.start(payload, me?.name ?? "You", opponents);
   };
 

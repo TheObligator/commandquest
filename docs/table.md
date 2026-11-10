@@ -43,6 +43,11 @@ The game screen. The board itself is `web/src/game/TableBoard.tsx`, shared by tw
   badge. Cards shrink to fit the seat. Drag cards to another row or position to arrange a board;
   that's only your view and never goes to the server.
 - Your hand: upright cards from the left. Drag one onto your board, or double-click it, to play it.
+- Tokens show their Scryfall art. In live games it's the token from the set of the card that made
+  it (Forge's token image key names the printing, e.g. Krenko's 10E Goblin is Scryfall's t10e #4);
+  otherwise a search by name, colors and base P/T, newest printing first. Lookups are cached in the
+  browser for 24 hours (`tokenArt` in `web/src/scryfall.ts`). Until the art loads, or if Scryfall has
+  none, a styled tile with the name and type stands in.
 - Big overlays sit over the printed boxes so they read at a glance: the mana cost on cards in hand,
   and P/T on creatures. On the battlefield P/T is the current value (counters and effects
   included), green when above what's printed and red when below.

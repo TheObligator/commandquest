@@ -20,6 +20,11 @@ export interface CardState {
   types: string[];
   tapped?: boolean;
   token?: boolean;
+  /** For a token: Forge's image key ("t:r_1_1_goblin|M19|12"), used to find its Scryfall art. */
+  tokenKey?: string;
+  /** For a token: its printing on Scryfall (set code, collector number), when Forge knows it. */
+  tokenSet?: string;
+  tokenNumber?: string;
   faceDown?: boolean;
   /** Players allowed to look at this card while it's face down or in a hidden zone, besides the zone's normal rules. */
   visibleTo?: string[];
@@ -79,6 +84,9 @@ export interface CardView {
   types?: string[];
   tapped?: boolean;
   token?: boolean;
+  tokenKey?: string;
+  tokenSet?: string;
+  tokenNumber?: string;
   power?: number;
   toughness?: number;
   counters?: Record<string, number>;

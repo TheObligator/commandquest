@@ -50,7 +50,8 @@ export type LiveStatus = "connecting" | "signing-in" | "ready" | "starting" | "p
 
 export interface DeckPayload {
   name: string;
-  cards: { name: string; quantity: number; board: string }[];
+  /** `set` / `collectorNumber`: the printing you picked (Scryfall codes), so Forge uses it too. */
+  cards: { name: string; quantity: number; board: string; set?: string; collectorNumber?: string }[];
 }
 
 export function useLiveGame() {

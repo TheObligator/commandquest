@@ -2,7 +2,7 @@
 // tokens, and the hover preview shared across the table.
 import { createContext, useContext, useEffect, useState } from "react";
 import { ManaCost } from "../components/ManaCost";
-import { cached, imageUrl, resolve } from "../scryfall";
+import { cached, cachedTokenArt, imageUrl, resolve, tokenArt } from "../scryfall";
 import type { CardView } from "./view";
 
 /** Loads Scryfall data for these card names once; re-renders when it arrives. */
@@ -50,18 +50,47 @@ export function CardBack({ label }: { label?: string }) {
 /** The face of a card at any size. Width comes from the parent (`--cw`). */
 export function CardFace({ card, size = "normal", knownFaceDown }: { card: CardView; size?: "small" | "normal"; knownFaceDown?: boolean }) {
   if (card.hidden) return <CardBack />;
-  if (card.token) {
-    return (
-      <div className="token-tile">
-        <span className="token-name">{card.name}</span>
-        <span className="token-type">Token {card.types?.join(" ")}</span>
-      </div>
-    );
-  }
+  if (card.token) return <TokenFace card={card} />;
   const src = cardImage(card.name, size);
   return (
     <div className={`card-face${knownFaceDown ? " known-facedown" : ""}`}>
       {src ? <img src={src} alt={card.name} draggable={false} loading="lazy" /> : <div className="card-noimg">{card.name}</div>}
+    </div>
+  );
+}
+
+/** A token's Scryfall art if it's been found (see `tokenArt`), for previews and the stack. */
+export function tokenImage(card: CardView): string | undefined {
+  return card.token && card.name ? cachedTokenArt(tokenSpec(card)) ?? undefined : undefined;
+}
+
+const tokenSpec = (card: CardView) => ({ name: card.name ?? "Token", key: card.tokenKey, set: card.tokenSet, number: card.tokenNumber });
+
+/** A token: its Scryfall art once found, a styled tile until then (or if Scryfall has none). */
+function TokenFace({ card }: { card: CardView }) {
+  const spec = tokenSpec(card);
+  const [url, setUrl] = useState(() => cachedTokenArt(spec));
+  useEffect(() => {
+    let live = true;
+    const known = cachedTokenArt(spec);
+    setUrl(known);
+    if (known === undefined) void tokenArt(spec).then((u) => live && setUrl(u ?? null));
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [card.name, card.tokenKey, card.tokenSet, card.tokenNumber]);
+  if (url) {
+    return (
+      <div className="card-face">
+        <img src={url} alt={`${card.name} token`} draggable={false} loading="lazy" />
+      </div>
+    );
+  }
+  return (
+    <div className="token-tile">
+      <span className="token-name">{card.name}</span>
+      <span className="token-type">Token {card.types?.join(" ")}</span>
     </div>
   );
 }
@@ -93,7 +122,9 @@ export function CostOverlay({ card }: { card: CardView }) {
  * (counters and effects included), green when above what's printed and red when below.
  */
 export function PTOverlay({ card }: { card: CardView }) {
-  const p = card.hidden ? undefined : printed(card.name);
+  // A token's base P/T is in Forge's token key ("t:r_1_1_goblin|…"); a name lookup could find another token's.
+  const tokenBase = /^t:[a-z]+_(\d+)_(\d+)_/.exec(card.tokenKey ?? "");
+  const p = card.hidden ? undefined : card.token ? (tokenBase ? { power: tokenBase[1], toughness: tokenBase[2] } : undefined) : printed(card.name);
   const inPlay = card.zone === "battlefield";
   const power = inPlay ? card.power : p?.power;
   const toughness = inPlay ? card.toughness : p?.toughness;
