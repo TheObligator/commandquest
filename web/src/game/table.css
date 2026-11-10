@@ -238,9 +238,9 @@ dialog.zone-viewer { width: min(980px, calc(100vw - 32px)); max-height: 86vh; ba
 /* Seat body: battlefield above, the zone row along the bottom-left. Short seats (stacked layout)
    put the zones on the left instead. */
 .sb-body { flex: 1; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 6px; margin-top: 4px; container-type: size; }
-.sb-zones { --zw: clamp(32px, 15cqh, 68px); display: flex; align-items: flex-end; gap: 6px; min-width: 0; }
-.layout-stacked .sb-body { grid-template-rows: none; grid-template-columns: auto minmax(0, 1fr); }
-.layout-stacked .sb-zones { --zw: clamp(26px, calc((100cqh - 22px) / 1.4), 58px); order: -1; align-self: center; }
+.sb-zones { --zw: clamp(32px, 15cqh, 68px); display: flex; align-items: flex-end; justify-content: flex-end; gap: 6px; min-width: 0; }
+.layout-stacked .sb-body { grid-template-rows: none; grid-template-columns: minmax(0, 1fr) auto; }
+.layout-stacked .sb-zones { --zw: clamp(26px, calc((100cqh - 22px) / 1.4), 58px); align-self: end; }
 .zone-tile { display: grid; justify-items: center; gap: 3px; padding: 0; margin: 0; border: 0; background: none; color: inherit; font: inherit; min-width: 0; }
 .zt-card { --cw: var(--zw); position: relative; width: var(--zw); aspect-ratio: 488 / 680; border-radius: 5% / 3.6%; }
 .zt-label { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 99px; background: #0b0d12; border: 1px solid var(--line); font-size: max(9px, calc(var(--zw) * .15)); font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #c4c8d2; white-space: nowrap; }

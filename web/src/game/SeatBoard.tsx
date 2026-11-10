@@ -5,7 +5,7 @@
 // Cards shrink to fit the seat so a board never scrolls until cards would get unreadably small.
 // You can drag cards to another row or position on any board; that only changes your own view.
 import { useLayoutEffect, useRef, useState } from "react";
-import { CardBack, CardBadges, CardFace, previewFor, usePreview } from "./cards";
+import { CardBack, CardBadges, CardFace, CostOverlay, previewFor, usePreview } from "./cards";
 import { arrange, moveCards, ROW_LABELS, type Arrangement, type CardView, type Pile, type PlayerView, type Row } from "./view";
 
 export type ZoneName = "graveyard" | "exile" | "command" | "library";
@@ -131,7 +131,7 @@ export function SeatBoard(props: {
             onClick={() => props.onOpenZone(p.id, "graveyard")} title="See the graveyard" />
           <ZoneTile label="Exile" count={p.exile.length} card={top(p.exile)} hover={hover}
             onClick={() => props.onOpenZone(p.id, "exile")} title="See exiled cards" />
-          <ZoneTile label="Cmd" extra={p.commanderCasts ? `+${2 * p.commanderCasts}` : undefined} card={top(p.command)} empty="In play" hover={hover}
+          <ZoneTile label="Cmd" extra={p.commanderCasts ? `+${2 * p.commanderCasts}` : undefined} card={top(p.command)} cost empty="In play" hover={hover}
             hint={`Command zone${p.commanderCasts ? ` · commander tax +${2 * p.commanderCasts}` : ""}`}
             onClick={isMe && p.command.length ? props.onCastCommander : undefined} title={isMe && p.command.length ? "Cast your commander" : undefined} />
         </div>
@@ -147,6 +147,8 @@ function ZoneTile(props: {
   extra?: string;
   card?: CardView;
   back?: boolean;
+  /** Show the card's mana cost, large (the command zone). */
+  cost?: boolean;
   empty?: string;
   hover?: (c: CardView) => { onMouseEnter: () => void; onMouseLeave: () => void };
   onClick?: () => void;
@@ -168,6 +170,7 @@ function ZoneTile(props: {
           <>
             <CardFace card={card} size="small" knownFaceDown={card.faceDown && !card.hidden} />
             <CardBadges card={card} />
+            {props.cost && <CostOverlay card={card} />}
           </>
         ) : props.back ? (
           <CardBack label="Library" />
