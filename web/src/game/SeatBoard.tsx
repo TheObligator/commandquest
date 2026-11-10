@@ -67,7 +67,8 @@ export function SeatBoard(props: {
   onOpenZone: (owner: string, zone: ZoneName) => void;
   onPlayFromHand?: (cardId: number) => void;
   onTap?: (cardId: number) => void;
-  onCastCommander?: () => void;
+  /** Cast one of your commanders (partners are two cards). */
+  onCastCommander?: (id: number) => void;
   onFocus?: () => void;
   focused?: boolean;
   /** Short seat: battlefield groups side by side instead of three rows. */
@@ -131,12 +132,55 @@ export function SeatBoard(props: {
             onClick={() => props.onOpenZone(p.id, "graveyard")} title="See the graveyard" />
           <ZoneTile label="Exile" count={p.exile.length} card={top(p.exile)} hover={hover}
             onClick={() => props.onOpenZone(p.id, "exile")} title="See exiled cards" />
-          <ZoneTile label="Cmd" extra={p.commanderCasts ? `+${2 * p.commanderCasts}` : undefined} card={top(p.command)} cost empty="In play" hover={hover}
-            hint={`Command zone${p.commanderCasts ? ` · commander tax +${2 * p.commanderCasts}` : ""}`}
-            onClick={isMe && p.command.length ? props.onCastCommander : undefined} title={isMe && p.command.length ? "Cast your commander" : undefined} />
+<CommandTile
+            cards={p.command.some((c) => c.commander) ? p.command.filter((c) => c.commander) : p.command.slice(-1)}
+            tax={p.commanderCasts ? 2 * p.commanderCasts : 0}
+            hover={hover}
+            onCast={isMe ? props.onCastCommander : undefined}
+          />
         </div>
       </div>
     </section>
+  );
+}
+
+/** The command zone: your commander, or both partners side by side, with their mana cost. */
+function CommandTile(props: {
+  cards: CardView[];
+  tax: number;
+  hover: (c: CardView) => { onMouseEnter: () => void; onMouseLeave: () => void };
+  onCast?: (id: number) => void;
+}) {
+  const { cards, tax, hover, onCast } = props;
+  return (
+    <div className="zone-tile" title={`Command zone${tax ? ` · commander tax +${tax}` : ""}`}>
+      <span className="zt-label">
+        Cmd
+        {tax > 0 && <b className="zt-extra">+{tax}</b>}
+      </span>
+      <div className="zt-cards">
+        {cards.length ? (
+          cards.map((card) => {
+            const Tag = onCast ? "button" : "div";
+            return (
+              <Tag
+                key={card.id}
+                className="zt-card"
+                onClick={onCast ? () => onCast(card.id) : undefined}
+                title={onCast ? `Cast ${card.name ?? "your commander"}` : card.name}
+                {...hover(card)}
+              >
+                <CardFace card={card} size="small" knownFaceDown={card.faceDown && !card.hidden} />
+                <CardBadges card={card} />
+                {card.commander && <CostOverlay card={card} />}
+              </Tag>
+            );
+          })
+        ) : (
+          <div className="zt-card"><div className="zt-empty">In play</div></div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -147,8 +191,6 @@ function ZoneTile(props: {
   extra?: string;
   card?: CardView;
   back?: boolean;
-  /** Show the card's mana cost, large (the command zone). */
-  cost?: boolean;
   empty?: string;
   hover?: (c: CardView) => { onMouseEnter: () => void; onMouseLeave: () => void };
   onClick?: () => void;
@@ -170,7 +212,6 @@ function ZoneTile(props: {
           <>
             <CardFace card={card} size="small" knownFaceDown={card.faceDown && !card.hidden} />
             <CardBadges card={card} />
-            {props.cost && <CostOverlay card={card} />}
           </>
         ) : props.back ? (
           <CardBack label="Library" />

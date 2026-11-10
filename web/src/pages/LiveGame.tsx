@@ -8,6 +8,7 @@ import { toast } from "../dom";
 import { useCardData } from "../game/cards";
 import { LiveRail } from "../game/LiveRail";
 import { LayoutPicker, TableBoard, useStored, useTableStops, type LayoutId } from "../game/TableBoard";
+import { useHotkeys } from "../game/useHotkeys";
 import { useLiveGame, type DeckPayload } from "../game/useLiveGame";
 import { tokenArtMap } from "../tokens";
 import { useDeckTokens } from "../useDeckTokens";
@@ -124,6 +125,7 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
 
   // Send your stops to the server at the start and whenever you change them.
   const sentStops = useRef("");
+  const commander = view.players[0].command.find((c) => c.commander);
   useEffect(() => {
     const record: Record<string, string[]> = {};
     for (const [player, steps] of st.stops) record[player] = [...steps];
@@ -134,38 +136,72 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
     }
   }, [st.stops, game]);
 
-  // Auto-pass keys: E / F6, B, R.
+  // Hold priority off (the default): once something you cast or activated goes on the stack and
+  // Forge gives you priority back, pass right away, like MTGO. On: you keep priority to do more.
+  // `castFrom`: the stack when you started (clicked a card). Once your item is on top of a bigger
+  // stack, the next priority prompt (Forge's OK + End Turn / Undo) is passed. Other prompts, like
+  // paying mana or choosing targets, are left alone.
+  const castFrom = useRef<number | null>(null);
+  const castDone = useRef(false);
+  const click = (id: number) => {
+    castFrom.current ??= view.stack.length;
+    game.clickCard(id);
+  };
+  const stepKey = `${view.turn}|${view.step}`;
   useEffect(() => {
-    const on = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).closest("input, textarea, select, dialog") || e.ctrlKey || e.metaKey || e.altKey) return;
-      const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-      if (k === "e" || k === "F6") game.setAutoPass("END_OF_TURN");
-      else if (k === "b") game.setAutoPass("BEFORE_MY_TURN");
-      else if (k === "r") game.setAutoPass("ACTION_OR_END_STEP");
-      else return;
-      e.preventDefault();
-    };
-    window.addEventListener("keydown", on);
-    return () => window.removeEventListener("keydown", on);
-  }, [game]);
+    castFrom.current = null;
+    castDone.current = false;
+  }, [stepKey]);
+  useEffect(() => {
+    if (castFrom.current !== null && view.stack.length > castFrom.current && view.stack.at(-1)?.controller === view.viewer) {
+      castFrom.current = null;
+      castDone.current = true;
+    }
+    const p = game.prompt;
+    if (!castDone.current || !p || game.ask || !isPriorityPrompt(p)) return;
+    castDone.current = false;
+    if (!st.holdPriority && p.ok.enabled) game.ok();
+  }, [game.prompt, game.ask, view, st.holdPriority, game]);
+  const ok = () => {
+    castFrom.current = null;
+    castDone.current = false;
+    game.ok();
+  };
+  const cancel = () => {
+    castFrom.current = null;
+    castDone.current = false;
+    game.cancel();
+  };
+
+  // Your hotkeys (Settings): auto-pass skips, hold priority, cast your commander.
+  useHotkeys({
+    autoEndOfTurn: () => game.setAutoPass("END_OF_TURN"),
+    autoBeforeMyTurn: () => game.setAutoPass("BEFORE_MY_TURN"),
+    autoActionOrEnd: () => game.setAutoPass("ACTION_OR_END_STEP"),
+    holdPriority: () => st.setHoldPriority(!st.holdPriority),
+    castCommander: () => (commander ? click(commander.id) : false),
+  });
 
   const seatOf = (id: string) => view.players.find((p) => p.id === id);
   const nameOf = (id: string) => (id === view.viewer ? "you" : seatOf(id)?.name ?? id);
   const colorOf = (id: string) => seatOf(id)?.color ?? "#888";
-  const commander = view.players[0].command.find((c) => c.commander);
 
   return (
     <TableBoard
       view={view}
       layout={layout}
       stops={st}
-      noHoldPriority
       priority={!!game.prompt?.ok.enabled || !!game.ask}
-      rail={(preview) => <LiveRail game={game} nameOf={nameOf} colorOf={colorOf} preview={preview} />}
-      hand={{ onPlay: game.clickCard, onClick: game.clickCard }}
-      onCardClick={game.clickCard}
+      rail={(preview) => <LiveRail game={{ ...game, ok, cancel, clickCard: click }} nameOf={nameOf} colorOf={colorOf} preview={preview} />}
+      hand={{ onPlay: click, onClick: click }}
+      onCardClick={click}
       onPlayerClick={game.clickPlayer}
-      onCastCommander={commander ? () => game.clickCard(commander.id) : undefined}
+      onCastCommander={click}
     />
   );
+}
+
+/** Forge's "you have priority" prompt (InputPassPriority): OK, and End Turn or Undo. */
+function isPriorityPrompt(p: { ok: { label: string }; cancel: { label: string } }) {
+  return p.ok.label === "OK" && (p.cancel.label === "End Turn" || p.cancel.label.startsWith("Undo"));
 }

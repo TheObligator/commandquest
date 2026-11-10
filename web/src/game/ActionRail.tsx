@@ -1,16 +1,18 @@
-// Left side of the table: the decision the game wants from you, quick auto-pass skips, the stack,
-// the hovered card and the game log.
+// Left side of the table: the stack, the hovered card, the decision the game wants from you and
+// quick auto-pass skips. (The log is under the phase strip, on the right.)
 import { useEffect, useRef } from "react";
+import type { HotkeyAction } from "./hotkeys";
+import { Kbd, useHotkeys } from "./useHotkeys";
 import { CardBack, cardImage, tokenImage, usePreview, type Preview } from "./cards";
 import type { AutoPassMode } from "./phases";
 import { stepLabel } from "./sim";
 import type { SimGame } from "./useSimGame";
 import { commanderTax, type GameView } from "./view";
 
-export const AUTO_PASS: { mode: AutoPassMode; label: string; key: string; title: string }[] = [
-  { mode: "END_OF_TURN", label: "End of turn", key: "E", title: "Skip the rest of this turn. Your stops apply again next turn." },
-  { mode: "BEFORE_MY_TURN", label: "Before my turn", key: "B", title: "Skip until the end step of the player right before you." },
-  { mode: "ACTION_OR_END_STEP", label: "Action / end step", key: "R", title: "Skip until someone casts something, or this turn's end step." },
+export const AUTO_PASS: { mode: AutoPassMode; label: string; key: HotkeyAction; title: string }[] = [
+  { mode: "END_OF_TURN", label: "End of turn", key: "autoEndOfTurn", title: "Skip the rest of this turn. Your stops apply again next turn." },
+  { mode: "BEFORE_MY_TURN", label: "Before my turn", key: "autoBeforeMyTurn", title: "Skip until the end step of the player right before you." },
+  { mode: "ACTION_OR_END_STEP", label: "Action / end step", key: "autoActionOrEnd", title: "Skip until someone casts something, or this turn's end step." },
 ];
 
 export function ActionRail(props: {
@@ -38,8 +40,6 @@ export function ActionRail(props: {
         {preview ? <PreviewCard p={preview} /> : <p className="ar-sub">Hover a card to see it here.</p>}
       </section>
 
-      <Log lines={v.log} />
-
       {/* At the bottom, by your hand: the decision, then the skips. */}
       <Decision {...props} />
       {sim.phase === "playing" && (
@@ -57,7 +57,7 @@ export function ActionRail(props: {
               onClick={() => sim.setAutoPass(a.mode)}
             >
               {a.label}
-              <kbd>{a.key}</kbd>
+              <Kbd action={a.key} />
             </button>
           ))}
         </section>
@@ -71,20 +71,20 @@ function Decision({ sim, nameOf, bottomIds, onError }: Parameters<typeof ActionR
   const me = v.players[0];
   let title: string;
   let text: React.ReactNode;
-  let actions: { label: string; key: string; primary?: boolean; disabled?: boolean; run: () => void }[] = [];
+  let actions: { label: string; key: HotkeyAction; primary?: boolean; disabled?: boolean; run: () => void }[] = [];
 
   if (sim.phase === "mulligan") {
     const keep = 7 - sim.mulligans;
     title = "Opening hand";
     text = sim.mulligans ? `Keep and put ${sim.mulligans} card${sim.mulligans > 1 ? "s" : ""} on the bottom, or mulligan again?` : "Keep this 7-card hand, or mulligan?";
     actions = [
-      { label: `Keep ${keep}`, key: "1", primary: true, run: sim.keep },
-      { label: "Mulligan", key: "2", disabled: keep <= 1, run: sim.mulligan },
+      { label: `Keep ${keep}`, key: "ok", primary: true, run: sim.keep },
+      { label: "Mulligan", key: "cancel", disabled: keep <= 1, run: sim.mulligan },
     ];
   } else if (sim.phase === "bottom") {
     title = "Bottom of library";
     text = `Choose ${sim.mulligans} card${sim.mulligans > 1 ? "s" : ""} in your hand to put on the bottom (${bottomIds.length}/${sim.mulligans}).`;
-    actions = [{ label: "Confirm", key: "1", primary: true, disabled: bottomIds.length !== sim.mulligans, run: () => sim.confirmBottom(bottomIds) }];
+    actions = [{ label: "Confirm", key: "ok", primary: true, disabled: bottomIds.length !== sim.mulligans, run: () => sim.confirmBottom(bottomIds) }];
   } else if (!sim.priority) {
     title = "Waiting";
     text = "Other players are deciding…";
@@ -96,7 +96,7 @@ function Decision({ sim, nameOf, bottomIds, onError }: Parameters<typeof ActionR
         <strong>{top.name}</strong> ({top.controller === v.viewer ? "yours" : nameOf(top.controller)}) is on top of the stack. Cast an instant to respond, or let it resolve.
       </>
     );
-    actions = [{ label: "Let it resolve", key: "F2", primary: true, run: sim.pass }];
+    actions = [{ label: "Let it resolve", key: "ok", primary: true, run: sim.pass }];
   } else {
     const mine = v.active === v.viewer;
     title = `${mine ? "Your" : nameOf(v.active) + "'s"} turn · ${stepLabel(v.step)}`;
@@ -110,12 +110,12 @@ function Decision({ sim, nameOf, bottomIds, onError }: Parameters<typeof ActionR
     ) : (
       "You have priority."
     );
-    actions = [{ label: "Pass priority", key: "F2", primary: true, run: sim.pass }];
+    actions = [{ label: "Pass priority", key: "ok", primary: true, run: sim.pass }];
     const commander = me.command[0];
     if (commander && mine && (v.step === "MAIN1" || v.step === "MAIN2")) {
       actions.push({
         label: `Cast ${commander.name?.split(",")[0]} (+${commanderTax(me)})`,
-        key: "C",
+        key: "castCommander",
         run: () => {
           const err = sim.castCommander();
           if (err) onError(err);
@@ -124,18 +124,13 @@ function Decision({ sim, nameOf, bottomIds, onError }: Parameters<typeof ActionR
     }
   }
 
-  // 1 / 2 / C shortcuts for the buttons shown.
-  const actionsRef = useRef(actions);
-  actionsRef.current = actions;
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).closest("input, textarea, select") || e.ctrlKey || e.metaKey || e.altKey) return;
-      const a = actionsRef.current.find((x) => x.key.length === 1 && x.key.toLowerCase() === e.key.toLowerCase());
-      if (a && !a.disabled) (e.preventDefault(), a.run());
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  // Your hotkeys for the buttons shown.
+  const byKey = (k: HotkeyAction) => () => {
+    const a = actions.find((x) => x.key === k);
+    if (!a || a.disabled) return false;
+    a.run();
+  };
+  useHotkeys({ ok: byKey("ok"), cancel: byKey("cancel"), castCommander: byKey("castCommander") });
 
   return (
     <section className={`ar-decision${sim.priority || sim.phase !== "playing" ? " live" : ""}`}>
@@ -146,7 +141,7 @@ function Decision({ sim, nameOf, bottomIds, onError }: Parameters<typeof ActionR
         {actions.map((a) => (
           <button key={a.label} className={`ar-btn${a.primary ? " primary" : ""}`} disabled={a.disabled} onClick={a.run}>
             {a.label}
-            <kbd>{a.key}</kbd>
+            <Kbd action={a.key} />
           </button>
         ))}
       </div>

@@ -35,4 +35,11 @@ export default defineSchema({
     /** Per seat, in turn order after the player (docs/stops.md). Older rows don't have it. */
     seats: v.optional(v.array(v.array(v.string()))),
   }).index("by_user", ["userId"]),
+
+  /** Per-user settings (convex/settings.ts). One row per user; absent = the defaults. */
+  settings: defineTable({
+    userId: v.id("users"),
+    /** Game hotkeys that differ from the defaults, action → key name (src/game/hotkeys.ts). */
+    hotkeys: v.record(v.string(), v.string()),
+  }).index("by_user", ["userId"]),
 });

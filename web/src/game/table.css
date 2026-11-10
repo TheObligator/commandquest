@@ -3,7 +3,7 @@
 
 #view.full { max-width: none; padding: 10px 12px 12px; }
 
-.game { --rail: 250px; --strip: 150px; display: flex; flex-direction: column; gap: 8px; height: calc(100dvh - 82px); min-height: 660px; }
+.game { --rail: 250px; --strip: 190px; display: flex; flex-direction: column; gap: 8px; height: calc(100dvh - 82px); min-height: 660px; }
 .game-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .game-toolbar h1 { font-size: 1.05rem; margin: 0 6px 0 0; }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
@@ -40,7 +40,10 @@
 .sb-focus:hover { color: var(--text); border-color: var(--seat); }
 
 /* Public zones: commander, graveyard top, exile top, library. Two rows of two, sized to the seat. */
-button.zone-tile { cursor: pointer; }
+button.zone-tile, button.zt-card { cursor: pointer; }
+button.zt-card { padding: 0; margin: 0; border: 0; background: none; color: inherit; font: inherit; display: block; }
+button.zt-card:hover { outline: 2px solid var(--accent-2); }
+.zt-cards { display: flex; gap: 3px; }
 button.zone-tile:hover .zt-card { outline: 2px solid var(--accent-2); }
 .zt-empty { height: 100%; border: 1px dashed var(--line); border-radius: inherit; display: grid; place-items: center; text-align: center; font-size: .55rem; color: #5d6476; padding: 2px; }
 
@@ -146,6 +149,9 @@ button.zone-tile:hover .zt-card { outline: 2px solid var(--accent-2); }
 .strip-col { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
 .strip-actions { display: flex; gap: 4px; }
 .strip-actions .btn { flex: 1; padding: 4px 6px; font-size: .74rem; }
+.strip-col .ar-log { flex: 0 0 auto; border: 1px solid var(--line); border-radius: 10px; background: #12151d; padding: 8px; }
+.strip-col .ar-log h3 { font-size: .68rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin: 0 0 4px; }
+.strip-col .ar-log ol { max-height: 160px; font-size: .7rem; }
 .phase-strip { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: #0f1218; }
 .ps-turn { text-align: center; padding: 4px; border-radius: 6px; border: 1px solid color-mix(in srgb, var(--active) 55%, var(--line)); background: color-mix(in srgb, var(--active) 8%, #12151d); }
 .ps-turn strong { display: block; color: var(--active); letter-spacing: .14em; text-transform: uppercase; font-size: .7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -206,7 +212,7 @@ dialog.zone-viewer { width: min(980px, calc(100vw - 32px)); max-height: 86vh; ba
 .zv-grid figcaption small { display: block; color: var(--accent-2); }
 
 @media (max-width: 1200px) {
-  .game { --rail: 210px; --strip: 124px; }
+  .game { --rail: 210px; --strip: 160px; }
 }
 @media (max-width: 860px) {
   .game { height: auto; }

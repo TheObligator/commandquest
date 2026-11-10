@@ -2,7 +2,7 @@
 // layout, stops and decisions can be tried without a game server. Live games (#/game) use the same
 // board (game/TableBoard.tsx) with views from the server.
 import { useConvexAuth, useQuery } from "convex/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useRoute } from "../app/router";
 import { toast } from "../dom";
@@ -10,6 +10,7 @@ import { ActionRail } from "../game/ActionRail";
 import { useCardData } from "../game/cards";
 import { ME, SIM_CARD_NAMES } from "../game/sim";
 import { LayoutPicker, TableBoard, useStored, useTableStops, type LayoutId } from "../game/TableBoard";
+import { useHotkeys } from "../game/useHotkeys";
 import { useSimGame } from "../game/useSimGame";
 
 const OPPONENT_NAMES = ["Opponent 1", "Opponent 2", "Opponent 3"];
@@ -67,25 +68,14 @@ function Game({ count, start, layout, myName }: { count: number; start: "new" | 
   const err = (msg: string | undefined) => msg && toast(msg, "error");
   const playCard = (id: number) => err(sim.play(id));
 
-  // Keyboard: F2 pass, F6 / E / B / R auto-pass, H hold priority (Esc is handled by the board).
-  const keys = useRef<(e: KeyboardEvent) => void>(() => {});
-  keys.current = (e) => {
-    if ((e.target as HTMLElement).closest("input, textarea, select, dialog") || e.ctrlKey || e.metaKey || e.altKey) return;
-    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-    const playing = sim.phase === "playing";
-    if (k === "F2" && playing) sim.pass();
-    else if ((k === "F6" || k === "e") && playing) sim.setAutoPass("END_OF_TURN");
-    else if (k === "b" && playing) sim.setAutoPass("BEFORE_MY_TURN");
-    else if (k === "r" && playing) sim.setAutoPass("ACTION_OR_END_STEP");
-    else if (k === "h") st.setHoldPriority(!st.holdPriority);
-    else return;
-    e.preventDefault();
-  };
-  useEffect(() => {
-    const on = (e: KeyboardEvent) => keys.current(e);
-    window.addEventListener("keydown", on);
-    return () => window.removeEventListener("keydown", on);
-  }, []);
+  // Your hotkeys (Settings): auto-pass skips and hold priority. The decision's buttons handle their own.
+  const playing = sim.phase === "playing";
+  useHotkeys({
+    autoEndOfTurn: () => (playing ? sim.setAutoPass("END_OF_TURN") : false),
+    autoBeforeMyTurn: () => (playing ? sim.setAutoPass("BEFORE_MY_TURN") : false),
+    autoActionOrEnd: () => (playing ? sim.setAutoPass("ACTION_OR_END_STEP") : false),
+    holdPriority: () => st.setHoldPriority(!st.holdPriority),
+  });
 
   return (
     <TableBoard

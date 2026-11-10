@@ -17,13 +17,17 @@ The game screen has a vertical phase strip on the right. Every step is a tile sp
 - **Stops only affect an empty stack.** As on MTGO, you always get priority when something is on the
   stack or the game needs a decision from you (attackers, blockers, targets…). Untap and cleanup
   have no priority (CR 502.4, 514.3), so they can't hold stops.
-- **Pass (F2)** passes priority once. **Pass turn (F6)** is the same as the "End of turn" auto-pass.
+- **Pass (Space)** passes priority once. Keys are the player's own (Settings); the defaults are given here.
 - **Auto-pass** (left rail) skips ahead, ignoring your stops but still stopping when something goes
   on the stack (`autoPassStatus` in `phases.ts`):
   - **End of turn (E):** skip the rest of this turn; your stops apply again from the next turn.
   - **Before my turn (B):** skip until the end step of the player right before you.
   - **Action / end step (R):** skip until someone casts something, or this turn's end step.
-- **Hold priority (H):** after you cast a spell you keep priority, so you can respond to it yourself.
+- **Hold priority (Shift, under the phase strip):** off, casting a spell or activating an ability
+  passes priority once it's on the stack, as on MTGO. On, you keep priority, so you can cast more
+  or respond to your own spell before passing. In live games the browser does the pass: once your
+  item is on top of the stack, it answers Forge's next priority prompt (OK + End Turn / Undo) with
+  OK (`LiveGame.tsx`).
 - **Presets.** Each account has a default preset (Convex `stops.get` / `stops.save` / `stops.reset`):
   one list for your turn, one per seat (`seats[0]` is the player after you in turn order, and so on),
   and a general opponents list (the stops all opponents share), used for any seat with no saved list.

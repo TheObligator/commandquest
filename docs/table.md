@@ -10,20 +10,26 @@ The game screen. The board itself is `web/src/game/TableBoard.tsx`, shared by tw
   hands) or the default mid-game (turn 9, full boards).
 
 ```
- ┌ action rail ┐ ┌──────────── seats ────────────┐ ┌ phase strip ┐
- │ Decision    │ │ Opp 1      Opp 2      Opp 3   │ │ Your turn T9 │
- │ Auto-pass   │ │                               │ │ Untap        │
- │ Stack       │ │ You                           │ │ Upkeep …     │
- │ Card preview│ │                               │ │ Hold priority│
- │ Log         │ └ Hand (upright, from the left) ┘ └ Save stops   ┘
+ ┌ action rail ┐ ┌──────────── seats ────────────┐ ┌ phase strip ─┐
+ │ Stack       │ │ Opp 1      Opp 2      Opp 3   │ │ Your turn T9 │
+ │ Card preview│ │                               │ │ Untap …      │
+ │             │ │ You                           │ │ Save stops   │
+ │ Decision    │ │                               │ │ Hold priority│
+ │ Auto-pass   │ └ Hand (upright, from the left) ┘ └ Log          ┘
 ```
 
 ## Layout
 
-- **Action rail (left):** the decision the game wants (mulligan, bottoming cards, respond to the
-  stack, your turn), the auto-pass skips (docs/stops.md), the stack (top first, in the caster's
-  seat color), the hovered card, and the log.
-- **Phase strip (right):** stops per step, split you / opponents (docs/stops.md).
+- **Action rail (left):** the stack (top first, in the caster's seat color), the hovered card, then
+  at the bottom the decision the game wants (mulligan, bottoming cards, respond to the stack, your
+  turn) and the auto-pass skips (docs/stops.md).
+- **Right column:** the phase strip with stops per step, split you / opponents (docs/stops.md),
+  then the hold-priority toggle and the log.
+- **Hotkeys** are the player's own (Settings, `#/settings`; `web/src/game/hotkeys.ts`), and every
+  button shows the key it's bound to. Defaults: Space pass priority / OK, X the second button
+  (Cancel, Mulligan, End Turn), Shift hold priority (tapped on its own), C cast your commander, and
+  E / B / R the auto-pass skips. Esc closes an enlarged board. They're saved to the account (Convex
+  `settings`) and in the browser, so they also work signed out.
 - **Seats** are always in turn order, starting from the player after you. Four layouts, chosen in
   the toolbar and remembered per browser:
   - **Pod:** opponents in a row across the top, you below.
@@ -36,9 +42,10 @@ The game screen. The board itself is `web/src/game/TableBoard.tsx`, shared by tw
 ## A seat
 
 - Header: name, life, poison, commander damage taken (♛, in the attacking commander's color).
-- Along the bottom-left (on the left in the stacked layout), the zones as card tiles, each with a
-  label and count: library (a card back), top of graveyard, top of exile, the commander (with its
-  tax), and how many cards are in hand. Click graveyard or exile to see every card in it.
+- Along the bottom-right (on the right in the stacked layout), the zones as card tiles, each with
+  a label and count: library (a card back), top of graveyard, top of exile, the commander with its
+  mana cost and tax (partners side by side; click one of yours to cast it), and how many cards are
+  in hand. Click graveyard or exile to see every card in it.
 - Battlefield in three rows: creatures, other permanents, lands. Identical cards pile up with a ×N
   badge. Cards shrink to fit the seat. Drag cards to another row or position to arrange a board;
   that's only your view and never goes to the server.

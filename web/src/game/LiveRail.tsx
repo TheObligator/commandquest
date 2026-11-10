@@ -1,7 +1,8 @@
-// Left rail for a live game: the stack, the hovered card and the log, then at the bottom Forge's
-// current prompt (with Forge's own button labels) or question, and the auto-pass skips.
-import { useEffect, useRef, useState } from "react";
-import { AUTO_PASS, Log, PreviewCard, StackList } from "./ActionRail";
+// Left rail for a live game: the stack and the hovered card, then at the bottom Forge's current
+// prompt (with Forge's own button labels) or question, and the auto-pass skips.
+import { useEffect, useState } from "react";
+import { AUTO_PASS, PreviewCard, StackList } from "./ActionRail";
+import { Kbd, useHotkeys } from "./useHotkeys";
 import { cardImage, previewFor, usePreview, type Preview } from "./cards";
 import type { LiveAsk, LiveGame } from "./useLiveGame";
 
@@ -27,8 +28,6 @@ export function LiveRail(props: {
         {preview ? <PreviewCard p={preview} /> : <p className="ar-sub">Hover a card to see it here.</p>}
       </section>
 
-      <Log lines={v.log} />
-
       {/* At the bottom, by your hand: what the game wants now, then the skips. */}
       {game.ask ? <AskPanel ask={game.ask} game={game} nameOf={nameOf} /> : <PromptPanel game={game} />}
 
@@ -46,7 +45,7 @@ export function LiveRail(props: {
             onClick={() => game.setAutoPass(a.mode)}
           >
             {a.label}
-            <kbd>{a.key}</kbd>
+            <Kbd action={a.key} />
           </button>
         ))}
       </section>
@@ -57,21 +56,10 @@ export function LiveRail(props: {
 /** Forge's prompt: OK / Cancel with Forge's labels (OK passes priority; Cancel is often "End Turn"). */
 function PromptPanel({ game }: { game: LiveGame }) {
   const p = game.prompt;
-  const okRef = useRef(game.ok);
-  okRef.current = game.ok;
-  const pRef = useRef(p);
-  pRef.current = p;
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).closest("input, textarea, select, dialog") || e.ctrlKey || e.metaKey || e.altKey) return;
-      const cur = pRef.current;
-      if (!cur) return;
-      if ((e.key === "F2" || e.key === "1") && cur.ok.enabled) (e.preventDefault(), okRef.current());
-      else if (e.key === "2" && cur.cancel.enabled) (e.preventDefault(), game.cancel());
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [game]);
+  useHotkeys({
+    ok: () => (p?.ok.enabled ? game.ok() : false),
+    cancel: () => (p?.cancel.enabled ? game.cancel() : false),
+  });
 
   if (!p) {
     return (
@@ -92,13 +80,13 @@ function PromptPanel({ game }: { game: LiveGame }) {
         {p.ok.label && (
           <button className="ar-btn primary" disabled={!p.ok.enabled} onClick={game.ok}>
             {p.ok.label}
-            <kbd>F2</kbd>
+            <Kbd action="ok" />
           </button>
         )}
         {p.cancel.label && (
           <button className="ar-btn" disabled={!p.cancel.enabled} onClick={game.cancel}>
             {p.cancel.label}
-            <kbd>2</kbd>
+            <Kbd action="cancel" />
           </button>
         )}
       </div>
@@ -129,6 +117,14 @@ function AskPanel({ ask, game, nameOf }: { ask: LiveAsk; game: LiveGame; nameOf:
     setPicked((p) => (p.includes(i) ? p.filter((x) => x !== i) : p.length < ask.max ? [...p, i] : p));
   };
   const viewer = game.view?.viewer ?? "";
+  useHotkeys({
+    ok: () => {
+      if (info) game.answer(ask.id, []);
+      else if (ask.kind !== "text" && !single && ok) game.answer(ask.id, picked);
+      else return false;
+    },
+    cancel: () => (ask.min === 0 && !info && ask.kind !== "text" ? game.answer(ask.id, []) : false),
+  });
 
   return (
     <section className="ar-decision live ar-ask">
@@ -177,16 +173,19 @@ function AskPanel({ ask, game, nameOf }: { ask: LiveAsk; game: LiveGame; nameOf:
             {info && (
               <button className="ar-btn primary" onClick={() => game.answer(ask.id, [])}>
                 OK
+                <Kbd action="ok" />
               </button>
             )}
             {!single && !info && (
               <button className="ar-btn primary" disabled={!ok} onClick={() => game.answer(ask.id, picked)}>
                 Confirm
+                <Kbd action="ok" />
               </button>
             )}
             {ask.min === 0 && !info && (
               <button className="ar-btn" onClick={() => game.answer(ask.id, [])}>
                 {single ? "Cancel" : "Choose none"}
+                <Kbd action="cancel" />
               </button>
             )}
           </div>

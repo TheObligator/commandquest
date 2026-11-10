@@ -6,12 +6,14 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api } from "../../convex/_generated/api";
 import { errorMessage } from "../app/errors";
 import { toast } from "../dom";
+import { Log } from "./ActionRail";
 import { PreviewContext, type Preview } from "./cards";
 import { HandBar } from "./HandBar";
 import { PhaseStrip, type Seat } from "./PhaseStrip";
 import { DEFAULT_PRESET, presetFromStops, stopsFromPreset, type StopPreset, type TableStops } from "./phases";
 import { SeatBoard, type ZoneName } from "./SeatBoard";
 import { prune, type Arrangement, type GameView } from "./view";
+import { useKeyHint, Kbd } from "./useHotkeys";
 import { ZoneViewer } from "./ZoneViewer";
 import "./table.css";
 
@@ -110,8 +112,6 @@ export function TableBoard(props: {
   stops: TableStopsState;
   /** You have priority right now (lights up the strip). */
   priority: boolean;
-  /** Hide the hold-priority toggle (live games: Forge always gives you priority back). */
-  noHoldPriority?: boolean;
   hand: {
     selecting?: boolean;
     selected?: number[];
@@ -124,7 +124,8 @@ export function TableBoard(props: {
   onCardClick?: (id: number) => void;
   onPlayerClick?: (id: string) => void;
   onTap?: (id: number) => void;
-  onCastCommander?: () => void;
+  /** Cast a commander from your command zone (by card id: partners are two). */
+  onCastCommander?: (id: number) => void;
   /** Cards Forge lets you pick right now. */
   selectable?: Set<number>;
 }) {
@@ -237,13 +238,13 @@ export function TableBoard(props: {
             priority={props.priority}
             perOpponent={st.perOpponent}
             onPerOpponent={st.setPerOpponent}
-            holdPriority={props.noHoldPriority ? undefined : st.holdPriority}
-            onHoldPriority={props.noHoldPriority ? undefined : st.setHoldPriority}
           />
           <div className="strip-actions">
             <button className="btn small" onClick={() => void st.save()} title="Use these stops in every new game (per seat, in turn order after you)">Save stops</button>
             <button className="btn small ghost" onClick={() => void st.reset()}>Reset</button>
           </div>
+          <HoldPriority on={st.holdPriority} onChange={st.setHoldPriority} />
+          <Log lines={v.log} />
         </div>
       </div>
 
@@ -257,5 +258,22 @@ export function TableBoard(props: {
         />
       )}
     </PreviewContext.Provider>
+  );
+}
+
+/** Hold priority: after you cast a spell or activate an ability, keep priority instead of passing. */
+function HoldPriority({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+  const hint = useKeyHint("holdPriority");
+  return (
+    <button
+      className={`ps-hold${on ? " on" : ""}`}
+      aria-pressed={on}
+      title={`${on ? "On: you keep priority after you cast or activate something, so you can do more before passing." : "Off: casting or activating something passes priority."}${hint}`}
+      onClick={() => onChange(!on)}
+    >
+      Hold priority
+      <span className="ps-toggle"><i /></span>
+      <Kbd action="holdPriority" />
+    </button>
   );
 }

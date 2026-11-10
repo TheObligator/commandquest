@@ -14,6 +14,7 @@ import type * as http from "../http.js";
 import type * as importDeck from "../importDeck.js";
 import type * as model_deckRules from "../model/deckRules.js";
 import type * as model_importers from "../model/importers.js";
+import type * as settings from "../settings.js";
 import type * as stops from "../stops.js";
 import type * as users from "../users.js";
 
@@ -30,6 +31,7 @@ declare const fullApi: ApiFromModules<{
   importDeck: typeof importDeck;
   "model/deckRules": typeof model_deckRules;
   "model/importers": typeof model_importers;
+  settings: typeof settings;
   stops: typeof stops;
   users: typeof users;
 }>;
