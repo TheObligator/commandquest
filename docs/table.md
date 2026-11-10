@@ -48,8 +48,10 @@ The game screen. The board itself is `web/src/game/TableBoard.tsx`, shared by tw
      `all_parts`, one entry per kind of token (name, colors and P/T: `tokenIdentity` in
      `web/src/tokens.ts`). The default printing is the commander's version if a commander makes it,
      else the newest card's. You can pick another printing per deck in the deck editor's Tokens
-     section (Convex `decks.tokenArt`, only your picks are stored). The deck's list goes to the game
-     server at the start, and each player's tokens use their own deck's art.
+     section (Convex `decks.tokenArt`, only your picks are stored). Importing a deck brings its
+     token printings in as picks: Moxfield's Tokens board, token cards on an Archidekt deck, or a
+     `Tokens` section with set and number in a pasted list (`tokenPicks`). The deck's list goes to
+     the game server at the start, and each player's tokens use their own deck's art.
   2. Otherwise (e.g. AI precons), the token from the set of the card that made it: Forge's token
      image key names the printing (10E's Goblin is Scryfall's t10e #4).
   3. Otherwise a search by name, colors and base P/T, newest printing first.

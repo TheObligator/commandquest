@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { DeckCard } from "../convex/model/deckRules.ts";
 import type { ScryCard } from "../src/scryfall.ts";
-import { deckTokens, tokenArtMap, tokenIdentity, tokenIds } from "../src/tokens.ts";
+import { deckTokens, tokenArtMap, tokenIdentity, tokenIds, tokenPicks } from "../src/tokens.ts";
 
 // A tiny Scryfall: cards that make tokens, and the token printings.
 const sc = (o: Partial<ScryCard> & { id: string; name: string }): ScryCard => ({ layout: "normal", cmc: 0, type_line: "", color_identity: [], set: "x", set_name: "X", collector_number: "1", rarity: "common", scryfall_uri: "", legalities: {}, ...o }) as ScryCard;
@@ -48,4 +48,19 @@ test("emblems aren't tokens, and sideboard cards don't count", () => {
   const list = deckTokens([d("Goldspan Dragon", "smith"), d("Goblin Instigator", "warren", "side")], card, token);
   assert.deepEqual(list.map((t) => t.name), ["Treasure"]);
   assert.deepEqual(tokenIds([d("Goldspan Dragon", "smith")], card).sort(), ["emblem-x", "treasure-khm"]);
+});
+
+test("tokenPicks: imported token printings become picks, first per kind wins, non-tokens ignored", () => {
+  const picks = tokenPicks([
+    sc({ id: "g1", name: "Goblin", layout: "token", type_line: "Token Creature — Goblin", colors: ["R"], power: "1", toughness: "1" }),
+    sc({ id: "g2", name: "Goblin", layout: "token", type_line: "Token Creature — Goblin", colors: ["R"], power: "1", toughness: "1" }),
+    sc({ id: "tr", name: "Treasure", layout: "token", type_line: "Token Artifact — Treasure", colors: [] }),
+    sc({ id: "em", name: "Elspeth Emblem", layout: "emblem", type_line: "Emblem — Elspeth" }),
+    sc({ id: "sol", name: "Sol Ring", type_line: "Artifact" }),
+    undefined,
+  ]);
+  assert.deepEqual(picks, [
+    { identity: "goblin|R|1/1", scryfallId: "g1" },
+    { identity: "treasure||-", scryfallId: "tr" },
+  ]);
 });

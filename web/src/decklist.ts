@@ -14,13 +14,22 @@ export interface ParsedCard {
   collectorNumber?: string;
 }
 
+/** A token printing listed with the deck (a "Tokens" section): used as the deck's token art. */
+export interface ParsedToken {
+  name: string;
+  scryfallId?: string;
+  set?: string;
+  collectorNumber?: string;
+}
+
 export interface ParsedList {
   name?: string;
   cards: ParsedCard[];
+  tokens: ParsedToken[];
   errors: string[];
 }
 
-const SECTIONS: Record<string, Board | "about" | "skip"> = {
+const SECTIONS: Record<string, Board | "about" | "tokens" | "skip"> = {
   commander: "commander",
   commanders: "commander",
   companion: "side",
@@ -34,7 +43,8 @@ const SECTIONS: Record<string, Board | "about" | "skip"> = {
   maybe: "maybe",
   considering: "maybe",
   about: "about",
-  tokens: "skip",
+  tokens: "tokens",
+  token: "tokens",
   attractions: "skip",
   stickers: "skip",
 };
@@ -43,8 +53,8 @@ const LINE =
   /^(?:(\d+)\s*x?\s+)?(.+?)(?:\s+\(([A-Za-z0-9]{2,6})\)(?:\s+([^\s[*^]+))?)?((?:\s+\*[A-Za-z]+\*)*)\s*(?:\[([^\]]*)\])?\s*(?:\^[^^]*\^)?\s*$/;
 
 export function parseDecklist(text: string): ParsedList {
-  const out: ParsedList = { cards: [], errors: [] };
-  let section: Board | "about" | "skip" = "main";
+  const out: ParsedList = { cards: [], tokens: [], errors: [] };
+  let section: Board | "about" | "tokens" | "skip" = "main";
   for (const raw of text.split(/\r?\n/)) {
     let line = raw.trim();
     if (!line) continue;
@@ -62,6 +72,12 @@ export function parseDecklist(text: string): ParsedList {
       continue;
     }
     if (section === "skip") continue;
+
+    if (section === "tokens") {
+      const t = LINE.exec(line);
+      if (t?.[2]) out.tokens.push({ name: t[2].trim(), ...(t[3] && { set: t[3].toLowerCase() }), ...(t[4] && { collectorNumber: t[4] }) });
+      continue;
+    }
 
     let board: Board = section;
     if (/^SB:\s*/i.test(line)) {

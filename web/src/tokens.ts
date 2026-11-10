@@ -58,8 +58,7 @@ export function deckTokens(
     for (const part of sc?.all_parts ?? []) {
       const t = token(part.id);
       if (!t || isEmblem(t)) continue;
-      const face = t.card_faces?.[0];
-      const id = tokenIdentity({ name: t.name, colors: t.colors ?? face?.color_indicator, power: t.power ?? face?.power, toughness: t.toughness ?? face?.toughness });
+      const id = printingIdentity(t);
       const entry = byIdentity.get(id) ?? { name: t.name, typeLine: t.type_line, sources: [] };
       if (!entry.sources.some((s) => s.card === c.name)) {
         entry.sources.push({ card: c.name, tokenId: t.id, released: sc?.released_at, commander: c.board === "commander" });
@@ -77,6 +76,27 @@ export function deckTokens(
   return list.sort((a, b) => a.name.localeCompare(b.name) || a.identity.localeCompare(b.identity));
 }
 
+/** The identity of a token printing from Scryfall. */
+export function printingIdentity(t: ScryCard): string {
+  const face = t.card_faces?.[0];
+  return tokenIdentity({ name: t.name, colors: t.colors ?? face?.color_indicator, power: t.power ?? face?.power, toughness: t.toughness ?? face?.toughness });
+}
+
+/**
+ * Token art picks from token printings listed with an imported deck (Moxfield's Tokens board,
+ * Archidekt token cards, a "Tokens" section): one per kind of token, the first listed wins.
+ * Anything that isn't a token is ignored.
+ */
+export function tokenPicks(printings: (ScryCard | undefined)[]): { identity: string; scryfallId: string }[] {
+  const picks = new Map<string, string>();
+  for (const t of printings) {
+    if (!t || isEmblem(t) || !isToken(t)) continue;
+    const identity = printingIdentity(t);
+    if (!picks.has(identity)) picks.set(identity, t.id);
+  }
+  return [...picks].map(([identity, scryfallId]) => ({ identity, scryfallId }));
+}
+
 /** Every token printing the deck's cards point at (to fetch before calling `deckTokens`). */
 export function tokenIds(cards: DeckCard[], card: (c: DeckCard) => ScryCard | undefined): string[] {
   const ids = new Set<string>();
@@ -87,6 +107,10 @@ export function tokenIds(cards: DeckCard[], card: (c: DeckCard) => ScryCard | un
 /** What a game needs: the printing to use for each kind of token. */
 export function tokenArtMap(tokens: DeckToken[]): Record<string, string> {
   return Object.fromEntries(tokens.map((t) => [t.identity, t.id]));
+}
+
+function isToken(t: ScryCard) {
+  return t.layout === "token" || t.layout === "double_faced_token" || /\btoken\b/i.test(t.type_line ?? "");
 }
 
 function isEmblem(t: ScryCard) {

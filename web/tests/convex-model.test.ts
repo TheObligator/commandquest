@@ -45,12 +45,13 @@ test("parseMoxfield (v3): boards, printings, unknown formats become other", () =
     name: "Test Deck", format: "none", boards: {
       mainboard: { cards: { a: { quantity: 1, card: { name: "Sol Ring", scryfall_id: "aaaaaaaa-0000-0000-0000-000000000000", set: "c21", cn: "263" } }, b: { quantity: 30, card: { name: "Island" } } } },
       commanders: { cards: { c: { quantity: 1, card: { name: "Talrand, Sky Summoner" } } } },
-      tokens: { cards: { t: { quantity: 1, card: { name: "Drake" } } } },
+      tokens: { cards: { t: { quantity: 1, card: { name: "Drake", scryfall_id: "dddddddd-0000-0000-0000-000000000000", set: "tm19", cn: "4" } } } },
     },
   });
   assert.equal(d.format, "other");
   assert.deepEqual(d.cards.map((c) => [c.name, c.board]), [["Talrand, Sky Summoner", "commander"], ["Island", "main"], ["Sol Ring", "main"]]);
   assert.equal(d.cards[2].collectorNumber, "263");
+  assert.deepEqual(d.tokens, [{ name: "Drake", scryfallId: "dddddddd-0000-0000-0000-000000000000", set: "tm19", collectorNumber: "4" }]);
 });
 
 test("parseArchidekt: commander, excluded categories, formats", () => {
@@ -62,9 +63,11 @@ test("parseArchidekt: commander, excluded categories, formats", () => {
       { quantity: 2, categories: ["Maybeboard"], card: { oracleCard: { name: "Thallid" } } },
       { quantity: 1, categories: ["Sideboard"], card: { oracleCard: { name: "Naturalize" } } },
       { quantity: 12, categories: [], card: { oracleCard: { name: "Forest" } } },
+      { quantity: 1, categories: ["Tokens"], card: { uid: "eeeeeeee-0000-0000-0000-000000000000", collectorNumber: "12", edition: { editioncode: "ttsp" }, oracleCard: { name: "Saproling", layout: "token", types: ["Creature"] } } },
     ],
   });
   assert.equal(d.format, "commander");
   assert.deepEqual(d.cards.map((c) => [c.name, c.board]), [["Thelon of Havenwood", "commander"], ["Forest", "main"], ["Naturalize", "side"], ["Thallid", "maybe"]]);
   assert.equal(d.cards[0].set, "tsp");
+  assert.deepEqual(d.tokens, [{ name: "Saproling", scryfallId: "eeeeeeee-0000-0000-0000-000000000000", set: "ttsp", collectorNumber: "12" }]);
 });

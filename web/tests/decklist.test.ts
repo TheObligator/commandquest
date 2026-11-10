@@ -42,10 +42,11 @@ test("Archidekt categories and markers", () => {
   assert.equal(r.cards[4].name, "Fire // Ice");
 });
 
-test("Arena 'About' block names the deck, comments and token sections are skipped", () => {
-  const r = parseDecklist("About\nName My Cool Deck\n\n// a comment\nDeck\n1 Island\n\nTokens\n1 Treasure\n");
+test("Arena 'About' block names the deck, comments are skipped, tokens are listed apart", () => {
+  const r = parseDecklist("About\nName My Cool Deck\n\n// a comment\nDeck\n1 Island\n\nTokens\n1 Treasure\n1 Goblin (TM13) 6\n");
   assert.equal(r.name, "My Cool Deck");
   assert.deepEqual(r.cards.map((c) => c.name), ["Island"]);
+  assert.deepEqual(r.tokens, [{ name: "Treasure" }, { name: "Goblin", set: "tm13", collectorNumber: "6" }]);
 });
 
 test("headers with counts and colons", () => {

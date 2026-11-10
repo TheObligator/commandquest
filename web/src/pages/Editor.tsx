@@ -6,7 +6,7 @@ import type { Board, DeckCard } from "../../convex/model/deckRules";
 import { errorMessage } from "../app/errors";
 import { navigate, replaceQuietly, useLeaveGuard, useRoute } from "../app/router";
 import { closeOnBackdrop, showCardDetails } from "../carddetails";
-import { mergeDuplicates, parseDecklist, writeDecklist } from "../decklist";
+import { mergeDuplicates, parseDecklist, writeDecklist, type ParsedToken } from "../decklist";
 import { toast } from "../dom";
 import { CardMenu } from "../components/CardMenu";
 import { DeckTokens } from "../components/DeckTokens";
@@ -14,6 +14,7 @@ import { ManaCost } from "../components/ManaCost";
 import { Loading } from "../components/Spinner";
 import { CONQUEST, validateConquest } from "../formats/conquest";
 import * as scry from "../scryfall";
+import { tokenPicks } from "../tokens";
 import { BOARDS } from "./boards";
 import { SearchBox, SearchResults } from "./EditorSearch";
 import { capitalize } from "./DeckList";
@@ -24,6 +25,8 @@ const MAX_WALKERS_BESIDE_COMMANDER = 3;
 const TYPE_ORDER = ["Creature", "Planeswalker", "Battle", "Instant", "Sorcery", "Artifact", "Enchantment", "Land", "Other"];
 const COLORS: Record<string, string> = { W: "White", U: "Blue", B: "Black", R: "Red", G: "Green" };
 const UNTITLED = "Untitled deck";
+
+type TokenPick = { identity: string; scryfallId: string };
 
 interface Draft {
   id?: Id<"decks">;
@@ -65,6 +68,9 @@ function DeckEditor({ initial }: { initial: Draft }) {
   const updateDeck = useMutation(api.decks.update);
   const removeDeck = useMutation(api.decks.remove);
   const importFromUrl = useAction(api.importDeck.fromUrl);
+  const addTokenArt = useMutation(api.decks.addTokenArt);
+  // Token art from an import into a deck that isn't saved yet: stored once it's created.
+  const pendingTokenArt = useRef<TokenPick[]>([]);
 
   // ---- Autosave ----
   // Every change bumps `version` and marks the deck dirty; a save runs ~0.8 s after the last change.
@@ -172,7 +178,7 @@ function DeckEditor({ initial }: { initial: Draft }) {
     });
   }
 
-  async function applyImport(cards: DeckCard[], replace: boolean, name?: string, format?: string) {
+  async function applyImport(cards: DeckCard[], replace: boolean, name?: string, format?: string, tokens: ParsedToken[] = []) {
     const merged = mergeDuplicates(replace ? cards : [...deck.cards, ...cards]);
     change((d) => ({
       ...d,
@@ -182,7 +188,24 @@ function DeckEditor({ initial }: { initial: Draft }) {
     }));
     setTab("search");
     toast(`Imported ${cards.reduce((n, c) => n + c.quantity, 0)} cards`);
-    await resolveCards(merged);
+    await Promise.all([resolveCards(merged), importTokenArt(tokens)]);
+  }
+
+  /** The token printings an imported list names become this deck's token art. */
+  async function importTokenArt(tokens: ParsedToken[]) {
+    const known = tokens.filter((t) => t.scryfallId || (t.set && t.collectorNumber));
+    if (!known.length) return;
+    const asCards: DeckCard[] = known.map((t) => ({ name: t.name, quantity: 1, board: "main", scryfallId: t.scryfallId, set: t.set, collectorNumber: t.collectorNumber }));
+    try {
+      await scry.resolve(asCards);
+      const picks = tokenPicks(asCards.map((c) => (c.scryfallId ? scry.cachedById(c.scryfallId) : scry.cachedPrinting(c.set!, c.collectorNumber!))));
+      if (!picks.length) return;
+      if (idRef.current) await addTokenArt({ id: idRef.current, picks });
+      else pendingTokenArt.current = [...pendingTokenArt.current.filter((p) => !picks.some((q) => q.identity === p.identity)), ...picks];
+      toast(`Imported art for ${picks.length} token${picks.length === 1 ? "" : "s"}`);
+    } catch (e) {
+      toast(`Couldn't import the deck's token art: ${errorMessage(e)}`, "error");
+    }
   }
 
   // ---- Save / delete / export ----
@@ -206,6 +229,11 @@ function DeckEditor({ initial }: { initial: Draft }) {
       else {
         const id = await createDeck(body);
         idRef.current = id;
+        if (pendingTokenArt.current.length) {
+          const picks = pendingTokenArt.current;
+          pendingTokenArt.current = [];
+          addTokenArt({ id, picks }).catch((e) => toast(`Couldn't save the deck's token art: ${errorMessage(e)}`, "error"));
+        }
         setDeck((x) => ({ ...x, id }));
         replaceQuietly(`/decks/${id}`);
       }
@@ -424,8 +452,8 @@ function ImportPane(props: {
   hidden: boolean;
   startReplacing: boolean;
   autoFocus: boolean;
-  onImport: (cards: DeckCard[], replace: boolean, name?: string, format?: string) => Promise<void>;
-  importFromUrl: (url: string) => Promise<{ name: string; format: string; cards: DeckCard[] }>;
+  onImport: (cards: DeckCard[], replace: boolean, name?: string, format?: string, tokens?: ParsedToken[]) => Promise<void>;
+  importFromUrl: (url: string) => Promise<{ name: string; format: string; cards: DeckCard[]; tokens: ParsedToken[] }>;
 }) {
   const [replace, setReplace] = useState(props.startReplacing);
   const [url, setUrl] = useState("");
@@ -436,7 +464,7 @@ function ImportPane(props: {
     if (!parsed.cards.length) {
       return toast(parsed.errors.length ? `Couldn't read any cards (first bad line: "${parsed.errors[0]}")` : "No cards found in that list.", "error");
     }
-    await props.onImport(parsed.cards, replace, parsed.name ?? fallbackName);
+    await props.onImport(parsed.cards, replace, parsed.name ?? fallbackName, undefined, parsed.tokens);
     setReplace(false);
     if (parsed.errors.length) toast(`Skipped ${parsed.errors.length} line(s) that didn't look like cards: "${parsed.errors[0]}"…`, "error");
   }
@@ -446,7 +474,7 @@ function ImportPane(props: {
     setBusy(true);
     try {
       const d = await props.importFromUrl(url.trim());
-      await props.onImport(d.cards, replace, d.name, d.format);
+      await props.onImport(d.cards, replace, d.name, d.format, d.tokens);
       setReplace(false);
       setUrl("");
     } catch (e) {

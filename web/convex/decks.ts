@@ -83,6 +83,26 @@ export const remove = mutation({
 const SCRYFALL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MAX_TOKEN_PICKS = 200;
 
+/** Token art from an imported deck: these picks replace any for the same kinds of token. */
+export const addTokenArt = mutation({
+  args: { id: v.id("decks"), picks: v.array(v.object({ identity: v.string(), scryfallId: v.string() })) },
+  handler: async (ctx, { id, picks }) => {
+    const userId = await requireUser(ctx);
+    const deck = await ctx.db.get(id);
+    if (!deck || deck.userId !== userId) throw new ConvexError("Deck not found.");
+    for (const p of picks) checkPick(p.identity, p.scryfallId);
+    const ids = new Set(picks.map((p) => p.identity));
+    const next = [...(deck.tokenArt ?? []).filter((t) => !ids.has(t.identity)), ...picks];
+    if (next.length > MAX_TOKEN_PICKS) throw new ConvexError("Too many token picks for one deck.");
+    await ctx.db.patch(id, { tokenArt: next });
+  },
+});
+
+function checkPick(identity: string, scryfallId: string | null) {
+  if (identity.length > 120 || !identity.includes("|")) throw new ConvexError("Not a token.");
+  if (scryfallId !== null && !SCRYFALL_ID.test(scryfallId)) throw new ConvexError("Not a Scryfall card id.");
+}
+
 /** Pick the printing for one kind of token in a deck (`scryfallId: null` goes back to the default). */
 export const setTokenArt = mutation({
   args: { id: v.id("decks"), identity: v.string(), scryfallId: v.union(v.string(), v.null()) },
@@ -90,8 +110,7 @@ export const setTokenArt = mutation({
     const userId = await requireUser(ctx);
     const deck = await ctx.db.get(id);
     if (!deck || deck.userId !== userId) throw new ConvexError("Deck not found.");
-    if (identity.length > 120 || !identity.includes("|")) throw new ConvexError("Not a token.");
-    if (scryfallId !== null && !SCRYFALL_ID.test(scryfallId)) throw new ConvexError("Not a Scryfall card id.");
+    checkPick(identity, scryfallId);
     const picks = (deck.tokenArt ?? []).filter((t) => t.identity !== identity);
     if (scryfallId !== null) picks.push({ identity, scryfallId });
     if (picks.length > MAX_TOKEN_PICKS) throw new ConvexError("Too many token picks for one deck.");

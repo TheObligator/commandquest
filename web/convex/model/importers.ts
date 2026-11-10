@@ -8,6 +8,15 @@ export interface ImportedDeck {
   format: string;
   source: "moxfield" | "archidekt";
   cards: DeckCard[];
+  /** Token printings the deck lists (Moxfield's Tokens board, Archidekt token cards): its token art. */
+  tokens: ImportedToken[];
+}
+
+export interface ImportedToken {
+  name: string;
+  scryfallId?: string;
+  set?: string;
+  collectorNumber?: string;
 }
 
 export type DeckSource = { site: "moxfield"; id: string; apiUrl: string } | { site: "archidekt"; id: string; apiUrl: string };
@@ -33,6 +42,14 @@ const byBoard = (a: DeckCard, b: DeckCard) => ORDER.indexOf(a.board) - ORDER.ind
 const text = (v: unknown) => (typeof v === "string" && v.trim() ? v : undefined);
 const KNOWN_FORMATS = new Set(["commander", "conquest", "standard", "pioneer", "modern", "legacy", "vintage", "pauper"]);
 
+function token(name: string, scryfallId?: string, set?: string, cn?: string): ImportedToken {
+  const t: ImportedToken = { name };
+  if (scryfallId) t.scryfallId = scryfallId;
+  if (set) t.set = set;
+  if (cn) t.collectorNumber = cn;
+  return t;
+}
+
 function card(name: string, quantity: number, board: Board, scryfallId?: string, set?: string, cn?: string): DeckCard {
   const c: DeckCard = { name, quantity, board };
   if (scryfallId) c.scryfallId = scryfallId;
@@ -56,8 +73,14 @@ export function parseMoxfield(d: any): ImportedDeck {
       cards.push(card(name, qty, board, text(e.card.scryfall_id), text(e.card.set), text(e.card.cn)));
     }
   }
+  // The Tokens board: tokens added to the deck on Moxfield, in the printing picked there.
+  const tokens: ImportedToken[] = [];
+  for (const e of Object.values((d?.boards ? d.boards.tokens?.cards : d?.tokens) ?? {}) as any[]) {
+    const name = text(e?.card?.name);
+    if (name) tokens.push(token(name, text(e.card.scryfall_id), text(e.card.set), text(e.card.cn)));
+  }
   const f = text(d?.format) ?? "";
-  return { name: text(d?.name) ?? "Imported deck", format: KNOWN_FORMATS.has(f) ? f : f ? "other" : "commander", source: "moxfield", cards: cards.sort(byBoard) };
+  return { name: text(d?.name) ?? "Imported deck", format: KNOWN_FORMATS.has(f) ? f : f ? "other" : "commander", source: "moxfield", cards: cards.sort(byBoard), tokens };
 }
 
 const ARCHIDEKT_FORMATS: Record<number, string> = { 1: "standard", 2: "modern", 3: "commander", 4: "legacy", 5: "vintage", 6: "pauper" };
@@ -67,15 +90,26 @@ export function parseArchidekt(d: any): ImportedDeck {
   const included = new Map<string, boolean>();
   for (const c of d?.categories ?? []) included.set(String(c?.name), c?.includedInDeck !== false);
   const cards: DeckCard[] = [];
+  const tokens: ImportedToken[] = [];
   for (const e of d?.cards ?? []) {
     const name = text(e?.card?.oracleCard?.name);
     const qty = Number(e?.quantity ?? 1);
     if (!name || !(qty >= 1)) continue;
+    // Token cards added to the deck (usually a "Tokens" category): token art, not deck cards.
+    if (isArchidektToken(e.card.oracleCard)) {
+      tokens.push(token(name, text(e.card.uid), text(e.card.edition?.editioncode), text(e.card.collectorNumber)));
+      continue;
+    }
     const cats: string[] = (e.categories ?? []).map(String);
     let board: Board = "main";
     if (cats.includes("Commander")) board = "commander";
     else if (cats.length && included.get(cats[0]) === false) board = cats[0].toLowerCase().includes("side") ? "side" : "maybe";
     cards.push(card(name, qty, board, text(e.card.uid), text(e.card.edition?.editioncode), text(e.card.collectorNumber)));
   }
-  return { name: text(d?.name) ?? "Imported deck", format: ARCHIDEKT_FORMATS[Number(d?.deckFormat)] ?? "other", source: "archidekt", cards: cards.sort(byBoard) };
+  return { name: text(d?.name) ?? "Imported deck", format: ARCHIDEKT_FORMATS[Number(d?.deckFormat)] ?? "other", source: "archidekt", cards: cards.sort(byBoard), tokens };
+}
+
+function isArchidektToken(o: any): boolean {
+  const layout = String(o?.layout ?? "");
+  return layout === "token" || layout === "double_faced_token" || [...(o?.types ?? []), ...(o?.superTypes ?? [])].map(String).includes("Token");
 }

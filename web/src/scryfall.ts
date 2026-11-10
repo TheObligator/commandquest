@@ -211,6 +211,13 @@ export function cachedById(id: string): ScryCard | undefined {
   return byId.get(id);
 }
 
+/** A cached printing by set and collector number. */
+export function cachedPrinting(set: string, collectorNumber: string): ScryCard | undefined {
+  const s = set.toLowerCase();
+  for (const c of byId.values()) if (c.set === s && c.collector_number === collectorNumber) return c;
+  return undefined;
+}
+
 // ---- Endpoints ----------------------------------------------------------------
 
 /** Full-text Scryfall search (supports Scryfall syntax like `t:dragon c:r`). */
