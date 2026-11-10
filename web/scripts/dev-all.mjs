@@ -35,6 +35,7 @@ const WATCH = [
   "forge-core/src",
   "forge-game/src",
   "forge-ai/src",
+  "forge-gui/src",
   "pom.xml",
 ];
 

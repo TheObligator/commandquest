@@ -29,6 +29,19 @@
             <artifactId>forge-ai</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- Forge's human player controller (PlayerControllerHuman) and match hosting. Its Jetty 11
+             isn't used by its code and would clash with Javalin's Jetty 12, so it's excluded. -->
+        <dependency>
+            <groupId>forge</groupId>
+            <artifactId>forge-gui</artifactId>
+            <version>${project.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.eclipse.jetty</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
         <dependency>
             <groupId>io.javalin</groupId>
             <artifactId>javalin</artifactId>

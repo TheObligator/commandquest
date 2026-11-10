@@ -61,3 +61,22 @@ The site finds the server through `VITE_GAME_SERVER` in `web/.env.production` an
 
 After pushing to `web`, run `game-service.sh deploy`. Games in progress end when the server
 restarts, so deploy when nobody's playing (the lobby will show a warning once games exist).
+
+## The engine inside the server
+
+`forge-web-server/src/main/java/forge/web/engine/`:
+
+- `ForgeEngine` starts Forge once per process with no desktop GUI (`HeadlessGui`). It finds the card
+  scripts in `forge-gui/res` (`FORGE_ASSETS` overrides), and loads them lazily: a name index at
+  startup (about 5 s), each card parsed the first time a game uses it. Forge keeps its user files in
+  `~/Library/Application Support/Forge`.
+- `GameSession` runs one Commander game. Human seats use Forge's own human controller
+  (`PlayerControllerHuman`, from upstream `forge-gui`), the same one desktop Forge and its network
+  play use, so every rules prompt (targets, modes, blockers, mulligans…) is Forge's. Its prompts reach
+  a seat through an `IRemote`. In production that's the player's WebSocket, and in the tests a
+  scripted stand-in. Other seats are Forge AI.
+- `HeadlessGui` gives Forge the single UI thread it expects (`forge-ui`). Browser answers are applied
+  on that thread.
+
+`GameSessionTest` plays a real four-player Commander game (one scripted human, three AI) for
+several turns.

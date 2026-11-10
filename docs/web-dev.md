@@ -14,7 +14,7 @@ newer `openjdk`).
 Run these from the repository root:
 
 ```sh
-mvn -f forge-web-server/reactor.xml package            # builds forge-core, forge-game, forge-ai and the server, and runs the tests
+mvn -f forge-web-server/reactor.xml package            # builds forge-core, forge-game, forge-ai, forge-gui and the server, and runs the tests
 java -jar forge-web-server/target/forge-web-server-*-all.jar
 ```
 
@@ -82,7 +82,7 @@ accepts `*.ts.net` host names via `allowedHosts`.
 ## Always-on dev mode (auto rebuild + restart)
 
 `npm run dev:all` (in `web/`) runs Vite and the Java server together. When anything under
-`forge-web-server/src`, its poms, or the upstream `forge-core`/`forge-game`/`forge-ai` sources
+`forge-web-server/src`, its poms, or the upstream `forge-core`/`forge-game`/`forge-ai`/`forge-gui` sources
 changes, it rebuilds the server (about 10s, tests skipped) and restarts it. If a build fails, the
 previous server keeps running and the errors go to the log. Vite hot-reloads the frontend by itself,
 and the page reconnects its WebSocket after a server restart.

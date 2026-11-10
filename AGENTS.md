@@ -79,7 +79,7 @@ If our code truly cannot work without changing an upstream file:
 - Requires a JDK (Java 17+) and Maven.
 - Build the server with `mvn -f forge-web-server/reactor.xml package` (run from the repo root, because
   `.mvn/maven.config` uses a relative path). That reactor builds only `forge-core`, `forge-game`,
-  `forge-ai` and our server, and it means the root `pom.xml` needs no edits. Don't add our module to
+  `forge-ai`, `forge-gui` and our server, and it means the root `pom.xml` needs no edits. Don't add our module to
   the root pom.
 - Frontend: `cd web && npm install && npm run build`. See `docs/web-dev.md`.
 - Run the relevant tests before calling a task done. If you couldn't run them, say so.

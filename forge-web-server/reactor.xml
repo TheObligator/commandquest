@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Build entry point for the web server that needs no change to upstream's root pom.xml.
-  It pulls in the upstream modules we depend on and builds them together with our server:
+  It pulls in the upstream modules we depend on (core, game, AI, and forge-gui for Forge's human
+  player controller) and builds them together with our server:
 
       mvn -f forge-web-server/reactor.xml package
 
@@ -21,6 +22,7 @@
         <module>../forge-core</module>
         <module>../forge-game</module>
         <module>../forge-ai</module>
+        <module>../forge-gui</module>
         <module>.</module>
     </modules>
 </project>
