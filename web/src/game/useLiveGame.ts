@@ -33,7 +33,8 @@ export interface AskOption {
 /** A question that blocks the game until answered. */
 export interface LiveAsk {
   id: number;
-  kind: "choose" | "text";
+  /** choose: pick min..max options; text: type an answer; info: a list to look at, then OK. */
+  kind: "choose" | "text" | "info";
   title?: string;
   message: string;
   options?: AskOption[];

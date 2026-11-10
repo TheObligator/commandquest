@@ -25,8 +25,23 @@ export function ActionRail(props: {
   const v = sim.view;
   return (
     <aside className="action-rail">
-      <Decision {...props} />
 
+      <section className="ar-stack">
+        <header>
+          <h3>Stack</h3>
+          <span className="ar-sub">{v.stack.length ? `${v.stack.length} item${v.stack.length > 1 ? "s" : ""} · top first` : "empty"}</span>
+        </header>
+        <StackList view={v} nameOf={nameOf} colorOf={colorOf} />
+      </section>
+
+      <section className="ar-preview" aria-live="polite">
+        {preview ? <PreviewCard p={preview} /> : <p className="ar-sub">Hover a card to see it here.</p>}
+      </section>
+
+      <Log lines={v.log} />
+
+      {/* At the bottom, by your hand: the decision, then the skips. */}
+      <Decision {...props} />
       {sim.phase === "playing" && (
         <section className="ar-autopass">
           <header>
@@ -47,20 +62,6 @@ export function ActionRail(props: {
           ))}
         </section>
       )}
-
-      <section className="ar-stack">
-        <header>
-          <h3>Stack</h3>
-          <span className="ar-sub">{v.stack.length ? `${v.stack.length} item${v.stack.length > 1 ? "s" : ""} · top first` : "empty"}</span>
-        </header>
-        <StackList view={v} nameOf={nameOf} colorOf={colorOf} />
-      </section>
-
-      <section className="ar-preview" aria-live="polite">
-        {preview ? <PreviewCard p={preview} /> : <p className="ar-sub">Hover a card to see it here.</p>}
-      </section>
-
-      <Log lines={v.log} />
     </aside>
   );
 }

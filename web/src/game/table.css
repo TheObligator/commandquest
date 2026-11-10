@@ -240,3 +240,5 @@ dialog.zone-viewer { width: min(980px, calc(100vw - 32px)); max-height: 86vh; ba
 .ar-ask input { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid #6a5434; background: #1a150e; color: #f0e2c4; }
 .live-banner { display: flex; align-items: center; gap: 12px; padding: 8px 14px; margin: 0 0 8px; border-radius: 8px; background: var(--bg-2); border: 1px solid var(--line); }
 .live-start { max-width: 560px; margin: 40px auto; display: grid; gap: 14px; }
+.ask-option.info { cursor: default; }
+.ask-option.info:hover { filter: none; }

@@ -35,7 +35,7 @@ old one, and so does closing the socket. `MAX_GAMES` (default 4) caps games on t
 | `state` | `view`: the game as you see it, in the client's `GameView` shape (`web/src/game/view.ts`), plus `gameOver`. Sent whenever it changes. Hidden information is already removed (below). |
 | `prompt` | Forge is waiting for you: `message`, and two buttons `ok` / `cancel`, each `{label, enabled}` with Forge's labels ("OK", "Keep", "Mulligan", "End Turn"…). Answer with a button or by clicking a card or player. |
 | `waiting` | No prompt for you right now (others are deciding). |
-| `ask` | A question that blocks the game: `{id, kind, title?, message, options?, selected?, min, max, card?}`. `kind` is `choose` (pick `min`–`max` of `options`, each `{label, cardId?, playerId?, card?}`) or `text` (`initial`, `numeric`). |
+| `ask` | A question that blocks the game: `{id, kind, title?, message, options?, selected?, min, max, card?}`. `kind` is `choose` (pick `min`–`max` of `options`, each `{label, cardId?, playerId?, card?}`), `info` (Forge reveals `options` to you: look, then answer with an empty `choice`), or `text` (`initial`, `numeric`). |
 | `over` | The game ended. |
 | `error` | `message` to show. |
 | `pong` | Reply to `ping`. |
@@ -61,6 +61,8 @@ The server builds each player's view from Forge's views and removes what that pl
 - A face-down card: `hidden` and `faceDown`, plus public facts (tapped, counters, its 2/2), unless
   Forge lets you look at it.
 - Question options that are cards you can't see say "Hidden card".
+- Forge's start-of-game list of AI-deck cards it plays badly is turned off
+  (`GameRules.setWarnAboutAICards(false)`): it would show you the AI's decklist.
 
 `GameHubTest` plays a game over the socket and checks that opponents' hands are never sent.
 

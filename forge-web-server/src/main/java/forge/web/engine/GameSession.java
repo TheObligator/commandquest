@@ -75,6 +75,9 @@ public final class GameSession {
         GameRules rules = new GameRules(GameType.Commander);
         rules.setAppliedVariants(EnumSet.of(GameType.Commander));
         rules.setGamesPerMatch(1);
+        // Forge would list the AI decks' cards it plays badly to every player: that's the AI's
+        // decklist, which the other players mustn't see.
+        rules.setWarnAboutAICards(false);
         s.match.startMatch(rules, EnumSet.of(GameType.Commander), players, guiMap, null);
         return s;
     }

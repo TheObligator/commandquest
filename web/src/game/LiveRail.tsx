@@ -1,5 +1,5 @@
-// Left rail for a live game: Forge's current prompt (with Forge's own button labels) or question,
-// the auto-pass skips, the stack, the hovered card and the log.
+// Left rail for a live game: the stack, the hovered card and the log, then at the bottom Forge's
+// current prompt (with Forge's own button labels) or question, and the auto-pass skips.
 import { useEffect, useRef, useState } from "react";
 import { AUTO_PASS, Log, PreviewCard, StackList } from "./ActionRail";
 import { cardImage, previewFor, usePreview, type Preview } from "./cards";
@@ -15,6 +15,21 @@ export function LiveRail(props: {
   const v = game.view!;
   return (
     <aside className="action-rail">
+      <section className="ar-stack">
+        <header>
+          <h3>Stack</h3>
+          <span className="ar-sub">{v.stack.length ? `${v.stack.length} item${v.stack.length > 1 ? "s" : ""} · top first` : "empty"}</span>
+        </header>
+        <StackList view={v} nameOf={nameOf} colorOf={colorOf} />
+      </section>
+
+      <section className="ar-preview" aria-live="polite">
+        {preview ? <PreviewCard p={preview} /> : <p className="ar-sub">Hover a card to see it here.</p>}
+      </section>
+
+      <Log lines={v.log} />
+
+      {/* At the bottom, by your hand: what the game wants now, then the skips. */}
       {game.ask ? <AskPanel ask={game.ask} game={game} nameOf={nameOf} /> : <PromptPanel game={game} />}
 
       <section className="ar-autopass">
@@ -35,20 +50,6 @@ export function LiveRail(props: {
           </button>
         ))}
       </section>
-
-      <section className="ar-stack">
-        <header>
-          <h3>Stack</h3>
-          <span className="ar-sub">{v.stack.length ? `${v.stack.length} item${v.stack.length > 1 ? "s" : ""} · top first` : "empty"}</span>
-        </header>
-        <StackList view={v} nameOf={nameOf} colorOf={colorOf} />
-      </section>
-
-      <section className="ar-preview" aria-live="polite">
-        {preview ? <PreviewCard p={preview} /> : <p className="ar-sub">Hover a card to see it here.</p>}
-      </section>
-
-      <Log lines={v.log} />
     </aside>
   );
 }
@@ -115,9 +116,11 @@ function AskPanel({ ask, game, nameOf }: { ask: LiveAsk; game: LiveGame; nameOf:
     setText(ask.initial ?? "");
   }, [ask.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const info = ask.kind === "info";
   const single = ask.max === 1;
   const ok = ask.kind === "text" || (picked.length >= ask.min && picked.length <= ask.max);
   const toggle = (i: number) => {
+    if (info) return;
     if (single) {
       // One choice: clicking it answers right away.
       game.answer(ask.id, [i]);
@@ -146,7 +149,7 @@ function AskPanel({ ask, game, nameOf }: { ask: LiveAsk; game: LiveGame; nameOf:
         </form>
       ) : (
         <>
-          {!single && (
+          {!single && !info && (
             <p className="ar-sub">
               Choose {ask.min === ask.max ? ask.min : ask.min ? `${ask.min} to ${ask.max}` : `up to ${ask.max}`} · {picked.length} chosen
             </p>
@@ -157,7 +160,7 @@ function AskPanel({ ask, game, nameOf }: { ask: LiveAsk; game: LiveGame; nameOf:
               return (
                 <li key={i}>
                   <button
-                    className={`ask-option${picked.includes(i) ? " on" : ""}`}
+                    className={`ask-option${picked.includes(i) ? " on" : ""}${info ? " info" : ""}`}
                     aria-pressed={!single ? picked.includes(i) : undefined}
                     onClick={() => toggle(i)}
                     onMouseEnter={() => o.card && setPreview(previewFor(o.card, viewer, nameOf))}
@@ -171,12 +174,17 @@ function AskPanel({ ask, game, nameOf }: { ask: LiveAsk; game: LiveGame; nameOf:
             })}
           </ul>
           <div className="ar-actions">
-            {!single && (
+            {info && (
+              <button className="ar-btn primary" onClick={() => game.answer(ask.id, [])}>
+                OK
+              </button>
+            )}
+            {!single && !info && (
               <button className="ar-btn primary" disabled={!ok} onClick={() => game.answer(ask.id, picked)}>
                 Confirm
               </button>
             )}
-            {ask.min === 0 && (
+            {ask.min === 0 && !info && (
               <button className="ar-btn" onClick={() => game.answer(ask.id, [])}>
                 {single ? "Cancel" : "Choose none"}
               </button>

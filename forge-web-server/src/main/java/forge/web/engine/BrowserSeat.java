@@ -153,6 +153,11 @@ public final class BrowserSeat implements IRemote {
                 o.put("message", str(a[0]));
                 min = (Integer) a[1];
                 max = (Integer) a[2];
+                if (max < 0) {
+                    o.put("kind", "info"); // Forge's reveal: a list to look at, nothing to pick
+                    min = 0;
+                    max = 0;
+                }
                 options = (List<?>) a[3];
                 FSerializableFunction<Object, String> display = (FSerializableFunction<Object, String>) a[5];
                 o.set("options", options(gv, options, display));
