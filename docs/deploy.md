@@ -16,7 +16,7 @@
 | Branch | Convex | Cloudflare Worker | Address |
 |---|---|---|---|
 | `web` | staging, `robust-barracuda-45` (`convex dev --once`) | `commandquest-staging` (`wrangler deploy --env staging`) | `staging.commandquest.app` |
-| `live` | production, `flippant-fly-782` (`convex deploy`) | `commandquest` (`wrangler deploy`) | `commandquest.app` |
+| `live` | production, `impressive-manatee-540` (`convex deploy`) | `commandquest` (`wrangler deploy`) | `commandquest.app` |
 
 Workers, not Pages: Cloudflare points new projects at Workers static assets. The custom domains are
 declared in `web/wrangler.jsonc`, and the first deploy creates both Workers and their DNS records,
@@ -41,14 +41,14 @@ name already has a DNS record, delete that record first, or the custom domain ca
 
 Dashboard → each deployment → Settings → **Deploy keys**:
 
-- production (`flippant-fly-782`): a production deploy key
+- production (`impressive-manatee-540`): a production deploy key
 - staging (`robust-barracuda-45`): a development deploy key
 
 Point sign-in at the real addresses:
 
 ```sh
-npx convex env set SITE_URL https://commandquest.app --prod
-npx convex env set SITE_URL https://staging.commandquest.app   # staging (dev deployment)
+npx convex env set SITE_URL https://commandquest.app --deployment impressive-manatee-540
+npx convex env set SITE_URL https://staging.commandquest.app --deployment robust-barracuda-45
 ```
 
 Add both addresses as authorized redirect URIs in the Google and Discord OAuth apps.

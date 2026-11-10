@@ -134,7 +134,7 @@ while the Mac is down. The functions are in `web/convex/`. The pure logic behind
 |---|---|---|
 | Local | anonymous, on `127.0.0.1:3210` | `npm run convex:local` (no Convex account needed; writes `web/.env.local`) |
 | Staging | `robust-barracuda-45` | `npm run build:staging` (`web/.env.staging`), the staging site |
-| Production | `flippant-fly-782` | `npm run build` (`web/.env.production`), the public site |
+| Production | `impressive-manatee-540` | `npm run build` (`web/.env.production`), the public site |
 
 - `npm run convex:local` runs a local backend, pushes the schema and functions on every save, and
   type-checks them. `npx convex run <module>:<function> '<json args>'` calls a function. Add

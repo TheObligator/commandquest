@@ -1,7 +1,7 @@
 # CommandQuest: test everything, then deploy Convex and the website.
 #
 #   push to `web`  -> tests -> Convex staging (robust-barracuda-45) -> Cloudflare Worker commandquest-staging
-#   push to `live` -> tests -> Convex production (flippant-fly-782)  -> Cloudflare Worker commandquest
+#   push to `live` -> tests -> Convex production (impressive-manatee-540)  -> Cloudflare Worker commandquest
 #
 # Setup (one time) is described in docs/deploy.md.
 name: Web
@@ -158,7 +158,7 @@ jobs:
         if: vars.SITE_URL != ''
         env:
           SITE_URL: ${{ vars.SITE_URL }}
-          EXPECT: ${{ github.ref_name == 'live' && 'flippant-fly-782' || 'robust-barracuda-45' }}
+          EXPECT: ${{ github.ref_name == 'live' && 'impressive-manatee-540' || 'robust-barracuda-45' }}
         run: |
           for i in 1 2 3 4 5 6; do
             html=$(curl -fsSL "$SITE_URL") && break
