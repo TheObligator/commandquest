@@ -62,6 +62,9 @@ public final class GameSession {
                 rp.setPlayer(new LobbyPlayerHuman(seat.name()));
                 ProtocolGuiGame gui = new ProtocolGuiGame(seat.remote());
                 gui.setNetGame();
+                if (seat.remote() instanceof BrowserSeat browser) {
+                    browser.attach(gui);
+                }
                 guiMap.put(rp, gui);
                 s.guis.put(seat.name(), gui);
             } else {
@@ -74,6 +77,11 @@ public final class GameSession {
         rules.setGamesPerMatch(1);
         s.match.startMatch(rules, EnumSet.of(GameType.Commander), players, guiMap, null);
         return s;
+    }
+
+    /** The live game, or null once it has ended. Read it on the game or forge-ui thread. */
+    public Game game() {
+        return match.getGame();
     }
 
     public GameView view() {

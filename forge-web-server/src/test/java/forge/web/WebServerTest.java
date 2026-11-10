@@ -75,7 +75,7 @@ public class WebServerTest {
     }
 
     @Test
-    public void webSocketEchoes() throws Exception {
+    public void webSocketAnswersPing() throws Exception {
         CompletableFuture<String> reply = new CompletableFuture<>();
         WebSocket ws = client.newWebSocketBuilder()
                 .buildAsync(URI.create("ws://localhost:" + port + "/ws"), new WebSocket.Listener() {
@@ -86,8 +86,8 @@ public class WebServerTest {
                     }
                 })
                 .get(5, TimeUnit.SECONDS);
-        ws.sendText("hello forge", true);
-        Assert.assertEquals(reply.get(5, TimeUnit.SECONDS), "hello forge");
+        ws.sendText("{\"t\":\"ping\"}", true);
+        Assert.assertEquals(reply.get(5, TimeUnit.SECONDS), "{\"t\":\"pong\"}");
         ws.sendClose(WebSocket.NORMAL_CLOSURE, "done");
     }
 }

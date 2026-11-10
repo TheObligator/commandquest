@@ -79,4 +79,8 @@ restarts, so deploy when nobody's playing (the lobby will show a warning once ga
   on that thread.
 
 `GameSessionTest` plays a real four-player Commander game (one scripted human, three AI) for
-several turns.
+several turns, and `GameHubTest` does the same through the WebSocket, as a browser would.
+The socket protocol is in docs/game-protocol.md.
+
+Server settings for games: `CONVEX_ISSUERS` (whose sign-ins are accepted; defaults to staging and
+production), `MAX_GAMES` (default 4).
