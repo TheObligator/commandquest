@@ -30,8 +30,15 @@ A newer push cancels an older run's tests, but a deploy that has started always 
 
 ### Cloudflare (DNS for commandquest.app is already there)
 
-1. **My Profile → API Tokens → Create token**, starting from the *Edit Cloudflare Workers* template,
-   limited to your account and the `commandquest.app` zone.
+1. **My Profile → API Tokens → Create Token → Create Custom Token** with:
+   - Account → **Workers Scripts: Edit** (create and deploy the Workers and their files)
+   - Account → **Account Settings: Read**
+   - Zone → **Zone: Read** and **DNS: Edit** (attach the custom domains)
+   - Account resources: only your account. Zone resources: only `commandquest.app`. No IP filter
+     (GitHub's runners change IPs).
+
+   No "Workers Routes" permission is needed for custom domains (the first deploy attached
+   `staging.commandquest.app` without it).
 2. Note the **Account ID** (shown on the account's home page and in the Workers & Pages overview).
 
 The first CI deploy creates the Workers, `commandquest.app` and `staging.commandquest.app`. If either
