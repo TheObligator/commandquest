@@ -1,0 +1,189 @@
+// Left rail for a live game: Forge's current prompt (with Forge's own button labels) or question,
+// the auto-pass skips, the stack, the hovered card and the log.
+import { useEffect, useRef, useState } from "react";
+import { AUTO_PASS, Log, PreviewCard, StackList } from "./ActionRail";
+import { cardImage, previewFor, usePreview, type Preview } from "./cards";
+import type { LiveAsk, LiveGame } from "./useLiveGame";
+
+export function LiveRail(props: {
+  game: LiveGame;
+  nameOf: (id: string) => string;
+  colorOf: (id: string) => string;
+  preview: Preview | null;
+}) {
+  const { game, nameOf, colorOf, preview } = props;
+  const v = game.view!;
+  return (
+    <aside className="action-rail">
+      {game.ask ? <AskPanel ask={game.ask} game={game} nameOf={nameOf} /> : <PromptPanel game={game} />}
+
+      <section className="ar-autopass">
+        <header>
+          <h3>Auto-pass</h3>
+          <span className="ar-sub">skip ahead</span>
+        </header>
+        {AUTO_PASS.map((a) => (
+          <button
+            key={a.mode}
+            className={`ar-skip${game.autoPass === a.mode ? " on" : ""}`}
+            aria-pressed={game.autoPass === a.mode}
+            title={a.title + (game.autoPass === a.mode ? " Click again to cancel." : "")}
+            onClick={() => game.setAutoPass(a.mode)}
+          >
+            {a.label}
+            <kbd>{a.key}</kbd>
+          </button>
+        ))}
+      </section>
+
+      <section className="ar-stack">
+        <header>
+          <h3>Stack</h3>
+          <span className="ar-sub">{v.stack.length ? `${v.stack.length} item${v.stack.length > 1 ? "s" : ""} · top first` : "empty"}</span>
+        </header>
+        <StackList view={v} nameOf={nameOf} colorOf={colorOf} />
+      </section>
+
+      <section className="ar-preview" aria-live="polite">
+        {preview ? <PreviewCard p={preview} /> : <p className="ar-sub">Hover a card to see it here.</p>}
+      </section>
+
+      <Log lines={v.log} />
+    </aside>
+  );
+}
+
+/** Forge's prompt: OK / Cancel with Forge's labels (OK passes priority; Cancel is often "End Turn"). */
+function PromptPanel({ game }: { game: LiveGame }) {
+  const p = game.prompt;
+  const okRef = useRef(game.ok);
+  okRef.current = game.ok;
+  const pRef = useRef(p);
+  pRef.current = p;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).closest("input, textarea, select, dialog") || e.ctrlKey || e.metaKey || e.altKey) return;
+      const cur = pRef.current;
+      if (!cur) return;
+      if ((e.key === "F2" || e.key === "1") && cur.ok.enabled) (e.preventDefault(), okRef.current());
+      else if (e.key === "2" && cur.cancel.enabled) (e.preventDefault(), game.cancel());
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [game]);
+
+  if (!p) {
+    return (
+      <section className="ar-decision">
+        <div className="ar-ribbon">Decision</div>
+        <h3>Waiting</h3>
+        <p>Other players are deciding…</p>
+      </section>
+    );
+  }
+  const [title, ...rest] = p.message.split("\n");
+  return (
+    <section className="ar-decision live">
+      <div className="ar-ribbon">Decision</div>
+      <h3>{title || "Your move"}</h3>
+      {rest.length > 0 && <p className="ar-prompt-text">{rest.join("\n")}</p>}
+      <div className="ar-actions">
+        {p.ok.label && (
+          <button className="ar-btn primary" disabled={!p.ok.enabled} onClick={game.ok}>
+            {p.ok.label}
+            <kbd>F2</kbd>
+          </button>
+        )}
+        {p.cancel.label && (
+          <button className="ar-btn" disabled={!p.cancel.enabled} onClick={game.cancel}>
+            {p.cancel.label}
+            <kbd>2</kbd>
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** A question that blocks the game: pick min..max of the options, or type an answer. */
+function AskPanel({ ask, game, nameOf }: { ask: LiveAsk; game: LiveGame; nameOf: (id: string) => string }) {
+  const [picked, setPicked] = useState<number[]>(ask.selected ?? []);
+  const [text, setText] = useState(ask.initial ?? "");
+  const setPreview = usePreview();
+  useEffect(() => {
+    setPicked(ask.selected ?? []);
+    setText(ask.initial ?? "");
+  }, [ask.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const single = ask.max === 1;
+  const ok = ask.kind === "text" || (picked.length >= ask.min && picked.length <= ask.max);
+  const toggle = (i: number) => {
+    if (single) {
+      // One choice: clicking it answers right away.
+      game.answer(ask.id, [i]);
+      return;
+    }
+    setPicked((p) => (p.includes(i) ? p.filter((x) => x !== i) : p.length < ask.max ? [...p, i] : p));
+  };
+  const viewer = game.view?.viewer ?? "";
+
+  return (
+    <section className="ar-decision live ar-ask">
+      <div className="ar-ribbon">Decision</div>
+      <h3>{ask.title || ask.message.split("\n")[0] || "Choose"}</h3>
+      {ask.title && <p className="ar-prompt-text">{ask.message}</p>}
+      {!ask.title && ask.message.includes("\n") && <p className="ar-prompt-text">{ask.message.split("\n").slice(1).join("\n")}</p>}
+      {ask.kind === "text" ? (
+        <form
+          className="ar-actions"
+          onSubmit={(e) => {
+            e.preventDefault();
+            game.answer(ask.id, null, text);
+          }}
+        >
+          <input autoFocus inputMode={ask.numeric ? "numeric" : undefined} value={text} onChange={(e) => setText(e.target.value)} />
+          <button className="ar-btn primary" type="submit">OK</button>
+        </form>
+      ) : (
+        <>
+          {!single && (
+            <p className="ar-sub">
+              Choose {ask.min === ask.max ? ask.min : ask.min ? `${ask.min} to ${ask.max}` : `up to ${ask.max}`} · {picked.length} chosen
+            </p>
+          )}
+          <ul className="ask-options">
+            {ask.options?.map((o, i) => {
+              const img = o.card && !o.card.hidden ? cardImage(o.card.name, "small") : undefined;
+              return (
+                <li key={i}>
+                  <button
+                    className={`ask-option${picked.includes(i) ? " on" : ""}`}
+                    aria-pressed={!single ? picked.includes(i) : undefined}
+                    onClick={() => toggle(i)}
+                    onMouseEnter={() => o.card && setPreview(previewFor(o.card, viewer, nameOf))}
+                    onMouseLeave={() => setPreview(null)}
+                  >
+                    {img && <img src={img} alt="" />}
+                    <span>{o.label}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="ar-actions">
+            {!single && (
+              <button className="ar-btn primary" disabled={!ok} onClick={() => game.answer(ask.id, picked)}>
+                Confirm
+              </button>
+            )}
+            {ask.min === 0 && (
+              <button className="ar-btn" onClick={() => game.answer(ask.id, [])}>
+                {single ? "Cancel" : "Choose none"}
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}

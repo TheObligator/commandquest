@@ -71,6 +71,12 @@ export function SeatBoard(props: {
   focused?: boolean;
   /** Short seat: battlefield groups side by side instead of three rows. */
   line?: boolean;
+  /** Live games: a click on any card goes to the game (Forge decides what it does). */
+  onCardClick?: (cardId: number) => void;
+  /** Live games: click a player's name to pick them (targets). */
+  onPlayerClick?: (playerId: string) => void;
+  /** Cards that can be picked right now. */
+  selectable?: Set<number>;
 }) {
   const { player: p, viewer, nameOf, colorOf } = props;
   const isMe = p.id === viewer;
@@ -90,7 +96,13 @@ export function SeatBoard(props: {
       aria-label={isMe ? "Your board" : `${p.name}'s board`}
     >
       <header className="sb-head">
-        <span className="sb-name">{isMe ? `${p.name} (you)` : p.name}</span>
+        {props.onPlayerClick ? (
+          <button className="sb-name sb-pick" onClick={() => props.onPlayerClick?.(p.id)} title={`Choose ${isMe ? "yourself" : p.name}`}>
+            {isMe ? `${p.name} (you)` : p.name}
+          </button>
+        ) : (
+          <span className="sb-name">{isMe ? `${p.name} (you)` : p.name}</span>
+        )}
         <span className="sb-life" title="Life">{p.life}</span>
         {p.poison > 0 && <span className="sb-poison" title="Poison counters">☠ {p.poison}</span>}
         {cmdDmg.map(([from, n]) => (
@@ -204,7 +216,7 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
             return (
               <div
                 key={pile.key}
-                className={["slot", c.tapped && "tapped", dropAt?.row === r && dropAt.before === c.id && "drop-before"].filter(Boolean).join(" ")}
+                className={["slot", c.tapped && "tapped", props.selectable?.has(c.id) && "selectable", dropAt?.row === r && dropAt.before === c.id && "drop-before"].filter(Boolean).join(" ")}
                 draggable
                 onDragStart={(e) => {
                   const d: DragData = { from: "battlefield", seat: p.id, ids: pile.cards.map((x) => x.id) };
@@ -218,8 +230,8 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
                   e.preventDefault();
                   if (dropAt?.row !== r || dropAt.before !== c.id) setDropAt({ row: r as Row, before: c.id });
                 }}
-                title={isMe && props.onTap ? `${c.name ?? "Face-down card"}: click to ${c.tapped ? "untap" : "tap"}, drag to move` : undefined}
-                onClick={() => isMe && props.onTap?.(c.id)}
+                title={props.onCardClick ? `${c.name ?? "Face-down card"}: click to use or choose it, drag to move` : isMe && props.onTap ? `${c.name ?? "Face-down card"}: click to ${c.tapped ? "untap" : "tap"}, drag to move` : undefined}
+                onClick={() => (props.onCardClick ? props.onCardClick(c.id) : isMe && props.onTap?.(c.id))}
                 {...props.hover(c)}
               >
                 <div

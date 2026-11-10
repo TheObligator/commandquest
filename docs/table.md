@@ -1,9 +1,13 @@
 # Game table
 
-The game screen (`web/src/pages/Table.tsx`, components in `web/src/game/`). Until game sessions
-exist, `#/table` runs a simulated game (`game/sim.ts`, `game/useSimGame.ts`) in place of the Forge
-server. Use `?players=2|3|4` and `?start=new` (opening hands) or the default mid-game (turn 9, full
-boards).
+The game screen. The board itself is `web/src/game/TableBoard.tsx`, shared by two pages:
+
+- `#/game?deck=<id>` (`pages/LiveGame.tsx`): a live game against Forge AI on the game server
+  (docs/game-protocol.md). Started from Play → Quick game. The left rail shows Forge's prompts and
+  questions (`game/LiveRail.tsx`); clicking a card or a player's name sends it to Forge.
+- `#/table` (`pages/Table.tsx`): a simulated game (`game/sim.ts`, `game/useSimGame.ts`) to try the
+  layout, stops and decisions without a server. Use `?players=2|3|4` and `?start=new` (opening
+  hands) or the default mid-game (turn 9, full boards).
 
 ```
  ┌ action rail ┐ ┌──────────── seats ────────────┐ ┌ phase strip ┐
@@ -49,6 +53,6 @@ removed, so a browser never receives what its player can't see:
   at it, plus public facts (tapped, counters, a face-down permanent is a 2/2). Only the players
   allowed to look see its name.
 
-The server must do this redaction (Forge: `CardView.canBeShownTo`) before sending state. The
-client-side `viewFor` exists for the simulation and defines the expected result
-(`web/tests/view.test.ts`).
+In live games the server does this (`ViewJson`, using Forge's `CardView.canBeShownTo`), so a
+browser never receives another player's hand. The client-side `viewFor` does it for the
+simulation (`web/tests/view.test.ts`).

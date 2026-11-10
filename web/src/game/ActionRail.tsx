@@ -7,7 +7,7 @@ import { stepLabel } from "./sim";
 import type { SimGame } from "./useSimGame";
 import { commanderTax, type GameView } from "./view";
 
-const AUTO_PASS: { mode: AutoPassMode; label: string; key: string; title: string }[] = [
+export const AUTO_PASS: { mode: AutoPassMode; label: string; key: string; title: string }[] = [
   { mode: "END_OF_TURN", label: "End of turn", key: "E", title: "Skip the rest of this turn. Your stops apply again next turn." },
   { mode: "BEFORE_MY_TURN", label: "Before my turn", key: "B", title: "Skip until the end step of the player right before you." },
   { mode: "ACTION_OR_END_STEP", label: "Action / end step", key: "R", title: "Skip until someone casts something, or this turn's end step." },
@@ -153,7 +153,7 @@ function Decision({ sim, nameOf, bottomIds, onError }: Parameters<typeof ActionR
   );
 }
 
-function StackList({ view, nameOf, colorOf }: { view: GameView; nameOf: (id: string) => string; colorOf: (id: string) => string }) {
+export function StackList({ view, nameOf, colorOf }: { view: GameView; nameOf: (id: string) => string; colorOf: (id: string) => string }) {
   const setPreview = usePreview();
   if (!view.stack.length) return null;
   return (
@@ -177,7 +177,7 @@ function StackList({ view, nameOf, colorOf }: { view: GameView; nameOf: (id: str
   );
 }
 
-function PreviewCard({ p }: { p: Preview }) {
+export function PreviewCard({ p }: { p: Preview }) {
   const src = !p.card.hidden && !p.card.token ? cardImage(p.card.name, "normal") : undefined;
   return (
     <figure>
@@ -197,7 +197,7 @@ function PreviewCard({ p }: { p: Preview }) {
   );
 }
 
-function Log({ lines }: { lines: string[] }) {
+export function Log({ lines }: { lines: string[] }) {
   const ref = useRef<HTMLOListElement>(null);
   useEffect(() => {
     ref.current?.scrollTo({ top: ref.current.scrollHeight });

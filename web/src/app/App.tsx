@@ -5,6 +5,7 @@ import { Editor } from "../pages/Editor";
 import { Landing } from "../pages/Landing";
 import { Play } from "../pages/Play";
 import { SignIn, takeNextPath } from "../pages/SignIn";
+import { LiveGame } from "../pages/LiveGame";
 import { Table } from "../pages/Table";
 import { Loading } from "../components/Spinner";
 import { Layout } from "./Layout";
@@ -41,10 +42,11 @@ export function App() {
   else if (route.path === "/signin") page = <SignIn />;
   else if (route.path === "/play") page = <Play />;
   else if (route.path === "/table") page = <Table />;
+  else if (route.path === "/game") page = <RequireAuth><LiveGame /></RequireAuth>;
   else if (route.path === "/decks") page = <RequireAuth><DeckList /></RequireAuth>;
   else if (route.path === "/decks/new") page = <RequireAuth><Editor key="new" /></RequireAuth>;
   else if ((params = match("/decks/:id", route.path))) page = <RequireAuth><Editor key={params.id} id={params.id} /></RequireAuth>;
   else page = <p className="empty">Page not found.</p>;
 
-  return <Layout full={route.path === "/table"}>{page}</Layout>;
+  return <Layout full={route.path === "/table" || route.path === "/game"}>{page}</Layout>;
 }

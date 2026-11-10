@@ -224,3 +224,19 @@ dialog.zone-viewer { width: min(980px, calc(100vw - 32px)); max-height: 86vh; ba
   .phase-strip { min-height: 520px; }
 }
 @keyframes sp-pulse { 50% { opacity: .35; } }
+
+/* Live games: what Forge lets you pick, and clickable player names. */
+.slot.selectable .bf-card, .hand-card.selectable { box-shadow: 0 0 0 2px var(--accent-2, #ffd27a), 0 0 12px rgb(255 210 122 / 45%); border-radius: 6px; }
+.sb-pick { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+.sb-pick:hover { color: var(--accent-2, #ffd27a); text-decoration: underline; }
+
+/* Live game: Forge's prompt text and questions in the decision panel. */
+.ar-prompt-text { white-space: pre-line; }
+.ar-ask .ask-options { list-style: none; margin: 6px 0 10px; padding: 0; display: grid; gap: 4px; max-height: 40vh; overflow: auto; }
+.ask-option { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 8px; border-radius: 6px; border: 1px solid #5a4320; background: #221b12; color: #f0e2c4; text-align: left; cursor: pointer; font: inherit; font-size: .85rem; }
+.ask-option:hover { filter: brightness(1.2); }
+.ask-option.on { border-color: var(--accent, #e0a84f); background: #3a2c17; }
+.ask-option img { width: 34px; border-radius: 3px; }
+.ar-ask input { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid #6a5434; background: #1a150e; color: #f0e2c4; }
+.live-banner { display: flex; align-items: center; gap: 12px; padding: 8px 14px; margin: 0 0 8px; border-radius: 8px; background: var(--bg-2); border: 1px solid var(--line); }
+.live-start { max-width: 560px; margin: 40px auto; display: grid; gap: 14px; }

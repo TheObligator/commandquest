@@ -38,8 +38,9 @@ export function PhaseStrip(props: {
   priority: boolean;
   perOpponent: boolean;
   onPerOpponent: (on: boolean) => void;
-  holdPriority: boolean;
-  onHoldPriority: (on: boolean) => void;
+  /** Omit both to hide the toggle (live games: Forge always gives you priority back after you cast). */
+  holdPriority?: boolean;
+  onHoldPriority?: (on: boolean) => void;
 }) {
   const { me, opponents, stops, onChange, activePlayer, step: current, turn, priority, perOpponent } = props;
   const oppIds = opponents.map((o) => o.id);
@@ -129,16 +130,18 @@ export function PhaseStrip(props: {
         <input type="checkbox" checked={perOpponent} onChange={(e) => props.onPerOpponent(e.target.checked)} />
         <span>Per opponent</span>
       </label>
-      <button
-        className={`ps-hold${props.holdPriority ? " on" : ""}`}
-        aria-pressed={props.holdPriority}
-        title="Keep priority after you cast a spell, so you can respond to it yourself (H)"
-        onClick={() => props.onHoldPriority(!props.holdPriority)}
-      >
-        Hold priority
-        <span className="ps-toggle"><i /></span>
-        <kbd>H</kbd>
-      </button>
+      {props.onHoldPriority && (
+        <button
+          className={`ps-hold${props.holdPriority ? " on" : ""}`}
+          aria-pressed={props.holdPriority}
+          title="Keep priority after you cast a spell, so you can respond to it yourself (H)"
+          onClick={() => props.onHoldPriority?.(!props.holdPriority)}
+        >
+          Hold priority
+          <span className="ps-toggle"><i /></span>
+          <kbd>H</kbd>
+        </button>
+      )}
     </aside>
   );
 }

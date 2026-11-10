@@ -1,14 +1,9 @@
 import { useConvexAuth, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import { api } from "../../convex/_generated/api";
+import { gameSocketUrl } from "../game/useLiveGame";
 
 type SocketState = "connecting" | "open" | "closed";
-
-/** WebSocket URL of the game server: VITE_GAME_SERVER in builds, this origin (Vite's proxy) in dev. */
-export function gameSocketUrl(): string {
-  const base = new URL(import.meta.env.VITE_GAME_SERVER || location.origin);
-  return `${base.protocol === "https:" ? "wss" : "ws"}://${base.host}/ws`;
-}
 
 /** Connection to the game server on the Mac. Games will run over this socket. */
 function useGameServerStatus(): SocketState {
@@ -48,6 +43,8 @@ export function Play() {
   const { isAuthenticated } = useConvexAuth();
   const decks = useQuery(api.decks.list, isAuthenticated ? {} : "skip");
   const label = { connecting: "connecting…", open: "online", closed: "offline, retrying…" }[status];
+  const [deckId, setDeckId] = useState("");
+  const chosen = deckId || decks?.[0]?._id || "";
 
   return (
     <>
@@ -58,7 +55,7 @@ export function Play() {
       <div className="card play-deck">
         <label>
           Your deck
-          <select disabled={!decks?.length}>
+          <select disabled={!decks?.length} value={chosen} onChange={(e) => setDeckId(e.target.value)}>
             {!isAuthenticated ? (
               <option>Sign in to pick a deck</option>
             ) : !decks?.length ? (
@@ -75,7 +72,13 @@ export function Play() {
         <a href="#/table" className="link">Open the table preview →</a>
       </p>
       <div className="modes">
-        <Mode title="Quick game" tag="Against AI" text="You and three AI opponents, Commander rules." />
+        <Mode
+          title="Quick game"
+          tag="Against AI"
+          text="You and up to three Forge AI opponents, Commander rules."
+          href={chosen && status === "open" ? `#/game?deck=${encodeURIComponent(chosen)}` : undefined}
+          why={!isAuthenticated ? "Sign in first" : !chosen ? "Build a deck first" : status !== "open" ? "The game server is offline" : undefined}
+        />
         <Mode title="Create a table" tag="Multiplayer" text="Open a table and invite friends with a link." />
         <Mode title="Join a table" tag="Multiplayer" text="Enter a table code from a friend." />
       </div>
@@ -83,13 +86,17 @@ export function Play() {
   );
 }
 
-function Mode({ title, text, tag }: { title: string; text: string; tag: string }) {
+function Mode({ title, text, tag, href, why }: { title: string; text: string; tag: string; href?: string; why?: string }) {
   return (
     <div className="mode card">
       <span className="tag">{tag}</span>
       <h3>{title}</h3>
       <p>{text}</p>
-      <button className="btn" disabled title="The game client is under construction">Coming soon</button>
+      {href ? (
+        <a className="btn" href={href}>Play</a>
+      ) : (
+        <button className="btn" disabled title={why ?? "Coming soon"}>{why ?? "Coming soon"}</button>
+      )}
     </div>
   );
 }

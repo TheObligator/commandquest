@@ -12,6 +12,10 @@ export function HandBar(props: {
   selected: number[];
   onToggleSelect: (id: number) => void;
   onPlay: (id: number) => void;
+  /** Single click (live games: Forge decides what it does, e.g. play or choose the card). */
+  onClick?: (id: number) => void;
+  /** Cards that can be picked right now. */
+  selectable?: Set<number>;
 }) {
   const setPreview = usePreview();
   return (
@@ -23,10 +27,10 @@ export function HandBar(props: {
           return (
             <button
               key={c.id}
-              className={`hand-card${selected ? " selected" : ""}`}
+              className={`hand-card${selected ? " selected" : ""}${props.selectable?.has(c.id) ? " selectable" : ""}`}
               draggable={!props.selecting}
               aria-pressed={props.selecting ? selected : undefined}
-              title={props.selecting ? "Put this on the bottom" : `${c.name}: drag to your board or double-click to play`}
+              title={props.selecting ? "Put this on the bottom" : props.onClick ? `${c.name}: click to play or choose it` : `${c.name}: drag to your board or double-click to play`}
               onDragStart={(e) => {
                 const d: DragData = { from: "hand", seat: props.viewer, ids: [c.id] };
                 setDrag(d);
@@ -35,8 +39,8 @@ export function HandBar(props: {
                 setPreview(null);
               }}
               onDragEnd={() => setDrag(null)}
-              onClick={() => props.selecting && props.onToggleSelect(c.id)}
-              onDoubleClick={() => !props.selecting && props.onPlay(c.id)}
+              onClick={() => (props.selecting ? props.onToggleSelect(c.id) : props.onClick?.(c.id))}
+              onDoubleClick={() => !props.selecting && !props.onClick && props.onPlay(c.id)}
               onMouseEnter={() => setPreview(previewFor(c, props.viewer, props.nameOf))}
               onMouseLeave={() => setPreview(null)}
             >
