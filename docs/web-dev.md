@@ -25,10 +25,12 @@ site keeps working while this server is down. It listens on port 8080 by default
 |---|---|---|
 | `PORT` | `8080` | HTTP port |
 | `WEB_DIST` | unset | Serve the built frontend (`web/dist`) from this directory, so one process serves everything |
+| `ALLOWED_ORIGINS` | unset (any) | Comma-separated site origins allowed to open `/ws` and read `/health`. Set in production (docs/game-host.md) |
+| `GIT_SHA` | unset | Commit reported by `/health` |
 
 Endpoints:
 
-- `GET  /health` returns `{"status":"ok"}`
+- `GET  /health` returns `{"status":"ok","version":"<GIT_SHA>"}`
 - `WS   /ws` echoes every text message back (placeholder for the game protocol)
 
 `reactor.xml` is an aggregator pom that lives in our module. It lets us build the upstream modules

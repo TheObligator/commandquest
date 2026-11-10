@@ -2,11 +2,16 @@ package forge.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.javalin.Javalin;
+import io.javalin.http.ForbiddenResponse;
 import io.javalin.http.staticfiles.Location;
 import io.javalin.json.JavalinJackson;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.tinylog.Logger;
 
 /**
@@ -21,7 +26,9 @@ import org.tinylog.Logger;
  * </ul>
  *
  * <p>Environment: {@code PORT} (default 8080), {@code WEB_DIST} (also serve the built frontend
- * from this directory).
+ * from this directory), {@code ALLOWED_ORIGINS} (comma-separated site origins that may open the
+ * WebSocket and read {@code /health}; unset allows any, for local dev), {@code GIT_SHA} (reported
+ * by {@code /health}).
  */
 public final class WebServer {
 
@@ -30,8 +37,20 @@ public final class WebServer {
     private WebServer() {
     }
 
-    /** Settings that differ between production, dev and tests. */
-    public record Options(Path webDist) {
+    /**
+     * Settings that differ between production, dev and tests.
+     *
+     * @param allowedOrigins site origins allowed to use the server from a browser; empty allows any
+     * @param version reported by /health, so the site can tell which build is running
+     */
+    public record Options(Path webDist, Set<String> allowedOrigins, String version) {
+        public Options(Path webDist) {
+            this(webDist, Set.of(), null);
+        }
+
+        boolean allows(String origin) {
+            return allowedOrigins.isEmpty() || (origin != null && allowedOrigins.contains(origin));
+        }
     }
 
     public static Javalin create(Options opts) {
@@ -42,7 +61,28 @@ public final class WebServer {
             if (opts.webDist() != null) {
                 config.staticFiles.add(opts.webDist().toAbsolutePath().toString(), Location.EXTERNAL);
             }
-            config.routes.get("/health", ctx -> ctx.json(Map.of("status", "ok")));
+            // The site lives on another origin (commandquest.app) than this server
+            // (game.commandquest.app), so /health needs CORS. Browsers don't apply CORS to
+            // WebSockets, so the upgrade checks Origin itself: another site can't open a socket
+            // with a visitor's browser.
+            config.routes.get("/health", ctx -> {
+                String origin = ctx.header("Origin");
+                if (origin != null && opts.allows(origin)) {
+                    ctx.header("Access-Control-Allow-Origin", opts.allowedOrigins().isEmpty() ? "*" : origin);
+                    ctx.header("Vary", "Origin");
+                }
+                Map<String, String> body = new LinkedHashMap<>();
+                body.put("status", "ok");
+                if (opts.version() != null) {
+                    body.put("version", opts.version());
+                }
+                ctx.json(body);
+            });
+            config.routes.wsBeforeUpgrade("/ws", ctx -> {
+                if (!opts.allows(ctx.header("Origin"))) {
+                    throw new ForbiddenResponse("Origin not allowed");
+                }
+            });
             config.routes.ws("/ws", ws -> {
                 ws.onConnect(ctx -> ctx.enableAutomaticPings());
                 ws.onMessage(ctx -> ctx.send(ctx.message()));
@@ -62,6 +102,12 @@ public final class WebServer {
             Logger.warn("WEB_DIST {} is not a directory; not serving the frontend", dist);
             dist = null;
         }
-        create(new Options(dist)).start(port);
+        Set<String> origins = env("ALLOWED_ORIGINS") == null ? Set.of()
+                : Arrays.stream(env("ALLOWED_ORIGINS").split(",")).map(String::trim)
+                        .filter(o -> !o.isEmpty()).collect(Collectors.toUnmodifiableSet());
+        if (origins.isEmpty()) {
+            Logger.warn("ALLOWED_ORIGINS is unset: any website may connect (fine for local dev only)");
+        }
+        create(new Options(dist, origins, env("GIT_SHA"))).start(port);
     }
 }

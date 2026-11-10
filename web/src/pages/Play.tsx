@@ -4,11 +4,17 @@ import { api } from "../../convex/_generated/api";
 
 type SocketState = "connecting" | "open" | "closed";
 
+/** WebSocket URL of the game server: VITE_GAME_SERVER in builds, this origin (Vite's proxy) in dev. */
+export function gameSocketUrl(): string {
+  const base = new URL(import.meta.env.VITE_GAME_SERVER || location.origin);
+  return `${base.protocol === "https:" ? "wss" : "ws"}://${base.host}/ws`;
+}
+
 /** Connection to the game server on the Mac. Games will run over this socket. */
 function useGameServerStatus(): SocketState {
   const [state, setState] = useState<SocketState>("connecting");
   useEffect(() => {
-    const url = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
+    const url = gameSocketUrl();
     let socket: WebSocket | undefined;
     let retry: number | undefined;
     let retryMs = 500;
