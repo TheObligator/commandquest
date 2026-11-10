@@ -11,7 +11,9 @@
    1. Convex functions and schema, pushed before the site so the new site never calls a missing function.
    2. The exact bundle the frontend job built and tested, deployed as a static-assets Cloudflare
       Worker (`web/wrangler.jsonc`).
-   3. A smoke test that fetches the site and checks it serves the build for the right Convex deployment.
+   3. A smoke test that checks the uploaded bundle points at the right Convex deployment and that
+      Cloudflare now serves exactly that version. It doesn't fetch the site: Cloudflare's bot
+      protection answers GitHub's runners with 403.
 
 | Branch | Convex | Cloudflare Worker | Address |
 |---|---|---|---|

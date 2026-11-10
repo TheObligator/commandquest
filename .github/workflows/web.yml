@@ -144,28 +144,39 @@ jobs:
           name: site
           path: web/dist
       - name: Deploy to Cloudflare Workers
+        id: worker
         working-directory: web
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: >-
-          npx --yes wrangler@${{ env.WRANGLER_VERSION }} deploy
-          ${{ github.ref_name == 'live' && ' ' || '--env staging' }}
-          --message "${{ github.sha }}"
-
-      # 3. Smoke test: the live page answers and points at the right Convex deployment.
-      - name: Smoke test
-        if: vars.SITE_URL != ''
-        env:
-          SITE_URL: ${{ vars.SITE_URL }}
-          EXPECT: ${{ github.ref_name == 'live' && 'impressive-manatee-540' || 'robust-barracuda-45' }}
+          ENV_FLAG: ${{ github.ref_name == 'live' && ' ' || '--env staging' }}
         run: |
-          for i in 1 2 3 4 5 6; do
-            html=$(curl -fsSL "$SITE_URL") && break
-            sleep 10
-          done
-          [ -n "$html" ] || { echo "::error::$SITE_URL did not respond"; exit 1; }
-          js=$(printf '%s' "$html" | grep -oE '/assets/[^"]+\.js' | head -1)
-          curl -fsSL "$SITE_URL$js" | grep -q "$EXPECT" \
-            || { echo "::error::$SITE_URL is not serving a build for $EXPECT"; exit 1; }
-          echo "OK: $SITE_URL serves the $EXPECT build"
+          npx --yes wrangler@${{ env.WRANGLER_VERSION }} deploy $ENV_FLAG --message "${{ github.sha }}" | tee deploy.log
+          id=$(grep -oiE 'Current Version ID: [0-9a-f-]+' deploy.log | awk '{print $NF}')
+          [ -n "$id" ] || { echo "::error::wrangler didn't report a version id"; exit 1; }
+          echo "version=$id" >> "$GITHUB_OUTPUT"
+
+      # 3. Smoke test, without fetching the site: Cloudflare's bot protection answers requests
+      #    from GitHub's runners with 403. Instead check that the bundle we uploaded points at the
+      #    right Convex deployment and that Cloudflare now serves exactly that version.
+      - name: Smoke test
+        working-directory: web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ENV_FLAG: ${{ github.ref_name == 'live' && ' ' || '--env staging' }}
+          EXPECT: ${{ github.ref_name == 'live' && 'impressive-manatee-540' || 'robust-barracuda-45' }}
+          VERSION: ${{ steps.worker.outputs.version }}
+        run: |
+          grep -qr "$EXPECT" dist/assets \
+            || { echo "::error::the uploaded bundle doesn't point at $EXPECT"; exit 1; }
+          npx --yes wrangler@${{ env.WRANGLER_VERSION }} deployments status $ENV_FLAG --json > status.json
+          node -e '
+            const d = JSON.parse(require("fs").readFileSync("status.json", "utf8"));
+            const live = (d.versions || []).find((v) => v.percentage === 100);
+            if (!live || live.version_id !== process.env.VERSION) {
+              console.log(JSON.stringify(d, null, 2));
+              console.log(`::error::Cloudflare serves ${live?.version_id ?? "no single version"}, not ${process.env.VERSION}`);
+              process.exit(1);
+            }'
+          echo "OK: version $VERSION is live and built for $EXPECT"
