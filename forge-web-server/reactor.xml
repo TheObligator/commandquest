@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Build entry point for the web server that needs no change to upstream's root pom.xml.
+  It pulls in the upstream modules we depend on and builds them together with our server:
+
+      mvn -f forge-web-server/reactor.xml package
+
+  forge-web-server/pom.xml still uses upstream's root pom as its parent, so it picks up
+  the shared plugin config, Java version, and checkstyle rules.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>forge</groupId>
+    <artifactId>forge-web-reactor</artifactId>
+    <version>0</version>
+    <packaging>pom</packaging>
+    <name>Forge Web Reactor</name>
+
+    <modules>
+        <module>../forge-core</module>
+        <module>../forge-game</module>
+        <module>../forge-ai</module>
+        <module>.</module>
+    </modules>
+</project>
