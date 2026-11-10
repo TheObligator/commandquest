@@ -15,7 +15,7 @@
 
 | Branch | Convex | Cloudflare Worker | Address |
 |---|---|---|---|
-| `web` | staging, `robust-barracuda-45` (`convex dev --once`) | `commandquest-staging` (`wrangler deploy --env staging`) | `staging.commandquest.app` |
+| `web` | staging, `robust-barracuda-45` (`convex deploy`) | `commandquest-staging` (`wrangler deploy --env staging`) | `staging.commandquest.app` |
 | `live` | production, `impressive-manatee-540` (`convex deploy`) | `commandquest` (`wrangler deploy`) | `commandquest.app` |
 
 Workers, not Pages: Cloudflare points new projects at Workers static assets. The custom domains are

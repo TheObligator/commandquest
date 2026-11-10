@@ -126,19 +126,16 @@ jobs:
         working-directory: web
 
       # 1. Convex first, so the new site never calls functions that aren't live yet.
-      #    Staging is a dev-type deployment (pushed with `convex dev --once`);
-      #    production is a prod deployment (`convex deploy`).
+      #    The environment's key picks the deployment: staging (a dev-type deployment) or
+      #    production. `convex deploy` needs only the key's `deployment:deploy` permission
+      #    (`convex dev --once` would also need `deployment:logs:view`).
       - name: Deploy Convex
         working-directory: web
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
         run: |
           if [ -z "$CONVEX_DEPLOY_KEY" ]; then echo "::error::CONVEX_DEPLOY_KEY is not set for this environment"; exit 1; fi
-          if [ "${{ github.ref_name }}" = live ]; then
-            npx convex deploy -y
-          else
-            npx convex dev --once
-          fi
+          npx convex deploy -y
 
       # 2. The site, exactly as built and tested by the frontend job, as a static-assets
       #    Worker (web/wrangler.jsonc). Wrangler runs at a pinned version, not a package dependency.
