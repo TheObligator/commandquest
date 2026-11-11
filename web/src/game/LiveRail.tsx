@@ -87,6 +87,12 @@ function PromptPanel({ game }: { game: LiveGame }) {
       {!!game.view?.selection?.offer?.length && (
         <OfferedCards cards={game.view.selection.offer} chosen={game.view.selection.chosen} onPick={game.clickCard} />
       )}
+      {!!game.view?.selection?.seen?.length && (
+        <>
+          <p className="ar-sub">Also looking at (can't be chosen):</p>
+          <RevealedCards cards={game.view.selection.seen} />
+        </>
+      )}
       <div className="ar-actions">
         {p.ok.label && (
           <button className="ar-btn primary" disabled={!p.ok.enabled} onClick={game.ok}>

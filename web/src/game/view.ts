@@ -142,7 +142,7 @@ export interface GameView {
    * `stack` items to target, `chosen` so far (card ids, or player ids as strings), and `actionable`
    * cards (while paying mana, the sources that can pay).
    */
-  selection?: { cards: number[]; players: string[]; stack: number[]; chosen: (number | string)[]; actionable: number[]; offer?: CardView[] };
+  selection?: { cards: number[]; players: string[]; stack: number[]; chosen: (number | string)[]; actionable: number[]; offer?: CardView[]; seen?: CardView[] };
   /** Live games: cards Forge is showing you right now (an opponent revealing their hand…). */
   revealed?: CardView[];
   /** Live games: an auto-pass you started is still going (Forge ends it when it gets there, or when something needs you). */

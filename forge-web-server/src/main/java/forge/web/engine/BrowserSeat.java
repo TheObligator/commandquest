@@ -353,6 +353,34 @@ public final class BrowserSeat implements IRemote {
                 offer.add(views.card(gv, c, me, true));
             }
         }
+        // The other cards you're looking at there right now (Harald's top five: the ones you can't
+        // take), so the prompt can show them too, not clickable.
+        ArrayNode alsoSeen = o.putArray("seen");
+        if (!offer.isEmpty()) {
+            java.util.Set<Integer> offered = new java.util.HashSet<>();
+            s.cards().forEach(c -> offered.add(c.getId()));
+            Game g = game.get();
+            java.util.Set<String> zonesDone = new java.util.HashSet<>();
+            for (CardView c : s.cards()) {
+                if (g == null || c.getZone() != ZoneType.Library || c.getOwner() == null
+                        || !zonesDone.add(c.getOwner().getId() + "/" + c.getZone())) {
+                    continue;
+                }
+                Player owner = g.getPlayer(c.getOwner().getId());
+                if (owner == null) {
+                    continue;
+                }
+                for (Card lc : owner.getCardsIn(ZoneType.Library)) {
+                    CardView v = lc.getView();
+                    if (!offered.contains(v.getId()) && v.canBeShownTo(me)) {
+                        alsoSeen.add(views.card(gv, v, me));
+                    }
+                }
+            }
+            if (alsoSeen.size() > 15) {
+                alsoSeen.removeAll(); // a whole library on show: the offered cards are enough
+            }
+        }
         for (Object t : s.targets()) {
             if (t instanceof CardView c) {
                 cards.add(c.getId());
