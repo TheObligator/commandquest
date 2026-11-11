@@ -1,5 +1,7 @@
 import { useAuthActions } from "@convex-dev/auth/react";
-import { useConvexAuth } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { clearPending, newPending, pending as savedPending, type Pending } from "../app/handoff";
 import { useEffect, useState } from "react";
 import { errorMessage } from "../app/errors";
 import { navigate, useRoute } from "../app/router";
@@ -31,7 +33,26 @@ export function SignIn() {
   const { query } = useRoute();
   const next = query.get("next") ?? "/decks";
   const [email, setEmail] = useState("");
-  const [sentTo, setSentTo] = useState<string | null>(null);
+  // A link asked for here, maybe opened on another device (app/handoff.ts): wait for its code.
+  const [waiting, setWaiting] = useState<Pending | null>(() => savedPending());
+  const sentTo = waiting?.email ?? null;
+  const handedCode = useQuery(api.signinHandoff.waiting, waiting && !isAuthenticated ? { pair: waiting.pair } : "skip");
+  const handoffDone = useMutation(api.signinHandoff.done);
+  useEffect(() => {
+    if (!handedCode || !waiting) return;
+    const pair = waiting.pair;
+    void (async () => {
+      try {
+        await (signIn as (provider: string | undefined, params: { code: string }) => Promise<unknown>)(undefined, { code: handedCode });
+      } catch (err) {
+        setError("That sign-in link has expired or was already used. Ask for a new one.");
+        console.warn(errorMessage(err));
+      }
+      clearPending();
+      setWaiting(null);
+      void handoffDone({ pair });
+    })();
+  }, [handedCode]); // eslint-disable-line react-hooks/exhaustive-deps
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -45,9 +66,11 @@ export function SignIn() {
     setBusy(true);
     rememberNext(next);
     try {
-      await signIn("resend", { email: email.trim() });
-      setSentTo(email.trim());
+      const p = newPending(email.trim());
+      await signIn("resend", { email: email.trim(), redirectTo: `/?pair=${p.pair}` });
+      setWaiting(p);
     } catch (err) {
+      clearPending();
       setError(errorMessage(err));
     } finally {
       setBusy(false);
@@ -70,8 +93,12 @@ export function SignIn() {
         <p className="muted">New here? Signing in creates your account. You'll stay signed in on this device.</p>
         {sentTo ? (
           <div className="sent">
-            <p><strong>Check your email.</strong> We sent a sign-in link to {sentTo}. Open it on this device to finish signing in.</p>
-            <button className="btn ghost small" onClick={() => setSentTo(null)}>Use a different email</button>
+            <p><strong>Check your email.</strong> We sent a sign-in link to {sentTo}.</p>
+            <p className="muted">
+              Open it here, or on any other device, like your phone: choose "Sign in on the device that asked" there and this
+              page signs in by itself. Keep this page open.
+            </p>
+            <button className="btn ghost small" onClick={() => (clearPending(), setWaiting(null))}>Use a different email</button>
           </div>
         ) : (
           <form className="auth-form" onSubmit={emailLink}>

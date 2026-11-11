@@ -47,6 +47,19 @@ export default defineSchema({
     seats: v.optional(v.array(v.array(v.string()))),
   }).index("by_user", ["userId"]),
 
+  /**
+   * Email sign-in links opened on another device (convex/signinHandoff.ts): the link's one-time
+   * code, passed to the device that asked for it. Deleted once used, and after an hour.
+   */
+  signinHandoffs: defineTable({
+    /** Random id the asking device put in the link; only it and the email's reader know it. */
+    pair: v.string(),
+    code: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_pair", ["pair"])
+    .index("by_created", ["createdAt"]),
+
   /** Per-user settings (convex/settings.ts). One row per user; absent = the defaults. */
   settings: defineTable({
     userId: v.id("users"),

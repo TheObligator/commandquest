@@ -15,6 +15,7 @@ import type * as importDeck from "../importDeck.js";
 import type * as model_deckRules from "../model/deckRules.js";
 import type * as model_importers from "../model/importers.js";
 import type * as settings from "../settings.js";
+import type * as signinHandoff from "../signinHandoff.js";
 import type * as stops from "../stops.js";
 import type * as users from "../users.js";
 
@@ -32,6 +33,7 @@ declare const fullApi: ApiFromModules<{
   "model/deckRules": typeof model_deckRules;
   "model/importers": typeof model_importers;
   settings: typeof settings;
+  signinHandoff: typeof signinHandoff;
   stops: typeof stops;
   users: typeof users;
 }>;
