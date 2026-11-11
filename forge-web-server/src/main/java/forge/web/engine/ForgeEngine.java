@@ -3,6 +3,7 @@ package forge.web.engine;
 import forge.StaticData;
 import forge.gui.GuiBase;
 import forge.localinstance.properties.ForgeNetPreferences.FNetPref;
+import forge.localinstance.properties.ForgeConstants;
 import forge.localinstance.properties.ForgePreferences.FPref;
 import forge.model.FModel;
 import java.nio.file.Files;
@@ -62,6 +63,9 @@ public final class ForgeEngine {
         }
         FModel.getPreferences().setPref(FPref.UI_RECORD_REPLAYS, false);
         FModel.getPreferences().setPref(FPref.UI_SHOW_ACTIONABLE_HIGHLIGHTS, false);
+        // Auto-yields and "always yes/no" for triggers: per card, for one game. Forge's "per
+        // install" mode would share one player's choices with everyone on this server.
+        FModel.getPreferences().setPref(FPref.UI_AUTO_DECISION_MODE, ForgeConstants.AUTO_DECISION_PER_CARD);
         started = true;
         Logger.info("Forge engine ready in {} ms (assets {})", System.currentTimeMillis() - t0, forgeGuiDir.toAbsolutePath().normalize());
     }

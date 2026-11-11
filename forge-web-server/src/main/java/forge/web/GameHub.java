@@ -2,18 +2,27 @@ package forge.web;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import forge.deck.Deck;
 import forge.game.Game;
+import forge.game.GameLogEntryType;
 import forge.game.card.Card;
+import forge.game.card.CounterType;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.player.PlayerView;
+import forge.game.spellability.SpellAbility;
+import forge.gamemodes.match.input.InputPassPriority;
+import forge.player.AutoYieldStore.TriggerDecision;
+import forge.player.PlayerControllerHuman;
 import forge.gamemodes.match.YieldUpdate;
 import forge.gui.FThreads;
 import forge.interfaces.IGameController;
 import forge.web.engine.BrowserSeat;
 import forge.web.engine.Decks;
+import forge.web.engine.Explain;
+import forge.web.engine.ManualActions;
 import forge.web.engine.ForgeEngine;
 import forge.web.engine.GameSession;
 import io.javalin.websocket.WsContext;
@@ -106,12 +115,17 @@ public final class GameHub {
             case "concede" -> act(c, IGameController::concede);
             case "card" -> {
                 int id = m.path("id").asInt();
-                act(c, ctl -> {
-                    Card card = game(c) == null ? null : game(c).findById(id);
-                    if (card != null) {
-                        ctl.selectCard(card.getView(), null, null);
-                    }
-                });
+                act(c, ctl -> click(c, ctl, id, null, null));
+            }
+            case "actions" -> {
+                int id = m.path("id").asInt();
+                act(c, ctl -> actions(c, ctl, id));
+            }
+            case "ability" -> {
+                int id = m.path("id").asInt();
+                int ability = m.path("ability").asInt();
+                String label = m.path("label").asText(null);
+                act(c, ctl -> click(c, ctl, id, ability, label));
             }
             case "player" -> {
                 int id = m.path("id").asInt();
@@ -129,6 +143,17 @@ public final class GameHub {
                 }
             }
             case "stops" -> stops(c, m.path("stops"));
+            case "yield" -> yieldTo(c, m.path("key").asText(""), m.path("autoYield"), m.path("decision").asText(null));
+            case "manual" -> manual(c, m);
+            case "details" -> details(c, m.path("id").asInt());
+            case "counter" -> counter(c, m.path("id").asInt(), m.path("type").asText(""), m.path("delta").asInt());
+            case "yieldsOff" -> act(c, ctl -> {
+                ctl.setDisableAutoYields(m.path("off").asBoolean());
+                BrowserSeat seat = c.seat;
+                if (seat != null) {
+                    seat.refresh();
+                }
+            });
             case "autopass" -> autoPass(c, m.path("mode").asText(null));
             default -> error(c, "Unknown message: " + t);
         }
@@ -217,6 +242,203 @@ public final class GameHub {
                 Logger.warn(e, "Player action failed");
             }
         });
+    }
+
+    /**
+     * Clicks a card for this player (Forge decides what that does). {@code ability}: the one picked
+     * from the card's menu, which answers Forge's "which ability?" if it asks. If the click does
+     * nothing, the browser gets a {@code notice} saying why.
+     */
+    private void click(Conn c, IGameController ctl, int id, Integer ability, String label) {
+        Game g = game(c);
+        BrowserSeat seat = c.seat;
+        Card card = g == null ? null : g.findById(id);
+        if (card == null || seat == null) {
+            return;
+        }
+        boolean used;
+        seat.prefer(ability, label);
+        try {
+            used = ctl.selectCard(card.getView(), null, null);
+        } finally {
+            seat.prefer(null, null);
+        }
+        Player me = seat.player() == null ? null : g.getPlayer(seat.player().getId());
+        if (!used && me != null) {
+            ObjectNode o = msg("notice");
+            o.put("message", Explain.whyNot(g, me, card, priorityInput(ctl)));
+            send(c, o);
+        }
+    }
+
+    /** The card's abilities for its menu: everything Forge lists for this player, and whether each can be used now. */
+    private void actions(Conn c, IGameController ctl, int id) {
+        Game g = game(c);
+        BrowserSeat seat = c.seat;
+        Card card = g == null ? null : g.findById(id);
+        Player me = card == null || seat == null || seat.player() == null ? null : g.getPlayer(seat.player().getId());
+        ObjectNode o = msg("actions");
+        o.put("id", id);
+        ArrayNode list = o.putArray("actions");
+        if (me != null) {
+            boolean canAct = priorityInput(ctl) && g.getPhaseHandler().getPriorityPlayer() == me;
+            // By id, and by text for abilities Forge rebuilds on each listing (alternative costs).
+            Set<Integer> playable = new HashSet<>();
+            Set<String> playableText = new HashSet<>();
+            if (canAct) {
+                for (SpellAbility sa : card.getAllPossibleAbilities(me, true)) {
+                    playable.add(sa.getId());
+                    playableText.add(sa.getView().getDescription());
+                }
+            }
+            Set<String> seen = new HashSet<>();
+            for (SpellAbility sa : card.getAllPossibleAbilities(me, false)) {
+                String label = sa.getView().getDescription();
+                if (label == null || label.isBlank() || !seen.add(label)) {
+                    continue;
+                }
+                ObjectNode a = list.addObject();
+                a.put("ability", sa.getId());
+                a.put("label", label);
+                a.put("enabled", playable.contains(sa.getId()) || playableText.contains(label));
+            }
+            if (playable.isEmpty()) {
+                o.put("reason", Explain.whyNot(g, me, card, priorityInput(ctl)));
+            }
+        }
+        send(c, o);
+    }
+
+    /**
+     * Auto-yield to an ability (Forge's yield key: this ability of this card), and for an optional
+     * trigger, always answer yes (ACCEPT), no (DECLINE) or ask (ASK).
+     */
+    private void yieldTo(Conn c, String key, JsonNode autoYield, String decision) {
+        if (key.isEmpty() || key.length() > 500) {
+            return;
+        }
+        act(c, ctl -> {
+            boolean scope = ctl.getYieldController().isAbilityScope();
+            if (autoYield.isBoolean()) {
+                ctl.setShouldAutoYield(key, autoYield.asBoolean(), scope);
+            }
+            if (decision != null) {
+                try {
+                    ctl.setTriggerDecision(key, TriggerDecision.valueOf(decision), scope);
+                } catch (IllegalArgumentException e) {
+                    return;
+                }
+            }
+            BrowserSeat seat = c.seat;
+            if (seat != null) {
+                seat.refresh();
+            }
+        });
+    }
+
+    /**
+     * A manual override from a card's menu (docs/game-protocol.md, {@code manual}): tap, turn
+     * face down, move to a zone, token copy, reveal... Only your own cards.
+     */
+    private void manual(Conn c, JsonNode m) {
+        int id = m.path("id").asInt();
+        String action = m.path("action").asText("");
+        act(c, ctl -> {
+            Game g = game(c);
+            BrowserSeat seat = c.seat;
+            Card card = g == null ? null : g.findById(id);
+            if (card == null || seat == null || seat.player() == null) {
+                return;
+            }
+            Player me = g.getPlayer(seat.player().getId());
+            if (!ManualActions.allowed(card, me)) {
+                notice(c, "You can only do that to your own cards.");
+                return;
+            }
+            List<Player> to = new ArrayList<>();
+            for (JsonNode p : m.path("to")) {
+                Player other = g.getPlayer(p.asInt(-1));
+                if (other != null && other != me && !to.contains(other)) {
+                    to.add(other);
+                }
+            }
+            if (!seat.manual().run(g, me, card, action, to, seat::refresh)) {
+                notice(c, "That can't be done to this card where it is now.");
+            }
+        });
+    }
+
+    /** Forge's full text for a card as you may see it: rules text with what's changed (counters, granted abilities, commander casts...). */
+    private void details(Conn c, int id) {
+        act(c, ctl -> {
+            Game g = game(c);
+            BrowserSeat seat = c.seat;
+            Card card = g == null ? null : g.findById(id);
+            ObjectNode o = msg("details");
+            o.put("id", id);
+            if (card != null && seat != null && seat.player() != null) {
+                forge.game.card.CardView cv = card.getView();
+                PlayerView me = seat.player();
+                boolean seen = cv.canBeShownTo(me) && (!cv.isFaceDown() || cv.canFaceDownBeShownTo(me));
+                o.put("text", forge.gui.card.CardDetailUtil.composeCardText(cv.getCurrentState(), g.getView(), seen));
+                o.put("sick", card.isInPlay() && card.isSick());
+                o.put("owner", card.getOwner().getName());
+                if (card.isCommander()) {
+                    o.put("commanderCasts", card.getOwner().getCommanderCast(card));
+                }
+            }
+            send(c, o);
+        });
+    }
+
+    private void notice(Conn c, String message) {
+        ObjectNode o = msg("notice");
+        o.put("message", message);
+        send(c, o);
+    }
+
+    private static final java.util.regex.Pattern COUNTER_NAME = java.util.regex.Pattern.compile("^[A-Za-z0-9+/\\- ]{1,24}$");
+
+    /**
+     * A manual override: put counters on a permanent, or take them off ({@code delta} &lt; 0),
+     * outside the rules, like players adjusting a paper board. Any permanent on the battlefield;
+     * the game log says who did it.
+     */
+    private void counter(Conn c, int id, String type, int delta) {
+        if (delta == 0 || Math.abs(delta) > 99 || !COUNTER_NAME.matcher(type).matches()) {
+            return;
+        }
+        act(c, ctl -> {
+            Game g = game(c);
+            BrowserSeat seat = c.seat;
+            Card card = g == null ? null : g.findById(id);
+            if (card == null || seat == null || seat.player() == null || !card.isInPlay()) {
+                return;
+            }
+            Player me = g.getPlayer(seat.player().getId());
+            CounterType ct = CounterType.getType(type);
+            if (ct == null) {
+                return;
+            }
+            int changed;
+            if (delta > 0) {
+                card.addCounterInternal(ct, delta, me, false, null, null); // no events, like Forge's dev-mode tool (they need trigger params)
+                changed = delta;
+            } else {
+                changed = card.subtractCounter(ct, -delta, me);
+            }
+            if (changed != 0) {
+                String what = Math.abs(changed) + " " + ct.getName() + " counter" + (Math.abs(changed) == 1 ? "" : "s");
+                g.getGameLog().add(GameLogEntryType.INFORMATION, me.getName() + (delta > 0 ? " put " + what + " on " : " removed " + what + " from ")
+                        + card.getName() + " (by hand)");
+            }
+            seat.refresh();
+        });
+    }
+
+    /** Forge is waiting for this player to act with priority (not paying mana, choosing targets...). */
+    private static boolean priorityInput(IGameController ctl) {
+        return ctl instanceof PlayerControllerHuman h && h.getInputProxy().getInput() instanceof InputPassPriority;
     }
 
     private IGameController controller(Conn c) {

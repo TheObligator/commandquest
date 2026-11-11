@@ -5,9 +5,18 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import forge.game.GameEntityView;
+import forge.game.Game;
 import forge.game.GameView;
+import forge.game.card.Card;
+import forge.game.player.Player;
+import forge.game.zone.ZoneType;
+import java.util.HashSet;
+import java.util.Set;
 import forge.game.card.CardView;
 import forge.game.player.PlayerView;
+import forge.game.spellability.StackItemView;
+import forge.interfaces.IGameController;
+import forge.game.spellability.SpellAbilityView;
 import forge.gamemodes.net.IRemote;
 import forge.gamemodes.net.ProtocolGuiGame;
 import forge.gamemodes.net.event.GuiGameEvent;
@@ -48,10 +57,17 @@ public final class BrowserSeat implements IRemote {
     private final Map<Integer, Pending> pending = new ConcurrentHashMap<>();
     private final AtomicInteger askIds = new AtomicInteger();
     private volatile ProtocolGuiGame gui;
+    private volatile java.util.function.Supplier<Game> game = () -> null;
+    private final ManualActions manual = new ManualActions();
     private volatile PlayerView me;
     private volatile String promptMessage = "";
     private volatile String lastState;
     private volatile boolean closed;
+    /** An ability picked from the browser's card menu: answers Forge's "which ability?" for that click. */
+    private volatile Preferred preferred;
+
+    private record Preferred(int id, String label) {
+    }
 
     /** A question waiting for the browser, with how to turn its answer into Forge's value. */
     private record Pending(CompletableFuture<Object> answer, List<?> options, GuiGameEvent ev) {
@@ -63,8 +79,9 @@ public final class BrowserSeat implements IRemote {
         this.sink = sink;
     }
 
-    void attach(ProtocolGuiGame gui, Map<String, Map<String, String>> tokenArtByPlayer) {
+    void attach(ProtocolGuiGame gui, Map<String, Map<String, String>> tokenArtByPlayer, java.util.function.Supplier<Game> game) {
         this.gui = gui;
+        this.game = game;
         views.setTokenArt(owner -> owner == null ? null : tokenArtByPlayer.get(owner.getName()));
     }
 
@@ -126,7 +143,15 @@ public final class BrowserSeat implements IRemote {
         String state;
         try {
             ObjectNode o = msg("state");
-            o.set("view", views.game(gv, me));
+            Game live = game.get();
+            if (live != null) {
+                manual.keepLocked(live);
+            }
+            ObjectNode view = views.game(gv, me);
+            view.set("playable", playable());
+            untapLocks(live, view);
+            yields(gv, view);
+            o.set("view", view);
             state = json.writeValueAsString(o);
         } catch (Exception e) {
             Logger.warn(e, "Couldn't build the game view");
@@ -137,6 +162,96 @@ public final class BrowserSeat implements IRemote {
             emitRaw(state);
         }
     }
+
+    /**
+     * Your cards you could use right now (cast, play, activate: not mana abilities), for the
+     * table's "playable" glow. Empty unless you have priority.
+     */
+    private ArrayNode playable() {
+        ArrayNode ids = json.createArrayNode();
+        try {
+            Game g = game.get();
+            Player p = g == null || me == null ? null : g.getPlayer(me.getId());
+            if (p == null || g.getPhaseHandler().getPriorityPlayer() != p || g.isGameOver()) {
+                return ids;
+            }
+            Set<Integer> seen = new HashSet<>();
+            for (Card c : p.getCardsIn(PLAYABLE_ZONES)) {
+                if (seen.add(c.getId()) && c.getAllPossibleAbilities(p, true).stream().anyMatch(sa -> !sa.isManaAbility())) {
+                    ids.add(c.getId());
+                }
+            }
+            for (Card c : g.getCardsIn(ZoneType.Exile)) { // cards others exiled that you may play
+                if (c.getOwner() != p && seen.add(c.getId()) && !c.mayPlay(p).isEmpty()
+                        && c.getAllPossibleAbilities(p, true).stream().anyMatch(sa -> !sa.isManaAbility())) {
+                    ids.add(c.getId());
+                }
+            }
+        } catch (RuntimeException e) {
+            Logger.debug(e, "Couldn't list playable cards");
+        }
+        return ids;
+    }
+
+    /**
+     * Adds your yield settings to each ability on the stack: {@code yieldKey} (Forge's key for
+     * "this ability of this card"), {@code autoYield}, and for your optional ("may") triggers
+     * {@code optional} and {@code decision} (ASK, ACCEPT or DECLINE).
+     */
+    private void yields(GameView gv, ObjectNode view) {
+        IGameController ctl = gui == null ? null : gui.getGameController(me);
+        if (ctl == null) {
+            return;
+        }
+        view.put("autoYieldsOff", ctl.getYieldController().getDisableAutoYields());
+        if (gv.getStack() == null) {
+            return;
+        }
+        Map<Integer, StackItemView> byId = new java.util.HashMap<>();
+        gv.getStack().forEach(s -> byId.put(s.getId(), s));
+        for (JsonNode n : view.path("stack")) {
+            StackItemView s = byId.get(n.path("id").asInt());
+            if (s == null || !s.isAbility() || s.getKey() == null || s.getKey().isEmpty()) {
+                continue;
+            }
+            ObjectNode o = (ObjectNode) n;
+            o.put("yieldKey", s.getKey());
+            o.put("autoYield", ctl.shouldAutoYield(s.getKey()));
+            if (s.isOptionalTrigger() && me.equals(s.getActivatingPlayer())) {
+                o.put("optional", true);
+                o.put("decision", String.valueOf(ctl.getTriggerDecision(s.getKey())));
+            }
+        }
+    }
+
+    public ManualActions manual() {
+        return manual;
+    }
+
+    /** Marks permanents kept from untapping by hand: {@code untapLock} "next" or "never". */
+    private void untapLocks(Game g, ObjectNode view) {
+        if (g == null) {
+            return;
+        }
+        for (JsonNode p : view.path("players")) {
+            for (JsonNode c : p.path("battlefield")) {
+                Card card = g.findById(c.path("id").asInt());
+                String lock = card == null ? null : manual.untapLock(card);
+                if (lock != null) {
+                    ((ObjectNode) c).put("untapLock", lock);
+                }
+            }
+        }
+    }
+
+    /** Sends the view again (e.g. after a yield setting changed, which isn't a game event). */
+    public void refresh() {
+        lastState = null;
+        pushState();
+    }
+
+    private static final List<ZoneType> PLAYABLE_ZONES =
+            List.of(ZoneType.Hand, ZoneType.Battlefield, ZoneType.Command, ZoneType.Graveyard, ZoneType.Exile);
 
     @Override
     @SuppressWarnings("unchecked")
@@ -174,6 +289,10 @@ public final class BrowserSeat implements IRemote {
             }
             case getAbilityToPlay -> {
                 options = (List<?>) a[1];
+                Object chosen = preferredOf(options);
+                if (chosen != null) {
+                    return chosen;
+                }
                 if (options.size() == 1) {
                     return options.get(0); // you clicked the card to do the only thing it can do
                 }
@@ -287,6 +406,32 @@ public final class BrowserSeat implements IRemote {
     }
 
     // ---- browser -> Forge ----
+
+    /**
+     * The next "which ability?" question picks this one (by id, else by its text: some abilities,
+     * like alternative costs, are rebuilt with a new id each time Forge lists them). Null clears it.
+     */
+    public void prefer(Integer abilityId, String label) {
+        preferred = abilityId == null ? null : new Preferred(abilityId, label);
+    }
+
+    private Object preferredOf(List<?> options) {
+        Preferred p = preferred;
+        if (p == null) {
+            return null;
+        }
+        for (Object o : options) {
+            if (o instanceof SpellAbilityView sa && sa.getId() == p.id()) {
+                return o;
+            }
+        }
+        for (Object o : options) {
+            if (o instanceof SpellAbilityView sa && p.label() != null && p.label().equals(sa.getDescription())) {
+                return o;
+            }
+        }
+        return null;
+    }
 
     /** The browser answered question {@code id}: {@code choice} is a list of option indexes, or {@code text}. */
     public void answer(int id, JsonNode choice, String text) {

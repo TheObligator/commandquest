@@ -98,6 +98,11 @@ public class GameHubTest {
             int landsPlayed = 0;
             int lastLandTurn = -1;
             int prompts = 0;
+            String notice = null;
+            boolean clickedEarly = false;
+            boolean landWasPlayable = false;
+            boolean askedActions = false;
+            boolean usedMenu = false;
             java.util.List<String> trace = new java.util.ArrayList<>();
             long end = System.currentTimeMillis() + 150_000;
             while (System.currentTimeMillis() < end && (landsPlayed < 2 || state.path("turn").asInt() < 6)) {
@@ -134,13 +139,42 @@ public class GameHubTest {
                                 break;
                             }
                         }
-                        if (myMain && land != null && lastLandTurn != state.path("turn").asInt()) {
-                            lastLandTurn = state.path("turn").asInt();
-                            landsPlayed++;
+                        boolean canPass = m.path("ok").path("enabled").asBoolean() && m.path("ok").path("label").asText().equals("OK")
+                                && m.path("cancel").path("label").asText().equals("End Turn"); // priority, not the mulligan
+                        if (!myMain && land != null && !clickedEarly && canPass) {
+                            // A land outside your main phase: nothing happens, and the server says why.
+                            clickedEarly = true;
                             ws.sendText("{\"t\":\"card\",\"id\":" + land.path("id").asInt() + "}", true);
+                        }
+                        if (myMain && land != null && lastLandTurn != state.path("turn").asInt()) {
+                            for (JsonNode id : state.path("playable")) {
+                                landWasPlayable |= id.asInt() == land.path("id").asInt();
+                            }
+                            if (!askedActions) {
+                                // The first land goes in through its right-click menu.
+                                askedActions = true;
+                                ws.sendText("{\"t\":\"actions\",\"id\":" + land.path("id").asInt() + "}", true);
+                            } else {
+                                lastLandTurn = state.path("turn").asInt();
+                                landsPlayed++;
+                                ws.sendText("{\"t\":\"card\",\"id\":" + land.path("id").asInt() + "}", true);
+                            }
                         } else if (m.path("ok").path("enabled").asBoolean()) {
                             ws.sendText("{\"t\":\"ok\"}", true);
                         }
+                    }
+                    case "notice" -> notice = m.path("message").asText();
+                    case "actions" -> {
+                        for (JsonNode a : m.path("actions")) {
+                            if (a.path("enabled").asBoolean() && !usedMenu) {
+                                usedMenu = true;
+                                lastLandTurn = state.path("turn").asInt();
+                                landsPlayed++;
+                                ws.sendText("{\"t\":\"ability\",\"id\":" + m.path("id").asInt() + ",\"ability\":" + a.path("ability").asInt()
+                                        + ",\"label\":" + json.writeValueAsString(a.path("label").asText()) + "}", true);
+                            }
+                        }
+                        Assert.assertTrue(usedMenu, "the land's menu offers playing it: " + m);
                     }
                     case "error" -> Assert.fail("server error: " + m.path("message").asText());
                     default -> { }
@@ -162,7 +196,59 @@ public class GameHubTest {
                         ws.sendText("{\"t\":\"ok\"}", true);
                     }
                 }
+                // Counters by hand: a +1/+1 counter on our first land shows up, and the log says so.
+                int landId = state.path("players").get(0).path("battlefield").get(0).path("id").asInt();
+                ws.sendText("{\"t\":\"counter\",\"id\":" + landId + ",\"type\":\"+1/+1\",\"delta\":2}", true);
+                boolean counted = false;
+                long wait = System.currentTimeMillis() + 10_000;
+                while (!counted && System.currentTimeMillis() < wait) {
+                    String s = b.inbox.poll(500, TimeUnit.MILLISECONDS);
+                    if (s == null) {
+                        continue;
+                    }
+                    JsonNode m = json.readTree(s);
+                    if (m.path("t").asText().equals("state")) {
+                        state = m.path("view");
+                        for (JsonNode c : state.path("players").get(0).path("battlefield")) {
+                            counted |= c.path("id").asInt() == landId && c.path("counters").path("+1/+1").asInt() == 2;
+                        }
+                    }
+                }
+                Assert.assertTrue(counted, "two +1/+1 counters put on by hand");
+                Assert.assertTrue(state.path("log").toString().contains("(by hand)"), "the log says a counter was added by hand");
+
+                // Other manual actions: tap it, keep it from ever untapping, and read its details.
+                ws.sendText("{\"t\":\"manual\",\"id\":" + landId + ",\"action\":\"tap\"}", true);
+                ws.sendText("{\"t\":\"manual\",\"id\":" + landId + ",\"action\":\"neverUntap\"}", true);
+                ws.sendText("{\"t\":\"details\",\"id\":" + landId + "}", true);
+                boolean tapped = false;
+                boolean locked = false;
+                String details = null;
+                wait = System.currentTimeMillis() + 10_000;
+                while (!(tapped && locked && details != null) && System.currentTimeMillis() < wait) {
+                    String s = b.inbox.poll(500, TimeUnit.MILLISECONDS);
+                    if (s == null) {
+                        continue;
+                    }
+                    JsonNode m = json.readTree(s);
+                    if (m.path("t").asText().equals("state")) {
+                        for (JsonNode c : m.path("view").path("players").get(0).path("battlefield")) {
+                            if (c.path("id").asInt() == landId) {
+                                tapped = c.path("tapped").asBoolean();
+                                locked = c.path("untapLock").asText().equals("never");
+                            }
+                        }
+                    } else if (m.path("t").asText().equals("details")) {
+                        details = m.path("text").asText();
+                    }
+                }
+                Assert.assertTrue(tapped, "tapped by hand");
+                Assert.assertTrue(locked, "set never to untap");
+                Assert.assertTrue(details != null && !details.isBlank(), "card details text: " + details);
                 Assert.assertTrue(prompts > 3, "Forge's prompts reached the browser");
+                Assert.assertTrue(clickedEarly && notice != null && notice.contains("land"), "a land clicked too early says why: " + notice);
+                Assert.assertTrue(landWasPlayable, "the land showed as playable in our main phase");
+                Assert.assertTrue(usedMenu, "a land was played from its menu");
                 Assert.assertTrue(landsPlayed >= 2, "played lands: " + landsPlayed);
                 me = state.path("players").get(0);
                 Assert.assertTrue(me.path("battlefield").size() >= 2, "our lands are on the battlefield");

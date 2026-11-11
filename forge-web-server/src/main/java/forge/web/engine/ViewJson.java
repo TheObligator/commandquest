@@ -220,6 +220,18 @@ public final class ViewJson {
         o.put("name", source != null && source.canBeShownTo(viewer) ? source.getCurrentState().getName() : "Hidden");
         o.put("kind", s.isTrigger() ? "Triggered ability" : s.isAbility() ? "Activated ability" : "Spell");
         o.put("text", s.getText());
+        ArrayNode targets = o.putArray("targets");
+        if (s.getTargetCards() != null) {
+            for (CardView t : s.getTargetCards()) {
+                boolean seen = t.canBeShownTo(viewer) && (!t.isFaceDown() || t.canFaceDownBeShownTo(viewer));
+                targets.addObject().put("cardId", t.getId()).put("label", seen ? t.getCurrentState().getName() : "Face-down card");
+            }
+        }
+        if (s.getTargetPlayers() != null) {
+            for (PlayerView t : s.getTargetPlayers()) {
+                targets.addObject().put("playerId", id(t)).put("label", t.getName());
+            }
+        }
         if (source != null) {
             if (!s.isAbility()) {
                 o.put("cardId", source.getId());

@@ -75,7 +75,7 @@ public final class GameSession {
                 ProtocolGuiGame gui = new ProtocolGuiGame(seat.remote());
                 gui.setNetGame();
                 if (seat.remote() instanceof BrowserSeat browser) {
-                    browser.attach(gui, s.tokenArt);
+                    browser.attach(gui, s.tokenArt, s::game);
                 }
                 guiMap.put(rp, gui);
                 s.guis.put(seat.name(), gui);
