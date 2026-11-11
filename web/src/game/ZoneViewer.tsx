@@ -17,13 +17,15 @@ export function ZoneViewer(props: {
   onCardClick?: (id: number) => void;
   playable?: Set<number>;
   onMenu?: OpenMenu;
+  /** `cards` are already top first (a library listing); otherwise the last card is the top. */
+  topFirst?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const setPreview = usePreview();
   useEffect(() => {
     ref.current?.showModal();
   }, []);
-  const cards = [...props.cards].reverse(); // top first
+  const cards = props.topFirst ? props.cards : [...props.cards].reverse(); // top first
   return (
     <dialog
       ref={ref}

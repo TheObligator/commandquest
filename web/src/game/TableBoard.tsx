@@ -156,6 +156,8 @@ export function TableBoard(props: {
   detailsFor?: (id: number) => Promise<CardDetails>;
   /** Live games: a stack item's auto-yield settings (its "⋯" and right-click). */
   stackItemMenu?: (s: StackItemView) => MenuSection[];
+  /** Live games: cards the page shows you in a viewer (your library while you search it). */
+  peek?: { title: string; cards: CardView[]; onClose: () => void } | null;
 }) {
   const { view: v, layout, stops: st } = props;
   const me = v.viewer;
@@ -343,6 +345,17 @@ export function TableBoard(props: {
           onClose={() => setZone(null)}
           onCardClick={props.onCardClick}
           playable={props.playable}
+          onMenu={openMenu}
+        />
+      )}
+      {props.peek && (
+        <ZoneViewer
+          title={props.peek.title}
+          cards={props.peek.cards}
+          topFirst
+          viewer={me}
+          nameOf={nameOf}
+          onClose={props.peek.onClose}
           onMenu={openMenu}
         />
       )}

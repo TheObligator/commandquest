@@ -16,6 +16,7 @@ import type { CardView, GameView } from "../game/view";
 import type { MenuSection } from "../components/CardMenu";
 import { CounterDialog } from "../game/CounterDialog";
 import { PayPrompt } from "../game/PayPrompt";
+import { LibraryDialog, type LibraryCountAction } from "../game/LibraryDialog";
 
 export function LiveGame() {
   const { query } = useRoute();
@@ -139,8 +140,9 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
     const all = new Set<string>();
     for (const p of view.players) for (const z of [p.hand, p.battlefield, p.graveyard, p.exile, p.command]) for (const c of z) if (c.name) all.add(c.name);
     for (const s of view.stack) if (s.card?.name) all.add(s.card.name);
+    for (const c of game.libraryList?.cards ?? []) if (c.name) all.add(c.name);
     return [...all].sort();
-  }, [view]);
+  }, [view, game.libraryList]);
   useCardData(names);
 
   // Send your stops to the server at the start and whenever you change them.
@@ -218,6 +220,63 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
     ],
   });
 
+  // Free play on your library: search it or look at its top cards (a viewer only you see, where
+  // right-clicking a card moves it), and draw, mill, exile, reveal or shuffle by hand.
+  const myLibrary = view.players[0].libraryCount;
+  /** Changes when your library might have: its size, or a new line in the game log (a shuffle). */
+  const libKey = `${myLibrary}|${view.log.length}|${view.log.at(-1) ?? ""}`;
+  const [peek, setPeek] = useState<{ top: number; ids?: Set<number> } | null>(null);
+  const [libDialog, setLibDialog] = useState<LibraryCountAction | null>(null);
+  const openPeek = (top: number) => {
+    setPeek({ top });
+    peekKey.current = libKey;
+    game.listLibrary(top, true);
+  };
+  const closePeek = () => {
+    setPeek(null);
+    game.clearLibraryList();
+  };
+  // Keep the list current as cards leave or the library is shuffled.
+  const peekKey = useRef("");
+  useEffect(() => {
+    if (!peek) return;
+    if (libKey === peekKey.current) return;
+    peekKey.current = libKey;
+    game.listLibrary(peek.top, false);
+  }, [peek, libKey, game]);
+  // Looking at the top N: only those cards stay in view (the next ones don't slide in as they leave).
+  useEffect(() => {
+    const list = game.libraryList;
+    if (peek && peek.top > 0 && !peek.ids && list && list.top === peek.top) setPeek({ ...peek, ids: new Set(list.cards.map((c) => c.id)) });
+  }, [game.libraryList, peek]);
+  const peekCards = !peek || !game.libraryList || game.libraryList.top !== peek.top
+    ? []
+    : peek.ids ? game.libraryList.cards.filter((c) => peek.ids!.has(c.id)) : game.libraryList.cards;
+  const librarySection = (): MenuSection => {
+    const empty = myLibrary === 0;
+    return {
+      title: "Library (by hand)",
+      items: [
+        { label: "Draw a card", disabled: empty, onSelect: () => game.library("draw", 1) },
+        { label: "🔍 Search library", disabled: empty, onSelect: () => openPeek(0) },
+        { label: "Look at the top cards…", disabled: empty, onSelect: () => setLibDialog("look") },
+        {
+          label: "👁 Reveal the top card to",
+          disabled: empty,
+          onSelect: () => {},
+          submenu: [
+            { label: "Everyone", onSelect: () => game.library("revealTop", 1, opponents.map((p) => p.id)) },
+            ...(opponents.length > 1 ? opponents.map((p) => ({ label: p.name, onSelect: () => game.library("revealTop", 1, [p.id]) })) : []),
+          ],
+        },
+        { label: "Mill a card", disabled: empty, onSelect: () => game.library("mill", 1) },
+        { label: "Exile the top card", disabled: empty, onSelect: () => game.library("exile", 1) },
+        { label: "Draw, mill or exile several…", disabled: empty, onSelect: () => setLibDialog("draw") },
+        { label: "🔀 Shuffle", onSelect: () => game.library("shuffle") },
+      ],
+    };
+  };
+
   const manualSection = (card: CardView): MenuSection => {
     if (view.freePlay === false) return { items: [] };
     const mine = (card.zone === "battlefield" ? card.controller : card.owner) === me;
@@ -258,6 +317,11 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
         ],
       },
     ];
+    if (t.kind === "zone" && t.zone === "library" && t.owner === me) {
+      return view.freePlay === false
+        ? { sections: passing, note: "Free play is off in this game, so your library can't be changed by hand." }
+        : { sections: [librarySection(), ...passing] };
+    }
     if (t.kind !== "card") return { sections: passing };
     const card = t.card;
     if (card.hidden) return { sections: card.zone === "battlefield" ? [manualSection(card)] : [] };
@@ -321,6 +385,14 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
   return (
     <>
     {game.prompt?.pay && !game.ask && <PayPrompt prompt={game.prompt} game={{ ok, cancel, payFree: game.payFree }} />}
+    {libDialog && (
+      <LibraryDialog
+        size={myLibrary}
+        initial={libDialog}
+        onClose={() => setLibDialog(null)}
+        onApply={(action, n) => (action === "look" ? openPeek(n) : game.library(action, n))}
+      />
+    )}
     {counterFor && (
       <CounterDialog
         card={counterFor}
@@ -341,6 +413,7 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
       playable={playable}
       menuFor={menuFor}
       detailsFor={game.details}
+      peek={peek ? { title: peek.top > 0 ? `Top ${peek.top === 1 ? "card" : `${peek.top} cards`} of your library` : "Your library (only you see this)", cards: peekCards, onClose: closePeek } : null}
       stackItemMenu={(s) => {
         const tick = (on: boolean | undefined, label: string) => `${on ? "✓ " : ""}${label}`;
         const key = s.yieldKey;

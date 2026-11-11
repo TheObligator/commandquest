@@ -82,6 +82,15 @@ export type ManualAction =
   | "tap" | "untap" | "faceDown" | "faceUp" | "skipUntap" | "neverUntap" | "untapNormally" | "tokenCopy"
   | "toBattlefield" | "toHand" | "toGraveyard" | "toExile" | "toCommand" | "toLibraryTop" | "toLibraryBottom" | "reveal";
 
+/** Manual actions on your own library (free play): the top `n` cards, or reveal the top card. */
+export type LibraryAction = "draw" | "mill" | "exile" | "revealTop" | "shuffle";
+
+/** Your library's cards as the server last listed them for you (`top` 0: all of it), top first. */
+export interface LibraryList {
+  top: number;
+  cards: CardView[];
+}
+
 export type LiveStatus = "connecting" | "signing-in" | "ready" | "starting" | "playing" | "over" | "offline";
 
 export interface DeckPayload {
@@ -100,6 +109,7 @@ export function useLiveGame() {
   const [ask, setAsk] = useState<LiveAsk | null>(null);
   const [error, setError] = useState<string | null>(null);
   /** Why the last click did nothing (a `notice`), with a counter so the same text shows again. */
+  const [libraryList, setLibraryList] = useState<LibraryList | null>(null);
   const [notice, setNotice] = useState<{ message: string; n: number } | null>(null);
   const actionWaiters = useRef(new Map<number, ((a: CardActions) => void)[]>());
   const detailWaiters = useRef(new Map<number, ((d: CardDetails) => void)[]>());
@@ -155,6 +165,9 @@ export function useLiveGame() {
             setError("You started a game somewhere else, so this one ended.");
             setStatus("over");
             break;
+          case "libraryCards":
+            setLibraryList({ top: m.top ?? 0, cards: m.cards ?? [] });
+            break;
           case "notice":
             setNotice((n) => ({ message: m.message, n: (n?.n ?? 0) + 1 }));
             break;
@@ -207,6 +220,7 @@ export function useLiveGame() {
     error,
     notice,
     autoPass,
+    libraryList,
     signedIn: !!token,
     clearError: () => setError(null),
     /** `freePlay`: allow manual overrides (tap, move, counters…) and paying mana costs with nothing. */
@@ -221,6 +235,11 @@ export function useLiveGame() {
     },
     ok: () => send({ t: "ok" }),
     cancel: () => send({ t: "cancel" }),
+    /** Free play: draw, mill or exile the top `n` cards of your library, reveal its top card to `to`, or shuffle it. */
+    library: (action: LibraryAction, n = 1, to?: string[]) => send({ t: "library", action, n, to: to?.map(Number) }),
+    /** Free play: list your library for you (`top` 0: search all of it). `log`: tell the table (when you open it). */
+    listLibrary: (top: number, log: boolean) => send({ t: "libraryCards", top, log }),
+    clearLibraryList: () => setLibraryList(null),
     /** Free play: pay the mana cost you're paying now with nothing. */
     payFree: () => send({ t: "payFree" }),
     clickCard: (id: number) => send({ t: "card", id }),
