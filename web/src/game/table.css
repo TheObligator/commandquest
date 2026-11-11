@@ -397,3 +397,14 @@ dialog.counter-dialog { width: min(360px, calc(100vw - 32px)); background: var(-
 .live-option { display: flex; gap: 10px; align-items: flex-start; line-height: 1.4; }
 .live-option input { flex: none; width: 16px; height: 16px; padding: 0; margin-top: 3px; }
 .context-menu [role="menuitem"] { white-space: pre-line; }
+
+/* Order and divide questions (LiveRail): a row per option with its buttons on the right. */
+.order-list li { display: flex; align-items: center; gap: 6px; }
+.order-list li .ask-option { flex: 1; min-width: 0; }
+.order-list li.left-out .ask-option { opacity: .45; text-decoration: line-through; }
+.order-btns { display: flex; align-items: center; gap: 3px; }
+.order-btns button { width: 26px; height: 26px; border-radius: 6px; border: 1px solid #6a5434; background: #2a2116; color: #f0e2c4; cursor: pointer; font-weight: 700; }
+.order-btns button:disabled { opacity: .35; cursor: default; }
+.dist-n { min-width: 22px; text-align: center; font-variant-numeric: tabular-nums; }
+.ask-label { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ask-label img { width: 34px; border-radius: 3px; }

@@ -46,8 +46,17 @@ export interface AskOption {
 /** A question that blocks the game until answered. */
 export interface LiveAsk {
   id: number;
-  /** choose: pick min..max options; text: type an answer; info: a list to look at, then OK. */
-  kind: "choose" | "text" | "info";
+  /**
+   * choose: pick min..max options; text: type an answer; info: a list to look at, then OK;
+   * order: put options in order (answer: their indexes in order, min..max of them);
+   * distribute: divide `amount` among the options (answer: one number per option).
+   */
+  kind: "choose" | "text" | "info" | "order" | "distribute";
+  /** order: what the first position means ("Closest to top"…). */
+  top?: string;
+  /** distribute: the total to divide, and whether each option needs at least 1. */
+  amount?: number;
+  atLeastOne?: boolean;
   title?: string;
   message: string;
   options?: AskOption[];

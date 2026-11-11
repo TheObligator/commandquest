@@ -497,6 +497,54 @@ public final class BrowserSeat implements IRemote {
                     o.put("numeric", Boolean.TRUE.equals(a[5]));
                 }
             }
+            case order -> {
+                // Put cards (or triggers, costs…) in order: the ones already ordered first, then the rest.
+                // remainingMin..remainingMax of them may be left out (usually none).
+                o.put("kind", "order");
+                o.put("title", str(a[0]));
+                o.put("message", str(a[0]));
+                o.put("top", str(a[1]));
+                List<Object> all = new ArrayList<>();
+                if (a[5] != null) {
+                    all.addAll((List<?>) a[5]);
+                }
+                all.addAll((List<?>) a[4]);
+                options = all;
+                o.set("options", options(gv, all, null));
+                min = Math.max(0, all.size() - (Integer) a[3]);
+                max = Math.max(0, all.size() - (Integer) a[2]);
+                if (a[6] instanceof CardView c && gv != null) {
+                    o.set("card", views.card(gv, c, me));
+                }
+            }
+            case manipulateCardList -> {
+                // Put these cards back in any order (Ponder-style): the whole list, top first.
+                o.put("kind", "order");
+                o.put("message", str(a[0]));
+                o.put("top", "Top");
+                List<Object> all = new ArrayList<>();
+                ((Iterable<?>) a[1]).forEach(all::add);
+                options = all;
+                o.set("options", options(gv, all, null));
+                min = all.size();
+                max = all.size();
+            }
+            case assignGenericAmount -> {
+                // Divide an amount (damage, counters…) among targets: answered with one number per option.
+                o.put("kind", "distribute");
+                Map<Object, Integer> targets = (Map<Object, Integer>) a[1];
+                options = new ArrayList<>(targets.keySet());
+                o.set("options", options(gv, options, null));
+                o.put("amount", (Integer) a[2]);
+                o.put("atLeastOne", Boolean.TRUE.equals(a[3]));
+                String what = a[4] == null ? "" : str(a[4]);
+                o.put("message", "Divide " + a[2] + (what.isEmpty() ? "" : " " + what) + (a[0] instanceof CardView src ? " from " + src.getCurrentState().getName() : ""));
+                if (a[0] instanceof CardView src && gv != null) {
+                    o.set("card", views.card(gv, src, me));
+                }
+                min = 0;
+                max = options.size();
+            }
             default -> {
                 // Not asked in the browser yet: Forge's default for this question.
                 return defaultAnswer(ev);
@@ -603,15 +651,51 @@ public final class BrowserSeat implements IRemote {
             }
         }
         List<?> opts = p.options();
+        if (p.ev().getMethod() == forge.gamemodes.net.ProtocolMethod.assignGenericAmount) {
+            p.answer().complete(distribution(p, choice));
+            return;
+        }
         Object value = switch (p.ev().getMethod()) {
             case getChoices, chooseEntitiesForEffect -> picked.stream().map(opts::get).toList();
             case getAbilityToPlay, chooseSingleEntityForEffect -> picked.isEmpty() ? null : opts.get(picked.get(0));
             case confirm, showConfirmDialog -> picked.isEmpty() ? null : picked.get(0) == 0;
             case showOptionDialog -> picked.isEmpty() ? null : picked.get(0);
             case showInputDialog -> opts == null ? text : picked.isEmpty() ? null : String.valueOf(opts.get(picked.get(0)));
+            case order -> orderResult(p, picked);
+            case manipulateCardList -> picked.size() == opts.size() ? picked.stream().map(opts::get).toList() : defaultAnswer(p.ev());
             default -> null;
         };
         p.answer().complete(value);
+    }
+
+    /** An order answer: the picked options in order, if the count fits; else Forge's default. */
+    private static Object orderResult(Pending p, List<Integer> picked) {
+        Object[] a = p.ev().getObjects();
+        int total = p.options().size();
+        int left = total - picked.size();
+        if (left < (Integer) a[2] || left > (Integer) a[3]) {
+            return defaultAnswer(p.ev());
+        }
+        return new IGuiGame.OrderResult<>(picked.stream().map(i -> (Object) p.options().get(i)).toList(), false);
+    }
+
+    /** A divide answer: one number per option, adding up to the amount (each at least 1 if asked); else Forge's default. */
+    private static Object distribution(Pending p, JsonNode choice) {
+        Object[] a = p.ev().getObjects();
+        int amount = (Integer) a[2];
+        boolean atLeastOne = Boolean.TRUE.equals(a[3]);
+        List<?> opts = p.options();
+        Map<Object, Integer> result = new java.util.LinkedHashMap<>();
+        int sum = 0;
+        for (int i = 0; i < opts.size(); i++) {
+            int n = choice != null && choice.isArray() ? choice.path(i).asInt(-1) : -1;
+            if (n < (atLeastOne ? 1 : 0) || n > amount) {
+                return defaultAnswer(p.ev());
+            }
+            result.put(opts.get(i), n);
+            sum += n;
+        }
+        return sum == amount ? result : defaultAnswer(p.ev());
     }
 
     /** What Forge gets when there's no browser answer (closed seat, or a question the browser can't ask yet). */

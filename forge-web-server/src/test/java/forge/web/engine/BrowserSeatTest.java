@@ -60,4 +60,49 @@ public class BrowserSeatTest {
         Assert.assertEquals(BrowserSeat.label("COLORLESS"), "Colorless");
         Assert.assertEquals(BrowserSeat.label("OK"), "OK");
     }
+
+    /** Asks Forge's question on another thread (it blocks), answers it like the browser, returns Forge's value. */
+    private static Object askAndAnswer(BrowserSeat seat, List<String> sent, ObjectMapper json, GuiGameEvent ev, String answer) throws Exception {
+        java.util.concurrent.CompletableFuture<Object> result = java.util.concurrent.CompletableFuture.supplyAsync(() -> seat.sendAndWait(ev));
+        JsonNode ask = null;
+        long end = System.currentTimeMillis() + 3000;
+        while (ask == null && System.currentTimeMillis() < end) {
+            for (String m : sent) {
+                JsonNode n = json.readTree(m);
+                if (n.path("t").asText().equals("ask")) {
+                    ask = n;
+                }
+            }
+            Thread.sleep(20);
+        }
+        Assert.assertNotNull(ask, "asked");
+        sent.clear();
+        seat.answer(ask.path("id").asInt(), json.readTree(answer), null);
+        return result.get(3, java.util.concurrent.TimeUnit.SECONDS);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void orderAndDivideQuestions() throws Exception {
+        ObjectMapper json = new ObjectMapper();
+        List<String> sent = new CopyOnWriteArrayList<>();
+        BrowserSeat seat = new BrowserSeat(json, sent::add);
+
+        Object order = askAndAnswer(seat, sent, json, new GuiGameEvent(ProtocolMethod.order,
+                "Order the triggers", "Resolves first", 0, 0, List.of("A", "B", "C"), null, null, false, false), "[2,0,1]");
+        Assert.assertEquals(((forge.gui.interfaces.IGuiGame.OrderResult<Object>) order).ordered(), List.of("C", "A", "B"));
+
+        java.util.Map<Object, Integer> targets = new java.util.LinkedHashMap<>();
+        targets.put("x", 0);
+        targets.put("y", 0);
+        Object split = askAndAnswer(seat, sent, json, new GuiGameEvent(ProtocolMethod.assignGenericAmount,
+                null, targets, 5, true, "damage"), "[2,3]");
+        Assert.assertEquals(split, java.util.Map.of("x", 2, "y", 3));
+
+        // Not adding up (or breaking "at least 1"): Forge's default split instead.
+        Object bad = askAndAnswer(seat, sent, json, new GuiGameEvent(ProtocolMethod.assignGenericAmount,
+                null, targets, 5, true, "damage"), "[5,0]");
+        Assert.assertEquals(bad, java.util.Map.of("x", 4, "y", 1));
+        seat.close();
+    }
 }
