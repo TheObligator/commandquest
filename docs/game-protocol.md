@@ -11,11 +11,26 @@ Forge's, word for word. Forge AI plays the other seats.
 
 | Browser sends | Server answers |
 |---|---|
-| `{t:"hello", token}`: the Convex Auth token (`useAuthToken()`) | `{t:"hello"}`, or `{t:"error"}` and close code 4401 |
+| `{t:"hello", token}`: the Convex Auth token (`useAuthToken()`) | `{t:"hello", game, autoPass?}`, or `{t:"error"}` and close code 4401 |
 
 The server checks the token itself (`ConvexAuth`): RS256, issued by one of `CONVEX_ISSUERS` (default:
 the staging and production Convex site URLs), audience `convex`, not expired, signed by a key from
 `<issuer>/.well-known/jwks.json`. Everything except `ping` needs a signed-in socket.
+
+## Reconnecting
+
+A game belongs to its player, not to the socket. When the socket closes mid-game, the game waits
+5 minutes for that player (Forge simply waits for their next answer), then ends. Signing in again
+within that time resumes it: `hello` comes back with `game: true` (and `autoPass`, the last mode
+set), followed by the current `state`, the `prompt` on screen if there is one, and an `ask` for
+every question still open. Stops and yields are kept on the server.
+
+Signing in from a second tab takes the game over the same way; the first tab gets `{t:"moved"}`
+and stays out of it until the player brings it back (the client signs in again).
+
+The browser pings every 10 seconds and treats 25 seconds of silence as a dropped connection, since
+a sleeping laptop or a dead Wi-Fi link can leave a socket that never reports closing. Restarting
+the game server still ends every game: they're only in its memory.
 
 ## Starting a game
 
@@ -34,7 +49,8 @@ card, the answer is an `error` that lists them.
 effects change the game. Free play only ever acts for the browser's own seat, never for AI seats.
 
 One game per user: starting another (or from another tab, which gets `{t:"replaced"}`) ends the
-old one, and so does closing the socket. `MAX_GAMES` (default 4) caps games on the server.
+old one. Closing the socket doesn't (see Reconnecting). `MAX_GAMES` (default 4) caps games on the
+server, counting games waiting for their player.
 
 ## Server → browser
 
@@ -51,6 +67,7 @@ old one, and so does closing the socket. `MAX_GAMES` (default 4) caps games on t
 | `libraryCards` | Answer to `libraryCards`: `{top, cards}`, your library's cards top first (all of it when `top` is 0), shown face up to you only. |
 | `error` | `message` to show. |
 | `pong` | Reply to `ping`. |
+| `moved` | Another tab of yours signed in and took this game. |
 
 ## Browser → server
 
@@ -92,5 +109,5 @@ The server builds each player's view from Forge's views and removes what that pl
 
 - Ordering simultaneous triggers, dividing combat damage among blockers, and dividing an amount
   (e.g. "deal 5 damage divided as you choose"): Forge's default is used, with no question asked.
-- Reconnecting to a game after the socket drops (the game ends instead).
+- Keeping games across a game server restart.
 - Multiplayer tables with other people (lobby).

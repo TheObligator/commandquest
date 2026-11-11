@@ -1,7 +1,9 @@
 // A live game on the game server (docs/game-protocol.md): connect, sign in with the Convex token,
-// start a game, then mirror the server's view and send this player's actions.
+// start a game, then mirror the server's view and send this player's actions. The game outlives
+// the socket for a few minutes: after a reload or a dropped connection, signing in again resumes it.
 import { useAuthToken } from "@convex-dev/auth/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { setGameInProgress } from "../app/busy";
 import type { AutoPassMode, StepId } from "./phases";
 import type { CardView, GameView } from "./view";
 
@@ -105,7 +107,15 @@ export interface LibraryList {
   cards: CardView[];
 }
 
-export type LiveStatus = "connecting" | "signing-in" | "ready" | "starting" | "playing" | "over" | "offline";
+/**
+ * `reconnecting`: the connection dropped mid-game; the table stays up while it comes back.
+ * `moved`: the game is open in another tab now (`takeBack` brings it here).
+ */
+export type LiveStatus = "connecting" | "signing-in" | "ready" | "starting" | "playing" | "reconnecting" | "over" | "offline" | "moved";
+
+/** Heartbeat: ping this often, and treat the connection as dead after this long without a word. */
+const PING_MS = 10_000;
+const SILENT_MS = 25_000;
 
 export interface DeckPayload {
   name: string;
@@ -141,6 +151,14 @@ export function useLiveGame() {
   tokenRef.current = token;
   const statusRef = useRef(status);
   statusRef.current = status;
+  /** Opens a fresh socket now (set by the connection effect). */
+  const reconnect = useRef<() => void>(() => {});
+
+  // A staging deploy doesn't reload the page under a game (src/app/UpdateNotice.tsx).
+  useEffect(() => {
+    setGameInProgress(status === "starting" || status === "playing" || status === "reconnecting" || status === "over" || status === "moved");
+  }, [status]);
+  useEffect(() => () => setGameInProgress(false), []);
 
   const send = useCallback((m: object) => {
     const s = ws.current;
@@ -149,22 +167,67 @@ export function useLiveGame() {
 
   useEffect(() => {
     let closed = false;
+    /** Another tab has the game: stay disconnected until `takeBack`. */
+    let parked = false;
     let retry: number | undefined;
     let retryMs = 1000;
+    let heard = Date.now();
+    const lost = (s: WebSocket) => {
+      s.onopen = s.onmessage = s.onclose = null;
+      s.close();
+      if (ws.current !== s) return;
+      ws.current = null;
+      if (closed) return;
+      setPrompt(null);
+      setAsk(null);
+      if (parked) {
+        setStatus("moved");
+        return;
+      }
+      // Mid-game, keep the table up: signing in again resumes the game.
+      setStatus((st) => (st === "playing" || st === "reconnecting" ? "reconnecting" : "offline"));
+      clearTimeout(retry);
+      retry = window.setTimeout(connect, retryMs);
+      retryMs = Math.min(retryMs * 2, 15_000);
+    };
     const connect = () => {
-      setStatus("connecting");
+      clearTimeout(retry);
+      const old = ws.current;
+      if (old) {
+        old.onopen = old.onmessage = old.onclose = null;
+        old.close();
+      }
+      setStatus((st) => (st === "reconnecting" ? st : "connecting"));
       const s = new WebSocket(gameSocketUrl());
       ws.current = s;
+      heard = Date.now();
       s.onopen = () => {
         retryMs = 1000;
-        setStatus("signing-in");
+        heard = Date.now();
+        setStatus((st) => (st === "reconnecting" ? st : "signing-in"));
         if (tokenRef.current) s.send(JSON.stringify({ t: "hello", token: tokenRef.current }));
       };
       s.onmessage = (e) => {
+        heard = Date.now();
         const m = JSON.parse(e.data as string);
         switch (m.t) {
           case "hello":
-            setStatus("ready");
+            // `game`: we're back in a running game; its state, prompt and questions follow.
+            setPrompt(null);
+            setAsk(null);
+            if (m.game) {
+              setStatus("playing");
+              setAutoPassState(m.autoPass ?? null);
+            } else if (statusRef.current === "reconnecting") {
+              setError("You were away too long, so the game ended.");
+              setStatus("over");
+            } else {
+              setStatus("ready");
+            }
+            break;
+          case "moved":
+            parked = true;
+            lost(s);
             break;
           case "state":
             setView(m.view as GameView);
@@ -173,6 +236,8 @@ export function useLiveGame() {
               setPrompt(null);
               setAsk(null);
             }
+            break;
+          case "pong":
             break;
           case "prompt":
             if (statusRef.current === "over") break; // the game has ended: nothing to answer
@@ -217,27 +282,44 @@ export function useLiveGame() {
             break;
         }
       };
-      s.onclose = () => {
-        if (closed) return;
-        // A game lives on the socket: if it drops, the server ends that game.
-        setStatus((st) => (st === "playing" ? "over" : "offline"));
-        setPrompt(null);
-        setAsk(null);
-        retry = window.setTimeout(connect, retryMs);
-        retryMs = Math.min(retryMs * 2, 15_000);
-      };
+      s.onclose = () => lost(s);
+    };
+    // A connection can die without closing (sleep, Wi-Fi drop): ping, and give up on silence.
+    const heartbeat = window.setInterval(() => {
+      const s = ws.current;
+      if (!s || s.readyState !== WebSocket.OPEN) return;
+      if (Date.now() - heard > SILENT_MS) lost(s);
+      else s.send(JSON.stringify({ t: "ping" }));
+    }, PING_MS);
+    // Back online, or back to the tab: retry now rather than after the backoff.
+    const retryNow = () => {
+      if (!parked && !ws.current && document.visibilityState === "visible") {
+        retryMs = 1000;
+        connect();
+      }
+    };
+    window.addEventListener("online", retryNow);
+    document.addEventListener("visibilitychange", retryNow);
+    reconnect.current = () => {
+      parked = false;
+      retryMs = 1000;
+      setStatus("reconnecting"); // keeps the table up until the game comes back
+      connect();
     };
     connect();
     return () => {
       closed = true;
       clearTimeout(retry);
-      ws.current?.close();
+      clearInterval(heartbeat);
+      window.removeEventListener("online", retryNow);
+      document.removeEventListener("visibilitychange", retryNow);
+      if (ws.current) lost(ws.current);
     };
   }, []);
 
   // The token can arrive after the socket opens (or refresh): sign in when both are there.
   useEffect(() => {
-    if (token && status === "signing-in") send({ t: "hello", token });
+    if (token && (status === "signing-in" || status === "reconnecting")) send({ t: "hello", token });
   }, [token, status, send]);
 
   return {
@@ -251,6 +333,8 @@ export function useLiveGame() {
     libraryList,
     signedIn: !!token,
     clearError: () => setError(null),
+    /** Brings the game back to this tab after it was opened in another one. */
+    takeBack: () => reconnect.current(),
     /** `freePlay`: allow manual overrides (tap, move, counters…) and paying mana costs with nothing. */
     start(deck: DeckPayload, name: string, opponents = 3, freePlay = true) {
       setError(null);

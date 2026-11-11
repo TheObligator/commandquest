@@ -34,14 +34,20 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.time.Duration;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import org.tinylog.Logger;
 
 /**
  * The game socket ({@code /ws}). Each browser signs in with its Convex token, then starts a game
  * against Forge AI and plays it: the protocol is in docs/game-protocol.md. One game per user;
- * starting another, or closing the socket, ends the old one.
+ * starting another ends the old one. A game belongs to its player, not to the socket: if the
+ * socket closes, the game waits {@link #reconnectGrace} for that player to sign in again (a
+ * reloaded tab, a dropped connection), then ends. Signing in from another tab takes the game over.
  */
 public final class GameHub {
 
@@ -50,6 +56,15 @@ public final class GameHub {
     private final ConvexAuth auth;
     private final ObjectMapper json = new ObjectMapper();
     private final Map<String, Conn> conns = new ConcurrentHashMap<>();
+    /** Each user's game, by user id. */
+    private final Map<String, Hosted> games = new ConcurrentHashMap<>();
+    /** How long a game waits for its player after their socket closes. */
+    private volatile Duration reconnectGrace = Duration.ofMinutes(5);
+    private final ScheduledExecutorService timers = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "game-expiry");
+        t.setDaemon(true);
+        return t;
+    });
     /** Engine start and game setup are slow; keep them off Jetty's threads. */
     private final ExecutorService work = Executors.newCachedThreadPool(r -> {
         Thread t = new Thread(r, "game-setup");
@@ -60,12 +75,34 @@ public final class GameHub {
     private static final class Conn {
         final WsContext ws;
         volatile String user;
-        volatile String seatName;
-        volatile BrowserSeat seat;
-        volatile GameSession session;
+        /** The game this socket is playing, if any. */
+        volatile Hosted game;
 
         Conn(WsContext ws) {
             this.ws = ws;
+        }
+    }
+
+    /** A user's game, and the socket it's currently shown on (null while they're away). */
+    private static final class Hosted {
+        final String user;
+        final String seatName;
+        volatile BrowserSeat seat;
+        volatile GameSession session;
+        volatile Conn conn;
+        volatile ScheduledFuture<?> expiry;
+        /** The last auto-pass mode the player set, for a reconnecting browser. */
+        volatile String autoPass;
+
+        Hosted(String user, String seatName, Conn conn) {
+            this.user = user;
+            this.seatName = seatName;
+            this.conn = conn;
+        }
+
+        boolean running() {
+            GameSession s = session;
+            return s != null && !s.isOver();
         }
     }
 
@@ -78,11 +115,35 @@ public final class GameHub {
         conns.put(ws.sessionId(), new Conn(ws));
     }
 
+    /** How long a game waits for its player to come back (tests shorten it). */
+    void setReconnectGrace(Duration grace) {
+        this.reconnectGrace = grace;
+    }
+
     public void onClose(WsContext ws) {
         Conn c = conns.remove(ws.sessionId());
-        if (c != null) {
-            endGame(c);
+        Hosted h = c == null ? null : c.game;
+        if (h == null) {
+            return;
         }
+        synchronized (h) {
+            if (h.conn != c) {
+                return;
+            }
+            if (h.running()) {
+                // Keep the game for a while: the player may be reloading the page or reconnecting.
+                h.conn = null;
+                h.expiry = timers.schedule(() -> {
+                    if (h.conn == null) {
+                        Logger.info("Game for {} ended: they didn't come back", h.user);
+                        endGame(h);
+                    }
+                }, reconnectGrace.toMillis(), TimeUnit.MILLISECONDS);
+                Logger.info("Game for {} is waiting for them to reconnect", h.user);
+                return;
+            }
+        }
+        endGame(h);
     }
 
     public void onMessage(WsContext ws, String text) {
@@ -115,7 +176,7 @@ public final class GameHub {
             case "ok" -> act(c, ctl -> ok(c, ctl));
             case "cancel" -> act(c, IGameController::selectButtonCancel);
             case "concede" -> {
-                BrowserSeat seat = c.seat;
+                BrowserSeat seat = seat(c);
                 if (seat != null) {
                     seat.answerOpenWithDefaults(); // Forge can't take the concession while it waits on a question
                 }
@@ -145,7 +206,7 @@ public final class GameHub {
                 });
             }
             case "answer" -> {
-                BrowserSeat seat = c.seat;
+                BrowserSeat seat = seat(c);
                 if (seat != null) {
                     seat.answer(m.path("id").asInt(), m.path("choice"), m.path("text").asText(null));
                 }
@@ -160,7 +221,7 @@ public final class GameHub {
             case "counter" -> counter(c, m.path("id").asInt(), m.path("type").asText(""), m.path("delta").asInt());
             case "yieldsOff" -> act(c, ctl -> {
                 ctl.setDisableAutoYields(m.path("off").asBoolean());
-                BrowserSeat seat = c.seat;
+                BrowserSeat seat = seat(c);
                 if (seat != null) {
                     seat.refresh();
                 }
@@ -173,8 +234,19 @@ public final class GameHub {
     private void hello(Conn c, String token) {
         work.execute(() -> {
             try {
-                c.user = auth.verify(token);
-                send(c, msg("hello"));
+                String user = auth.verify(token);
+                c.user = user;
+                Hosted h = games.get(user);
+                boolean resume = h != null && h.running() && h.seat != null;
+                ObjectNode hello = msg("hello");
+                hello.put("game", resume);
+                if (resume) {
+                    hello.put("autoPass", h.autoPass);
+                }
+                send(c, hello);
+                if (resume) {
+                    resume(c, h);
+                }
             } catch (Exception e) {
                 Logger.info("Sign-in refused: {}", e.getMessage());
                 error(c, "Sign-in failed: " + e.getMessage());
@@ -183,15 +255,37 @@ public final class GameHub {
         });
     }
 
+    /** Shows the player's game on this socket (a reload, a reconnect, or another tab taking it over). */
+    private void resume(Conn c, Hosted h) {
+        Conn old;
+        synchronized (h) {
+            ScheduledFuture<?> expiry = h.expiry;
+            if (expiry != null) {
+                expiry.cancel(false);
+                h.expiry = null;
+            }
+            old = h.conn;
+            h.conn = c;
+            c.game = h;
+        }
+        if (old != null && old != c) {
+            old.game = null;
+            send(old, msg("moved"));
+        }
+        Logger.info("{} is back in their game", h.user);
+        FThreads.invokeInEdtLater(h.seat::replay); // reads the game view, like every other action
+    }
+
     private void start(Conn c, JsonNode m) {
-        endGame(c);
-        for (Conn other : conns.values()) { // one game per user, even across tabs
-            if (other != c && c.user.equals(other.user)) {
-                endGame(other);
+        Hosted previous = games.get(c.user); // one game per user, even across tabs
+        if (previous != null) {
+            Conn other = previous.conn;
+            endGame(previous);
+            if (other != null && other != c) {
                 send(other, msg("replaced"));
             }
         }
-        long running = conns.values().stream().filter(x -> x.session != null && !x.session.isOver()).count();
+        long running = games.values().stream().filter(Hosted::running).count();
         if (running >= maxGames) {
             error(c, "The game server is full right now. Try again in a few minutes.");
             return;
@@ -202,18 +296,26 @@ public final class GameHub {
                 ForgeEngine.start();
                 Deck mine = Decks.fromJson(m.path("deck"));
                 List<GameSession.Seat> seats = new ArrayList<>();
-                BrowserSeat seat = new BrowserSeat(json, s -> sendRaw(c, s));
-                seat.setFreePlay(m.path("freePlay").asBoolean(true));
                 String name = m.path("name").asText("You").trim();
                 name = name.isEmpty() || name.length() > 40 || name.startsWith("AI ") ? "You" : name;
+                Hosted h = new Hosted(c.user, name, c);
+                // Messages go to whichever socket shows the game now (none while the player is away).
+                BrowserSeat seat = new BrowserSeat(json, s -> {
+                    Conn to = h.conn;
+                    if (to != null) {
+                        sendRaw(to, s);
+                    }
+                });
+                seat.setFreePlay(m.path("freePlay").asBoolean(true));
+                h.seat = seat;
                 seats.add(new GameSession.Seat(name, mine, seat, tokenArt(m.path("deck").path("tokens"))));
-                c.seatName = name;
                 List<Deck> ai = Decks.randomPrecons(opponents);
                 for (int i = 0; i < ai.size(); i++) {
                     seats.add(new GameSession.Seat("AI " + (i + 1), ai.get(i), null));
                 }
-                c.seat = seat;
-                c.session = GameSession.startCommander(seats);
+                games.put(c.user, h);
+                c.game = h;
+                h.session = GameSession.startCommander(seats);
                 Logger.info("Game started for {} ({} AI)", c.user, ai.size());
             } catch (IllegalArgumentException e) {
                 error(c, e.getMessage());
@@ -263,7 +365,7 @@ public final class GameHub {
      */
     private void click(Conn c, IGameController ctl, int id, Integer ability, String label) {
         Game g = game(c);
-        BrowserSeat seat = c.seat;
+        BrowserSeat seat = seat(c);
         Card card = g == null ? null : g.findById(id);
         if (card == null || seat == null) {
             return;
@@ -308,7 +410,7 @@ public final class GameHub {
     /** The card's abilities for its menu: everything Forge lists for this player, and whether each can be used now. */
     private void actions(Conn c, IGameController ctl, int id) {
         Game g = game(c);
-        BrowserSeat seat = c.seat;
+        BrowserSeat seat = seat(c);
         Card card = g == null ? null : g.findById(id);
         Player me = card == null || seat == null || seat.player() == null ? null : g.getPlayer(seat.player().getId());
         ObjectNode o = msg("actions");
@@ -368,7 +470,7 @@ public final class GameHub {
                     return;
                 }
             }
-            BrowserSeat seat = c.seat;
+            BrowserSeat seat = seat(c);
             if (seat != null) {
                 seat.refresh();
             }
@@ -387,7 +489,7 @@ public final class GameHub {
         String action = m.path("action").asText("");
         act(c, ctl -> {
             Game g = game(c);
-            BrowserSeat seat = c.seat;
+            BrowserSeat seat = seat(c);
             Card card = g == null ? null : g.findById(id);
             if (card == null || seat == null || seat.player() == null) {
                 return;
@@ -422,7 +524,7 @@ public final class GameHub {
         int n = m.path("n").asInt(1);
         act(c, ctl -> {
             Game g = game(c);
-            BrowserSeat seat = c.seat;
+            BrowserSeat seat = seat(c);
             Player me = g == null || seat == null || seat.player() == null ? null : g.getPlayer(seat.player().getId());
             if (me == null) {
                 return;
@@ -451,7 +553,7 @@ public final class GameHub {
         }
         act(c, ctl -> {
             Game g = game(c);
-            BrowserSeat seat = c.seat;
+            BrowserSeat seat = seat(c);
             Player me = g == null || seat == null || seat.player() == null ? null : g.getPlayer(seat.player().getId());
             if (me == null) {
                 return;
@@ -476,7 +578,7 @@ public final class GameHub {
 
     /** OK: while you're paying mana it's Auto-pay (our planner, else Forge's); otherwise Forge's OK. */
     private void ok(Conn c, IGameController ctl) {
-        BrowserSeat seat = c.seat;
+        BrowserSeat seat = seat(c);
         Game g = game(c);
         if (Payment.input(ctl) != null && seat != null && seat.player() != null && g != null) {
             AutoPay.run(ctl, g.getPlayer(seat.player().getId()), ctl::selectButtonOk);
@@ -487,7 +589,7 @@ public final class GameHub {
 
     /** Is free play on in this game? If not, tells the browser that manual overrides are off. */
     private boolean freePlay(Conn c) {
-        BrowserSeat seat = c.seat;
+        BrowserSeat seat = seat(c);
         if (seat != null && seat.freePlay()) {
             return true;
         }
@@ -505,7 +607,7 @@ public final class GameHub {
         }
         act(c, ctl -> {
             Game g = game(c);
-            BrowserSeat seat = c.seat;
+            BrowserSeat seat = seat(c);
             Player me = g == null || seat == null || seat.player() == null ? null : g.getPlayer(seat.player().getId());
             if (me != null && !Payment.payFree(ctl, g, me)) {
                 notice(c, "There's no mana cost to pay right now.");
@@ -517,7 +619,7 @@ public final class GameHub {
     private void details(Conn c, int id) {
         act(c, ctl -> {
             Game g = game(c);
-            BrowserSeat seat = c.seat;
+            BrowserSeat seat = seat(c);
             Card card = g == null ? null : g.findById(id);
             ObjectNode o = msg("details");
             o.put("id", id);
@@ -555,7 +657,7 @@ public final class GameHub {
         }
         act(c, ctl -> {
             Game g = game(c);
-            BrowserSeat seat = c.seat;
+            BrowserSeat seat = seat(c);
             Card card = g == null ? null : g.findById(id);
             if (card == null || seat == null || seat.player() == null || !card.isInPlay()) {
                 return;
@@ -587,17 +689,24 @@ public final class GameHub {
     }
 
     private IGameController controller(Conn c) {
-        GameSession s = c.session;
-        BrowserSeat seat = c.seat;
+        Hosted h = c.game;
+        GameSession s = h == null ? null : h.session;
+        BrowserSeat seat = h == null ? null : h.seat;
         if (s == null || seat == null || seat.player() == null || s.isOver()) {
             return null;
         }
-        return s.controller(c.seatName, seat.player());
+        return s.controller(h.seatName, seat.player());
     }
 
     private static Game game(Conn c) {
-        GameSession s = c.session;
+        Hosted h = c.game;
+        GameSession s = h == null ? null : h.session;
         return s == null ? null : s.game();
+    }
+
+    private static BrowserSeat seat(Conn c) {
+        Hosted h = c.game;
+        return h == null ? null : h.seat;
     }
 
     /**
@@ -626,15 +735,19 @@ public final class GameHub {
 
     /** Auto-pass: END_OF_TURN, BEFORE_MY_TURN, ACTION_OR_END_STEP, or null to cancel. */
     private void autoPass(Conn c, String mode) {
+        Hosted h = c.game;
+        if (h != null) {
+            h.autoPass = mode == null || mode.equals("null") ? null : mode;
+        }
         act(c, ctl -> {
             Game g = game(c);
-            PlayerView me = c.seat.player();
+            BrowserSeat seat = seat(c);
+            PlayerView me = seat == null ? null : seat.player();
             if (g == null || me == null) {
                 return;
             }
             ctl.applyYieldUpdate(new YieldUpdate.ClearMarker(me));
             ctl.applyYieldUpdate(new YieldUpdate.SetAutoPassUntilEndOfTurn(me, false));
-            BrowserSeat seat = c.seat;
             if (mode == null || mode.equals("null")) {
                 if (seat != null) {
                     seat.refresh();
@@ -660,11 +773,18 @@ public final class GameHub {
         });
     }
 
-    private void endGame(Conn c) {
-        BrowserSeat seat = c.seat;
-        GameSession s = c.session;
-        c.seat = null;
-        c.session = null;
+    private void endGame(Hosted h) {
+        games.remove(h.user, h);
+        ScheduledFuture<?> expiry = h.expiry;
+        if (expiry != null) {
+            expiry.cancel(false);
+        }
+        Conn c = h.conn;
+        if (c != null && c.game == h) {
+            c.game = null;
+        }
+        BrowserSeat seat = h.seat;
+        GameSession s = h.session;
         if (seat != null) {
             seat.close();
         }

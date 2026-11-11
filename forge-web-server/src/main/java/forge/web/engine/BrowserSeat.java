@@ -61,7 +61,10 @@ public final class BrowserSeat implements IRemote {
     private final ManualActions manual = new ManualActions();
     private volatile PlayerView me;
     private volatile String promptMessage = "";
-    /** The prompt last sent (null while waiting), to resend when its text arrives after its buttons. */
+    /**
+     * The prompt last sent (null while waiting), to resend when its text arrives after its buttons,
+     * and to a browser that reconnects ({@link #replay()}).
+     */
     private volatile ObjectNode lastPrompt;
     /** What Forge's current prompt lets you click (Forge's setSelection), for the table's highlights. */
     private volatile forge.gamemodes.match.Selection selection = forge.gamemodes.match.Selection.NONE;
@@ -78,7 +81,7 @@ public final class BrowserSeat implements IRemote {
     }
 
     /** A question waiting for the browser, with how to turn its answer into Forge's value. */
-    private record Pending(CompletableFuture<Object> answer, List<?> options, GuiGameEvent ev) {
+    private record Pending(CompletableFuture<Object> answer, List<?> options, GuiGameEvent ev, ObjectNode ask) {
     }
 
     public BrowserSeat(ObjectMapper json, Consumer<String> sink) {
@@ -426,6 +429,21 @@ public final class BrowserSeat implements IRemote {
         pushState();
     }
 
+    /**
+     * Everything a freshly connected browser needs to carry on (after a reload or reconnect): the
+     * view, the prompt on screen, and every question still waiting for an answer.
+     */
+    public void replay() {
+        refresh();
+        ObjectNode prompt = lastPrompt;
+        if (prompt != null) {
+            emit(prompt);
+        }
+        pending.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(e -> emit(e.getValue().ask()));
+    }
+
     private static final List<ZoneType> PLAYABLE_ZONES =
             List.of(ZoneType.Hand, ZoneType.Battlefield, ZoneType.Command, ZoneType.Graveyard, ZoneType.Exile);
 
@@ -591,7 +609,7 @@ public final class BrowserSeat implements IRemote {
         o.put("max", max);
         int id = askIds.incrementAndGet();
         o.put("id", id);
-        Pending p = new Pending(new CompletableFuture<>(), options, ev);
+        Pending p = new Pending(new CompletableFuture<>(), options, ev, o);
         pending.put(id, p);
         pushState();
         emit(o);
@@ -839,10 +857,18 @@ public final class BrowserSeat implements IRemote {
     }
 
     private void emit(ObjectNode o) {
+        String s = encode(o);
+        if (s != null) {
+            emitRaw(s);
+        }
+    }
+
+    private String encode(ObjectNode o) {
         try {
-            emitRaw(json.writeValueAsString(o));
+            return json.writeValueAsString(o);
         } catch (Exception e) {
             Logger.warn(e, "Couldn't encode a message");
+            return null;
         }
     }
 

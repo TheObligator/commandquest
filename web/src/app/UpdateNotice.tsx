@@ -1,17 +1,28 @@
 import { useEffect, useState } from "react";
 import { isNewBuild } from "../version";
+import { gameInProgress, onBusyChange } from "./busy";
 
 /** How often an open tab checks for a new deploy, besides whenever it comes back into view. */
 const POLL_MS = 60_000;
 
 /**
- * Notices when the site has been redeployed since this tab loaded. Staging reloads itself straight
- * away so testers always run the latest build; production asks first, so nobody loses what they
- * were doing. Off in dev, where Vite reloads the page itself.
+ * Notices when the site has been redeployed since this tab loaded. Staging reloads itself so testers
+ * always run the latest build, but not in the middle of a game: it waits until the player leaves the
+ * game page. Production asks first. Off in dev, where Vite reloads the page itself.
  */
 export function UpdateNotice() {
   const [updated, setUpdated] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+
+  // Staging: reload as soon as no game is open.
+  useEffect(() => {
+    if (!updated || import.meta.env.MODE !== "staging") return;
+    const reloadWhenIdle = () => {
+      if (!gameInProgress()) location.reload();
+    };
+    reloadWhenIdle();
+    return onBusyChange(reloadWhenIdle);
+  }, [updated]);
 
   useEffect(() => {
     if (!import.meta.env.PROD || updated) return;
@@ -24,8 +35,7 @@ export function UpdateNotice() {
       } catch {
         return; // Offline or mid-deploy: try again next time.
       }
-      if (import.meta.env.MODE === "staging") location.reload();
-      else setUpdated(true);
+      setUpdated(true);
     };
     const timer = setInterval(check, POLL_MS);
     const onVisible = () => void check();
@@ -39,7 +49,7 @@ export function UpdateNotice() {
     };
   }, [updated]);
 
-  if (!updated || dismissed) return null;
+  if (!updated || dismissed || import.meta.env.MODE === "staging") return null;
   return (
     <div className="update-notice" role="status">
       <span>CommandQuest has been updated. Refresh to get the latest version.</span>

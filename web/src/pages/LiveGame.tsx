@@ -48,7 +48,7 @@ export function LiveGame() {
     game.start(payload, me?.name ?? "You", opponents, freePlay);
   };
 
-  const playing = game.view && (game.status === "playing" || game.status === "over");
+  const playing = game.view && (game.status === "playing" || game.status === "reconnecting" || game.status === "moved" || game.status === "over");
 
   return (
     <div className="game">
@@ -56,7 +56,7 @@ export function LiveGame() {
         <h1>
           {deck?.name ?? "Game"} <span className="muted small">vs Forge AI</span>
         </h1>
-        <span className="status" data-state={game.status === "offline" ? "closed" : "open"}>
+        <span className="status" data-state={game.status === "offline" || game.status === "reconnecting" || game.status === "moved" ? "closed" : "open"}>
           {STATUS[game.status]}
         </span>
         {playing && game.status === "playing" && (
@@ -67,6 +67,21 @@ export function LiveGame() {
         <span className="sb-spacer" />
         <LayoutPicker layout={layout} onChange={setLayout} />
       </div>
+
+      {game.status === "reconnecting" && (
+        <div className="live-banner">
+          <strong>Connection lost.</strong>
+          <span className="muted">Reconnecting… Your game is kept for 5 minutes.</span>
+        </div>
+      )}
+
+      {game.status === "moved" && (
+        <div className="live-banner">
+          <strong>This game is open in another tab.</strong>
+          <span className="sb-spacer" />
+          <button className="btn small" onClick={game.takeBack}>Play here</button>
+        </div>
+      )}
 
       {game.status === "over" && (
         <div className="live-banner">
@@ -91,7 +106,7 @@ export function LiveGame() {
               <h2>Quick game</h2>
               <p className="muted">
                 You and Forge AI opponents playing Commander precons that ship with Forge. The game runs on the CommandQuest
-                game server; if you close this tab, the game ends.
+                game server. If you lose your connection or reload the page, come back within 5 minutes to carry on.
               </p>
               <label>
                 Opponents{" "}
@@ -137,6 +152,8 @@ const STATUS: Record<ReturnType<typeof useLiveGame>["status"], string> = {
   ready: "Game server online",
   starting: "Starting the game…",
   playing: "Playing",
+  reconnecting: "Reconnecting…",
+  moved: "Open in another tab",
   over: "Game over",
   offline: "Game server offline, retrying…",
 };

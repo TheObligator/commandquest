@@ -360,6 +360,71 @@ public class GameHubTest {
         }
     }
 
+    private WebSocket connect(Javalin app, Browser b) throws Exception {
+        return HttpClient.newHttpClient().newWebSocketBuilder()
+                .buildAsync(URI.create("ws://localhost:" + app.port() + "/ws"), b).get(5, TimeUnit.SECONDS);
+    }
+
+    /**
+     * A game outlives its socket: after a reload or dropped connection the player signs in again and
+     * gets the board and the prompt they were looking at. Signing in from another tab takes it over.
+     */
+    @Test(timeOut = 120_000)
+    public void reconnectResumesTheGame() throws Exception {
+        MyRandom.setRandom(new Random(11));
+        TestTokens tokens = new TestTokens();
+        Javalin app = WebServer.create(new WebServer.Options(null, Set.of(), null, tokens.auth(), 2)).start(0);
+        String hello = "{\"t\":\"hello\",\"token\":\"" + tokens.valid("user1") + "\"}";
+        Browser first = new Browser();
+        WebSocket ws = connect(app, first);
+        WebSocket second = null;
+        WebSocket third = null;
+        try {
+            ws.sendText(hello, true);
+            Assert.assertFalse(next(first, "hello", 10_000).path("game").asBoolean(), "no game to resume yet");
+            ObjectNode start = json.createObjectNode();
+            start.put("t", "start");
+            start.put("name", "Tester");
+            start.put("opponents", 1);
+            start.set("deck", deck());
+            ws.sendText(json.writeValueAsString(start), true);
+            JsonNode prompt = next(first, "prompt", 60_000);
+            Assert.assertEquals(prompt.path("cancel").path("label").asText(), "Mulligan", "the opening hand: " + prompt);
+
+            // The tab reloads: the old socket closes, a new one signs in.
+            ws.sendClose(WebSocket.NORMAL_CLOSURE, "reload").get(5, TimeUnit.SECONDS);
+            Thread.sleep(300);
+            Browser back = new Browser();
+            second = connect(app, back);
+            second.sendText(hello, true);
+            Assert.assertTrue(next(back, "hello", 10_000).path("game").asBoolean(), "the game is still there");
+            JsonNode view = next(back, "state", 10_000).path("view");
+            Assert.assertEquals(view.path("players").get(0).path("hand").size(), 7, "the same board");
+            Assert.assertEquals(next(back, "prompt", 10_000).path("cancel").path("label").asText(), "Mulligan",
+                    "the prompt that was on screen");
+
+            // Keep the hand from the new socket: the game carries on there.
+            second.sendText("{\"t\":\"ok\"}", true);
+            next(back, "waiting", 30_000);
+
+            // Another tab signs in: it takes the game, the old one is told.
+            Browser other = new Browser();
+            third = connect(app, other);
+            third.sendText(hello, true);
+            Assert.assertTrue(next(other, "hello", 10_000).path("game").asBoolean(), "the other tab gets the game");
+            next(other, "state", 10_000);
+            next(back, "moved", 10_000);
+        } finally {
+            for (WebSocket w : new WebSocket[] {second, third}) {
+                if (w != null) {
+                    w.sendClose(WebSocket.NORMAL_CLOSURE, "done");
+                }
+            }
+            Thread.sleep(500);
+            app.stop();
+        }
+    }
+
     private static int countCommander(JsonNode cards) {
         int n = 0;
         for (JsonNode c : cards) {
