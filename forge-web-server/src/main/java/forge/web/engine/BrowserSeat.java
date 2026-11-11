@@ -546,16 +546,18 @@ public final class BrowserSeat implements IRemote {
                 }
             }
             case manipulateCardList -> {
-                // Put these cards back in any order (Ponder-style): the whole list, top first.
-                o.put("kind", "order");
+                // Scry and the like: the cards you may move (options), each to the top or the bottom
+                // of your library (toTop / toBottom say which are allowed), in an order.
+                o.put("kind", "arrange");
                 o.put("message", str(a[0]));
-                o.put("top", "Top");
-                List<Object> all = new ArrayList<>();
-                ((Iterable<?>) a[1]).forEach(all::add);
-                options = all;
-                o.set("options", options(gv, all, null));
-                min = all.size();
-                max = all.size();
+                List<Object> manip = new ArrayList<>();
+                ((Iterable<?>) a[2]).forEach(manip::add);
+                options = manip;
+                o.set("options", options(gv, manip, null));
+                o.put("toTop", Boolean.TRUE.equals(a[3]));
+                o.put("toBottom", Boolean.TRUE.equals(a[4]));
+                min = manip.size();
+                max = manip.size();
             }
             case assignGenericAmount -> {
                 // Divide an amount (damage, counters…) among targets: answered with one number per option.
@@ -683,6 +685,10 @@ public final class BrowserSeat implements IRemote {
             p.answer().complete(distribution(p, choice));
             return;
         }
+        if (p.ev().getMethod() == forge.gamemodes.net.ProtocolMethod.manipulateCardList) {
+            p.answer().complete(arrangement(p, choice));
+            return;
+        }
         Object value = switch (p.ev().getMethod()) {
             case getChoices, chooseEntitiesForEffect -> picked.stream().map(opts::get).toList();
             case getAbilityToPlay, chooseSingleEntityForEffect -> picked.isEmpty() ? null : opts.get(picked.get(0));
@@ -690,7 +696,6 @@ public final class BrowserSeat implements IRemote {
             case showOptionDialog -> picked.isEmpty() ? null : picked.get(0);
             case showInputDialog -> opts == null ? text : picked.isEmpty() ? null : String.valueOf(opts.get(picked.get(0)));
             case order -> orderResult(p, picked);
-            case manipulateCardList -> picked.size() == opts.size() ? picked.stream().map(opts::get).toList() : defaultAnswer(p.ev());
             default -> null;
         };
         p.answer().complete(value);
@@ -705,6 +710,44 @@ public final class BrowserSeat implements IRemote {
             return defaultAnswer(p.ev());
         }
         return new IGuiGame.OrderResult<>(picked.stream().map(i -> (Object) p.options().get(i)).toList(), false);
+    }
+
+    /**
+     * An arrange answer: option indexes for the top (first = top), then -1, then the ones for the
+     * bottom (last = bottom). Forge gets the whole list: top cards, the rest as they were, bottom
+     * cards. Every movable card exactly once, in an allowed place; else Forge's default.
+     */
+    private static Object arrangement(Pending p, JsonNode choice) {
+        Object[] a = p.ev().getObjects();
+        List<?> manip = p.options();
+        List<Object> top = new ArrayList<>();
+        List<Object> bottom = new ArrayList<>();
+        java.util.Set<Integer> seen = new java.util.HashSet<>();
+        boolean toBottom = false;
+        if (choice != null && choice.isArray()) {
+            for (JsonNode n : choice) {
+                int i = n.asInt(-2);
+                if (i == -1) {
+                    toBottom = true;
+                    continue;
+                }
+                if (i < 0 || i >= manip.size() || !seen.add(i)) {
+                    return defaultAnswer(p.ev());
+                }
+                (toBottom ? bottom : top).add(manip.get(i));
+            }
+        }
+        if (seen.size() != manip.size() || (!top.isEmpty() && !Boolean.TRUE.equals(a[3])) || (!bottom.isEmpty() && !Boolean.TRUE.equals(a[4]))) {
+            return defaultAnswer(p.ev());
+        }
+        List<Object> result = new ArrayList<>(top);
+        ((Iterable<?>) a[1]).forEach(c -> {
+            if (!manip.contains(c)) {
+                result.add(c);
+            }
+        });
+        result.addAll(bottom);
+        return result;
     }
 
     /** A divide answer: one number per option, adding up to the amount (each at least 1 if asked); else Forge's default. */
@@ -751,8 +794,8 @@ public final class BrowserSeat implements IRemote {
                 yield new IGuiGame.OrderResult(all, false);
             }
             case manipulateCardList -> {
-                List<CardView> cards = new ArrayList<>();
-                ((Iterable<CardView>) a[1]).forEach(cards::add);
+                List<Object> cards = new ArrayList<>();
+                ((Iterable<?>) a[1]).forEach(cards::add);
                 yield cards;
             }
             case assignGenericAmount -> {

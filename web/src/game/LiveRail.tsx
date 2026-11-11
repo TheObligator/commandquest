@@ -20,6 +20,8 @@ export function LiveRail(props: {
       {/* At the bottom, by your hand: what the game wants now, then the skips. */}
       {game.ask?.kind === "order" ? (
         <OrderPanel key={game.ask.id} ask={game.ask} game={game} />
+      ) : game.ask?.kind === "arrange" ? (
+        <ArrangePanel key={game.ask.id} ask={game.ask} game={game} />
       ) : game.ask?.kind === "distribute" ? (
         <DistributePanel key={game.ask.id} ask={game.ask} game={game} />
       ) : game.ask ? (
@@ -232,6 +234,72 @@ function OrderPanel({ ask, game }: { ask: LiveAsk; game: LiveGame }) {
       </ol>
       <div className="ar-actions">
         <button className="ar-btn primary" disabled={!ok} onClick={done}>
+          Done
+          <Kbd action="ok" />
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/** Scry and the like: each card to the top or the bottom of your library, in order. */
+function ArrangePanel({ ask, game }: { ask: LiveAsk; game: LiveGame }) {
+  const all = ask.options ?? [];
+  const [top, setTop] = useState<number[]>(() => (ask.toTop !== false ? all.map((_, i) => i) : []));
+  const [bottom, setBottom] = useState<number[]>(() => (ask.toTop !== false ? [] : all.map((_, i) => i)));
+  const move = (list: number[], set: (v: number[]) => void, pos: number, by: number) => {
+    const to = pos + by;
+    if (to < 0 || to >= list.length) return;
+    const n = [...list];
+    [n[pos], n[to]] = [n[to], n[pos]];
+    set(n);
+  };
+  const flip = (i: number, toBottom: boolean) => {
+    if (toBottom) {
+      setTop((t) => t.filter((x) => x !== i));
+      setBottom((b) => [...b, i]);
+    } else {
+      setBottom((b) => b.filter((x) => x !== i));
+      setTop((t) => [...t, i]);
+    }
+  };
+  const done = () => game.answer(ask.id, [...top, -1, ...bottom]);
+  useHotkeys({ ok: () => done() });
+  const rows = (list: number[], set: (v: number[]) => void, onBottom: boolean) =>
+    list.map((i, pos) => (
+      <li key={i}>
+        <span className="ask-option info">
+          <OptionLabel o={all[i]} />
+        </span>
+        <span className="order-btns">
+          {list.length > 1 && (
+            <>
+              <button type="button" aria-label="Move up" disabled={pos === 0} onClick={() => move(list, set, pos, -1)}>↑</button>
+              <button type="button" aria-label="Move down" disabled={pos === list.length - 1} onClick={() => move(list, set, pos, 1)}>↓</button>
+            </>
+          )}
+          {(onBottom ? ask.toTop !== false : ask.toBottom !== false) && (
+            <button type="button" className="flip" title={onBottom ? "Put it on top" : "Put it on the bottom"} onClick={() => flip(i, !onBottom)}>
+              {onBottom ? "Top" : "Bottom"}
+            </button>
+          )}
+        </span>
+      </li>
+    ));
+  return (
+    <section className="ar-decision live ar-ask">
+      <div className="ar-ribbon">Decision</div>
+      <h3>{ask.message || "Top or bottom?"}</h3>
+      <p className="ar-sub">Top of library (first = top)</p>
+      <ol className="ask-options order-list">{top.length ? rows(top, setTop, false) : <li className="ar-sub">None</li>}</ol>
+      {(ask.toBottom !== false || bottom.length > 0) && (
+        <>
+          <p className="ar-sub">Bottom of library (last = bottom)</p>
+          <ol className="ask-options order-list">{bottom.length ? rows(bottom, setBottom, true) : <li className="ar-sub">None</li>}</ol>
+        </>
+      )}
+      <div className="ar-actions">
+        <button className="ar-btn primary" onClick={done}>
           Done
           <Kbd action="ok" />
         </button>

@@ -105,4 +105,20 @@ public class BrowserSeatTest {
         Assert.assertEquals(bad, java.util.Map.of("x", 4, "y", 1));
         seat.close();
     }
+
+    @Test
+    public void scryArrangement() throws Exception {
+        ObjectMapper json = new ObjectMapper();
+        List<String> sent = new CopyOnWriteArrayList<>();
+        BrowserSeat seat = new BrowserSeat(json, sent::add);
+        // Forge sends the whole library and the cards you may move (a and b); b stays on top, a goes to the bottom.
+        Object result = askAndAnswer(seat, sent, json, new GuiGameEvent(ProtocolMethod.manipulateCardList,
+                "Move cards to top or bottom of library", List.of("a", "b", "c", "d"), List.of("a", "b"), true, true, false), "[1,-1,0]");
+        Assert.assertEquals(result, List.of("b", "c", "d", "a"));
+        // A card left out: Forge's default (everything where it was).
+        Object bad = askAndAnswer(seat, sent, json, new GuiGameEvent(ProtocolMethod.manipulateCardList,
+                "Move cards", List.of("a", "b", "c"), List.of("a", "b"), true, true, false), "[1]");
+        Assert.assertEquals(bad, List.of("a", "b", "c"));
+        seat.close();
+    }
 }

@@ -51,7 +51,10 @@ export interface LiveAsk {
    * order: put options in order (answer: their indexes in order, min..max of them);
    * distribute: divide `amount` among the options (answer: one number per option).
    */
-  kind: "choose" | "text" | "info" | "order" | "distribute";
+  kind: "choose" | "text" | "info" | "order" | "distribute" | "arrange";
+  /** arrange (scry…): whether cards may go on top / on the bottom of the library. */
+  toTop?: boolean;
+  toBottom?: boolean;
   /** order: what the first position means ("Closest to top"…). */
   top?: string;
   /** distribute: the total to divide, and whether each option needs at least 1. */

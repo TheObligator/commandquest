@@ -408,3 +408,4 @@ dialog.counter-dialog { width: min(360px, calc(100vw - 32px)); background: var(-
 .dist-n { min-width: 22px; text-align: center; font-variant-numeric: tabular-nums; }
 .ask-label { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .ask-label img { width: 34px; border-radius: 3px; }
+.order-btns button.flip { width: auto; padding: 0 8px; font-size: .75rem; }
