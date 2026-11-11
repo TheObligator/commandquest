@@ -58,6 +58,16 @@ function PromptPanel({ game }: { game: LiveGame }) {
       </section>
     );
   }
+  if (p.pay) {
+    // The pay window over the table has the buttons; the hotkeys above still work.
+    return (
+      <section className="ar-decision live">
+        <div className="ar-ribbon">Decision</div>
+        <h3>Pay mana</h3>
+        <p>Paying for {p.pay.card || "this"}: Auto-pay, tap your sources, or cancel.</p>
+      </section>
+    );
+  }
   const [title, ...rest] = p.message.split("\n");
   return (
     <section className="ar-decision live">

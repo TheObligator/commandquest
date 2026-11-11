@@ -15,6 +15,7 @@ import { useDeckTokens } from "../useDeckTokens";
 import type { CardView, GameView } from "../game/view";
 import type { MenuSection } from "../components/CardMenu";
 import { CounterDialog } from "../game/CounterDialog";
+import { PayPrompt } from "../game/PayPrompt";
 
 export function LiveGame() {
   const { query } = useRoute();
@@ -24,6 +25,7 @@ export function LiveGame() {
   const me = useQuery(api.users.me, isAuthenticated ? {} : "skip");
   const [layout, setLayout] = useStored<LayoutId>("cq.table.layout", "pod");
   const [opponents, setOpponents] = useState(3);
+  const [freePlay, setFreePlay] = useStored<boolean>("cq.game.freePlay", true);
   const game = useLiveGame();
   const { tokens } = useDeckTokens(deck?.cards, deck?.tokenArt);
 
@@ -42,7 +44,7 @@ export function LiveGame() {
   const start = () => {
     if (!deck) return;
     const payload: DeckPayload = { name: deck.name, cards: deck.cards.map((c) => ({ name: c.name, quantity: c.quantity, board: c.board, set: c.set, collectorNumber: c.collectorNumber })), tokens: tokenArtMap(tokens) };
-    game.start(payload, me?.name ?? "You", opponents);
+    game.start(payload, me?.name ?? "You", opponents, freePlay);
   };
 
   const playing = game.view && (game.status === "playing" || game.status === "over");
@@ -97,6 +99,17 @@ export function LiveGame() {
                     <option key={n} value={n}>{n}</option>
                   ))}
                 </select>
+              </label>
+              <label className="live-option">
+                <input type="checkbox" checked={freePlay} onChange={(e) => setFreePlay(e.target.checked)} />
+                <span>
+                  Free play
+                  <span className="muted small">
+                    {" "}Fix things by hand like at a paper table: tap, move and copy cards, add counters, and cast a spell
+                    without paying its mana cost when a card that should allow it doesn't. The log shows everything done by
+                    hand. Off: only the cards' own effects change the game.
+                  </span>
+                </span>
               </label>
               <button className="btn" onClick={start} disabled={!deck || game.status !== "ready"}>
                 {game.status === "starting" ? "Starting…" : game.status === "ready" ? "Start game" : STATUS[game.status]}
@@ -206,6 +219,7 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
   });
 
   const manualSection = (card: CardView): MenuSection => {
+    if (view.freePlay === false) return { items: [] };
     const mine = (card.zone === "battlefield" ? card.controller : card.owner) === me;
     const items: MenuSection["items"] = [];
     if (card.zone === "battlefield") {
@@ -306,6 +320,7 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
 
   return (
     <>
+    {game.prompt?.pay && !game.ask && <PayPrompt prompt={game.prompt} game={{ ok, cancel, payFree: game.payFree }} />}
     {counterFor && (
       <CounterDialog
         card={counterFor}

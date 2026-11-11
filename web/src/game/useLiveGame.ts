@@ -21,6 +21,17 @@ export interface LivePrompt {
   message: string;
   ok: LiveButton;
   cancel: LiveButton;
+  /** Set while you pay mana for a spell or ability: OK is Forge's Auto-pay, Cancel stops the cast. */
+  pay?: LivePay;
+}
+
+/** What you're paying mana for. `free`: this game allows paying it with nothing (free play). */
+export interface LivePay {
+  cost: string;
+  card: string;
+  cardId: number;
+  kind: "spell" | "ability" | "effect";
+  free: boolean;
 }
 
 export interface AskOption {
@@ -128,7 +139,7 @@ export function useLiveGame() {
             setStatus(m.view.gameOver ? "over" : "playing");
             break;
           case "prompt":
-            setPrompt({ message: m.message, ok: m.ok, cancel: m.cancel });
+            setPrompt({ message: m.message, ok: m.ok, cancel: m.cancel, pay: m.pay });
             break;
           case "waiting":
             setPrompt(null);
@@ -198,17 +209,20 @@ export function useLiveGame() {
     autoPass,
     signedIn: !!token,
     clearError: () => setError(null),
-    start(deck: DeckPayload, name: string, opponents = 3) {
+    /** `freePlay`: allow manual overrides (tap, move, counters…) and paying mana costs with nothing. */
+    start(deck: DeckPayload, name: string, opponents = 3, freePlay = true) {
       setError(null);
       setView(null);
       setPrompt(null);
       setAsk(null);
       setAutoPassState(null);
       setStatus("starting");
-      send({ t: "start", deck, name, opponents });
+      send({ t: "start", deck, name, opponents, freePlay });
     },
     ok: () => send({ t: "ok" }),
     cancel: () => send({ t: "cancel" }),
+    /** Free play: pay the mana cost you're paying now with nothing. */
+    payFree: () => send({ t: "payFree" }),
     clickCard: (id: number) => send({ t: "card", id }),
     /** What this card can do right now (for its right-click menu). */
     actions(id: number): Promise<CardActions> {

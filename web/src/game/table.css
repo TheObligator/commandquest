@@ -376,3 +376,16 @@ dialog.counter-dialog { width: min(360px, calc(100vw - 32px)); background: var(-
 .counter-dialog label { display: grid; gap: 4px; font-size: .8rem; color: var(--muted); }
 .counter-dialog input { padding: 7px 9px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg-2, #12151d); color: var(--text); font-size: .95rem; }
 .cd-btns { display: flex; gap: 8px; }
+
+/* The pay window (PayPrompt): floats over the table without blocking clicks on your lands. */
+.pay-prompt { position: fixed; z-index: 40; left: 50%; top: 22%; transform: translateX(-50%); width: min(340px, calc(100vw - 32px)); padding: 14px; border-radius: 12px; background: linear-gradient(180deg, #2b2215, #1a150e); border: 1px solid #5a4320; box-shadow: 0 0 0 1px rgb(224 168 79 / 60%), 0 12px 40px rgb(0 0 0 / 55%); color: #f0e2c4; }
+.pay-prompt header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.pay-prompt header strong { font-family: Georgia, "Times New Roman", serif; font-style: italic; font-size: 1.05rem; }
+.pay-prompt header .mana { margin-left: auto; }
+.pay-prompt header .sym { width: 18px; height: 18px; }
+.pay-what { font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: #c9a86a; }
+.pay-btns { display: grid; gap: 6px; }
+.ar-btn.free { background: #1f2a1c; border-color: #4f6b3c; color: #dbe9cc; }
+.pay-hint { margin: 10px 0 0; font-size: .8rem; color: #bfb39b; }
+.live-option { display: flex; gap: 10px; align-items: flex-start; line-height: 1.4; }
+.live-option input { margin-top: 4px; }

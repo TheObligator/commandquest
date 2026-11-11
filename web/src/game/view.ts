@@ -132,6 +132,8 @@ export interface GameView {
   viewer: string;
   /** Live games: you've turned off all your auto-yields. */
   autoYieldsOff?: boolean;
+  /** Free play is on in this game: manual overrides and paying mana costs with nothing. */
+  freePlay?: boolean;
   /** Live games: your cards you can use right now (cast, play or activate). */
   playable?: number[];
   /** In turn order, starting with the viewer. */
