@@ -64,8 +64,8 @@ function PromptPanel({ game }: { game: LiveGame }) {
     return (
       <section className="ar-decision">
         <div className="ar-ribbon">Decision</div>
-        <h3>Waiting</h3>
-        <p>Other players are deciding…</p>
+        <h3>{game.status === "over" ? "Game over" : "Waiting"}</h3>
+        <p>{game.status === "over" ? "Nothing more to decide in this game." : "Other players are deciding…"}</p>
       </section>
     );
   }
