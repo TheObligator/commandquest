@@ -39,10 +39,13 @@ export const usePreview = () => useContext(PreviewContext);
 
 // ---- Tiles -------------------------------------------------------------------------------------
 
+/** Magic's card back, from Scryfall (shown under Wizards' Fan Content Policy, like the card images). */
+export const CARD_BACK_URL = "https://backs.scryfall.io/normal/0/a/0aeebaf5-8c7d-4636-9e82-8c27447861f7.jpg";
+
 export function CardBack({ label }: { label?: string }) {
   return (
-    <div className="card-back" aria-label={label ?? "Face-down card"}>
-      <span>◆</span>
+    <div className="card-back" role="img" aria-label={label ?? "Face-down card"}>
+      <img src={CARD_BACK_URL} alt="" draggable={false} loading="lazy" />
     </div>
   );
 }
