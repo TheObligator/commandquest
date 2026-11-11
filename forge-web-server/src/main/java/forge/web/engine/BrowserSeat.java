@@ -63,6 +63,8 @@ public final class BrowserSeat implements IRemote {
     private volatile String promptMessage = "";
     private volatile String lastState;
     private volatile boolean closed;
+    /** Free play (chosen when the game starts): manual overrides and paying mana costs with nothing. */
+    private volatile boolean freePlay = true;
     /** An ability picked from the browser's card menu: answers Forge's "which ability?" for that click. */
     private volatile Preferred preferred;
 
@@ -87,6 +89,14 @@ public final class BrowserSeat implements IRemote {
 
     public PlayerView player() {
         return me;
+    }
+
+    public boolean freePlay() {
+        return freePlay;
+    }
+
+    public void setFreePlay(boolean on) {
+        freePlay = on;
     }
 
     // ---- Forge -> browser ----
@@ -115,6 +125,7 @@ public final class BrowserSeat implements IRemote {
                 o.put("message", promptMessage);
                 o.set("ok", button((String) a[1], (Boolean) a[3]));
                 o.set("cancel", button((String) a[2], (Boolean) a[4]));
+                payment(o);
                 emit(o);
             }
             case awaitNextInput -> emit(msg("waiting"));
@@ -123,6 +134,29 @@ public final class BrowserSeat implements IRemote {
                 emit(msg("over"));
             }
             default -> { }
+        }
+    }
+
+    /**
+     * While you pay mana for a spell or ability, the prompt says what for ({@code pay}: cost, card,
+     * cardId, kind spell/ability/effect, and {@code free} when this game allows paying nothing).
+     */
+    private void payment(ObjectNode prompt) {
+        try {
+            Game g = game.get();
+            Player p = g == null || me == null ? null : g.getPlayer(me.getId());
+            Payment.Info info = p == null || gui == null ? null : Payment.info(gui.getGameController(me), p);
+            if (info == null) {
+                return;
+            }
+            ObjectNode pay = prompt.putObject("pay");
+            pay.put("cost", info.cost());
+            pay.put("card", info.card());
+            pay.put("cardId", info.cardId());
+            pay.put("kind", info.kind());
+            pay.put("free", freePlay);
+        } catch (RuntimeException e) {
+            Logger.debug(e, "Couldn't describe the payment");
         }
     }
 
@@ -149,6 +183,7 @@ public final class BrowserSeat implements IRemote {
             }
             ObjectNode view = views.game(gv, me);
             view.set("playable", playable());
+            view.put("freePlay", freePlay);
             untapLocks(live, view);
             yields(gv, view);
             o.set("view", view);

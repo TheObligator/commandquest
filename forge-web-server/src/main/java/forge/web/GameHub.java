@@ -23,6 +23,7 @@ import forge.web.engine.BrowserSeat;
 import forge.web.engine.Decks;
 import forge.web.engine.Explain;
 import forge.web.engine.ManualActions;
+import forge.web.engine.Payment;
 import forge.web.engine.ForgeEngine;
 import forge.web.engine.GameSession;
 import io.javalin.websocket.WsContext;
@@ -145,6 +146,7 @@ public final class GameHub {
             case "stops" -> stops(c, m.path("stops"));
             case "yield" -> yieldTo(c, m.path("key").asText(""), m.path("autoYield"), m.path("decision").asText(null));
             case "manual" -> manual(c, m);
+            case "payFree" -> payFree(c);
             case "details" -> details(c, m.path("id").asInt());
             case "counter" -> counter(c, m.path("id").asInt(), m.path("type").asText(""), m.path("delta").asInt());
             case "yieldsOff" -> act(c, ctl -> {
@@ -192,6 +194,7 @@ public final class GameHub {
                 Deck mine = Decks.fromJson(m.path("deck"));
                 List<GameSession.Seat> seats = new ArrayList<>();
                 BrowserSeat seat = new BrowserSeat(json, s -> sendRaw(c, s));
+                seat.setFreePlay(m.path("freePlay").asBoolean(true));
                 String name = m.path("name").asText("You").trim();
                 name = name.isEmpty() || name.length() > 40 || name.startsWith("AI ") ? "You" : name;
                 seats.add(new GameSession.Seat(name, mine, seat, tokenArt(m.path("deck").path("tokens"))));
@@ -341,6 +344,9 @@ public final class GameHub {
      * face down, move to a zone, token copy, reveal... Only your own cards.
      */
     private void manual(Conn c, JsonNode m) {
+        if (!freePlay(c)) {
+            return;
+        }
         int id = m.path("id").asInt();
         String action = m.path("action").asText("");
         act(c, ctl -> {
@@ -364,6 +370,34 @@ public final class GameHub {
             }
             if (!seat.manual().run(g, me, card, action, to, seat::refresh)) {
                 notice(c, "That can't be done to this card where it is now.");
+            }
+        });
+    }
+
+    /** Is free play on in this game? If not, tells the browser that manual overrides are off. */
+    private boolean freePlay(Conn c) {
+        BrowserSeat seat = c.seat;
+        if (seat != null && seat.freePlay()) {
+            return true;
+        }
+        notice(c, "Free play is off in this game: only the cards' own effects can do that.");
+        return false;
+    }
+
+    /**
+     * Free play: pay the rest of the mana cost you're paying now with nothing (for a card that
+     * should be free but isn't scripted that way). Only from your own browser, so never for AI seats.
+     */
+    private void payFree(Conn c) {
+        if (!freePlay(c)) {
+            return;
+        }
+        act(c, ctl -> {
+            Game g = game(c);
+            BrowserSeat seat = c.seat;
+            Player me = g == null || seat == null || seat.player() == null ? null : g.getPlayer(seat.player().getId());
+            if (me != null && !Payment.payFree(ctl, g, me)) {
+                notice(c, "There's no mana cost to pay right now.");
             }
         });
     }
@@ -405,7 +439,7 @@ public final class GameHub {
      * the game log says who did it.
      */
     private void counter(Conn c, int id, String type, int delta) {
-        if (delta == 0 || Math.abs(delta) > 99 || !COUNTER_NAME.matcher(type).matches()) {
+        if (delta == 0 || Math.abs(delta) > 99 || !COUNTER_NAME.matcher(type).matches() || !freePlay(c)) {
             return;
         }
         act(c, ctl -> {
