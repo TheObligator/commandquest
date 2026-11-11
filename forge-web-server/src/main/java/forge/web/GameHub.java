@@ -114,7 +114,13 @@ public final class GameHub {
             case "start" -> start(c, m);
             case "ok" -> act(c, ctl -> ok(c, ctl));
             case "cancel" -> act(c, IGameController::selectButtonCancel);
-            case "concede" -> act(c, IGameController::concede);
+            case "concede" -> {
+                BrowserSeat seat = c.seat;
+                if (seat != null) {
+                    seat.answerOpenWithDefaults(); // Forge can't take the concession while it waits on a question
+                }
+                act(c, IGameController::concede);
+            }
             case "card" -> {
                 int id = m.path("id").asInt();
                 act(c, ctl -> click(c, ctl, id, null, null));

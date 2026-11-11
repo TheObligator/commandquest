@@ -818,6 +818,11 @@ public final class BrowserSeat implements IRemote {
         };
     }
 
+    /** Answers every open question with Forge's default (e.g. before conceding, which can't happen while Forge waits on one). */
+    public void answerOpenWithDefaults() {
+        pending.values().forEach(p -> p.answer().complete(defaultAnswer(p.ev())));
+    }
+
     /** The browser left: release every waiting question so the game thread never hangs. */
     public void close() {
         closed = true;
