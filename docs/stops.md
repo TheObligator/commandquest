@@ -35,7 +35,9 @@ The game screen has a vertical phase strip on the right. Every step is a tile sp
 
 Defaults (`DEFAULT_PRESET` in `web/src/game/phases.ts`, used by the client and by Convex):
 
-- **Your turn:** upkeep, draw, main 1, beginning of combat, declare blockers, main 2
+- **Your turn:** main 1, beginning of combat, declare blockers, main 2. Upkeep and draw are off:
+  a trigger there (or anything else on the stack) still gives you priority, so they only matter
+  for instant-speed plays with an empty stack.
 - **Opponents' turns:** beginning of combat, declare attackers, declare blockers, end step. These
   are the usual windows to respond on someone else's turn.
 
