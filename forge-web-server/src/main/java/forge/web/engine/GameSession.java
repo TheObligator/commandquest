@@ -14,7 +14,6 @@ import forge.gamemodes.net.ProtocolGuiGame;
 import forge.gui.interfaces.IGuiGame;
 import forge.interfaces.IGameController;
 import forge.player.GamePlayerUtil;
-import forge.player.LobbyPlayerHuman;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
@@ -71,7 +70,7 @@ public final class GameSession {
         for (Seat seat : seats) {
             RegisteredPlayer rp = RegisteredPlayer.forCommander(seat.deck());
             if (seat.human()) {
-                rp.setPlayer(new LobbyPlayerHuman(seat.name()));
+                rp.setPlayer(new WebLobbyPlayer(seat.name()));
                 ProtocolGuiGame gui = new ProtocolGuiGame(seat.remote());
                 gui.setNetGame();
                 if (seat.remote() instanceof BrowserSeat browser) {

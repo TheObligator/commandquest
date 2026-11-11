@@ -75,6 +75,10 @@ restarts, so deploy when nobody's playing (the lobby will show a warning once ga
   play use, so every rules prompt (targets, modes, blockers, mulligans…) is Forge's. Its prompts reach
   a seat through an `IRemote`. In production that's the player's WebSocket, and in the tests a
   scripted stand-in. Other seats are Forge AI.
+- Human seats are created by `WebLobbyPlayer` with `WebPlayerController`, a small subclass of
+  Forge's controller that plays the mulligan as Commander does: the first mulligan is free even
+  1v1 (Forge only frees it with 3+ players or in Brawl), and cards go to the bottom once you keep,
+  not straight after each mulligan (London mulligan, CR 103.5).
 - `HeadlessGui` gives Forge the single UI thread it expects (`forge-ui`). Browser answers are applied
   on that thread.
 

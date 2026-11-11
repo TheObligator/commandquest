@@ -273,6 +273,93 @@ public class GameHubTest {
         }
     }
 
+    /**
+     * Commander mulligans, 1v1: the first mulligan is free, and cards go to the bottom only once you
+     * keep (London mulligan), not straight after each mulligan.
+     */
+    @Test(timeOut = 120_000)
+    public void commanderMulliganOneOnOne() throws Exception {
+        MyRandom.setRandom(new Random(7));
+        TestTokens tokens = new TestTokens();
+        Javalin app = WebServer.create(new WebServer.Options(null, Set.of(), null, tokens.auth(), 2)).start(0);
+        Browser b = new Browser();
+        WebSocket ws = HttpClient.newHttpClient().newWebSocketBuilder()
+                .buildAsync(URI.create("ws://localhost:" + app.port() + "/ws"), b).get(5, TimeUnit.SECONDS);
+        java.util.List<String> seen = new java.util.ArrayList<>();
+        try {
+            ws.sendText("{\"t\":\"hello\",\"token\":\"" + tokens.valid("user1") + "\"}", true);
+            next(b, "hello", 10_000);
+            ObjectNode start = json.createObjectNode();
+            start.put("t", "start");
+            start.put("name", "Tester");
+            start.put("opponents", 1);
+            start.set("deck", deck());
+            ws.sendText(json.writeValueAsString(start), true);
+
+            JsonNode state = next(b, "state", 60_000).path("view");
+            int mulligans = 0;
+            boolean kept = false;
+            boolean bottomed = false;
+            int handAfterKeep = -1;
+            long end = System.currentTimeMillis() + 90_000;
+            while (System.currentTimeMillis() < end && handAfterKeep < 0) {
+                String s = b.inbox.poll(5, TimeUnit.SECONDS);
+                if (s == null) {
+                    continue;
+                }
+                JsonNode m = json.readTree(s);
+                switch (m.path("t").asText()) {
+                    case "state" -> {
+                        state = m.path("view");
+                        seen.add("state hand=" + state.path("players").get(0).path("hand").size());
+                    }
+                    case "ask" -> {
+                        seen.add("ask " + m.path("message").asText() + " " + m.path("options"));
+                        ObjectNode a = json.createObjectNode();
+                        a.put("t", "answer");
+                        a.put("id", m.path("id").asInt());
+                        a.putArray("choice").add(m.path("selected").size() > 0 ? m.path("selected").get(0).asInt() : 0);
+                        ws.sendText(json.writeValueAsString(a), true);
+                    }
+                    case "prompt" -> {
+                        if (m.path("message").asText().isBlank()) {
+                            continue; // the buttons arrive before the text: answer the prompt once, when it's complete
+                        }
+                        JsonNode hand = state.path("players").get(0).path("hand");
+                        boolean mulliganPrompt = m.path("cancel").path("label").asText().equals("Mulligan");
+                        boolean priority = m.path("cancel").path("label").asText().equals("End Turn");
+                        seen.add((mulliganPrompt ? "keep?" : priority ? "priority" : "choose") + " hand=" + hand.size() + " " + m.path("message").asText().replace("\n", " ") + " " + m.path("ok") + m.path("cancel"));
+                        if (mulliganPrompt) {
+                            Assert.assertEquals(hand.size(), 7, "every new hand is seven cards: " + seen);
+                            if (mulligans < 2) {
+                                mulligans++;
+                                ws.sendText("{\"t\":\"cancel\"}", true);
+                            } else {
+                                kept = true;
+                                ws.sendText("{\"t\":\"ok\"}", true);
+                            }
+                        } else if (!priority && !bottomed) {
+                            Assert.assertTrue(kept, "cards go to the bottom only after keeping: " + seen);
+                            bottomed = true; // (the prompt is sent again once the card is selected)
+                            ws.sendText("{\"t\":\"card\",\"id\":" + hand.get(0).path("id").asInt() + "}", true);
+                            ws.sendText("{\"t\":\"ok\"}", true);
+                        } else if (priority && kept) {
+                            handAfterKeep = hand.size();
+                        }
+                    }
+                    default -> { }
+                }
+            }
+            Assert.assertEquals(mulligans, 2, "mulliganed twice: " + seen);
+            Assert.assertTrue(bottomed, "asked to bottom a card: " + seen);
+            Assert.assertEquals(handAfterKeep, 6, "two mulligans, the first free: one card on the bottom: " + seen);
+        } finally {
+            ws.sendClose(WebSocket.NORMAL_CLOSURE, "done");
+            Thread.sleep(500);
+            app.stop();
+        }
+    }
+
     private static int countCommander(JsonNode cards) {
         int n = 0;
         for (JsonNode c : cards) {
