@@ -2,8 +2,8 @@ import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
 // Signing in with an email link opened on a different device (src/pages/SignIn.tsx). The device
-// that asks for the link puts a random `pair` id in it and waits. The link's page on the other
-// device can hand its one-time code back here, and the asking device signs itself in with it.
+// that asks for the link puts a random `pair` id in it and waits. Opened anywhere else, the link's
+// page hands its one-time code back here, and the asking browser claims it and signs itself in.
 // Knowing `pair` means having the email (or being the asking device), so it guards the code.
 
 const PAIR = /^[A-Za-z0-9]{32}$/;
@@ -13,7 +13,7 @@ function checkPair(pair: string) {
   if (!PAIR.test(pair)) throw new ConvexError("Bad sign-in link.");
 }
 
-/** The other device approved: keep its code for the asking device. */
+/** The link was opened on another device: keep its code for the asking browser. */
 export const approve = mutation({
   args: { pair: v.string(), code: v.string() },
   handler: async (ctx, { pair, code }) => {
@@ -29,22 +29,27 @@ export const approve = mutation({
   },
 });
 
-/** The asking device waits on this: the code once another device approved, else null. */
-export const waiting = query({
+/** Is a code waiting for this pair? (The asking browser watches this, then claims it.) */
+export const ready = query({
   args: { pair: v.string() },
   handler: async (ctx, { pair }) => {
-    if (!PAIR.test(pair)) return null;
+    if (!PAIR.test(pair)) return false;
     const row = await ctx.db.query("signinHandoffs").withIndex("by_pair", (q) => q.eq("pair", pair)).unique();
-    return row && row.createdAt > Date.now() - MAX_AGE_MS ? row.code : null;
+    return !!row && row.createdAt > Date.now() - MAX_AGE_MS;
   },
 });
 
-/** The asking device used the code (or gave up): forget it. */
-export const done = mutation({
+/**
+ * Takes the waiting code, once: the asking browser when it sees it, or the device that opened
+ * the link if nobody took it in time (the asking page was closed). Null if it's gone.
+ */
+export const claim = mutation({
   args: { pair: v.string() },
   handler: async (ctx, { pair }) => {
     checkPair(pair);
     const row = await ctx.db.query("signinHandoffs").withIndex("by_pair", (q) => q.eq("pair", pair)).unique();
-    if (row) await ctx.db.delete(row._id);
+    if (!row) return null;
+    await ctx.db.delete(row._id);
+    return row.createdAt > Date.now() - MAX_AGE_MS ? row.code : null;
   },
 });

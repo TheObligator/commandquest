@@ -475,3 +475,5 @@ table.hotkeys { width: 100%; border-collapse: collapse; }
   .hotkeys th { grid-column: 1 / -1; border-top: 1px solid var(--line); }
   .hotkeys td { border-top: 0; }
 }
+.sent .auth-form { justify-self: stretch; }
+.signin-code { font: 600 1.2rem ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 3px; text-transform: uppercase; }

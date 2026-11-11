@@ -1,7 +1,7 @@
 import { useConvexAuth } from "convex/react";
 import { useEffect, useState } from "react";
-import { clearPending, linkFromElsewhere, openedLink, tidyUrl } from "./handoff";
-import { SignInHere } from "../pages/SignInHere";
+import { clearPending, openedLink, tidyUrl } from "./handoff";
+import { SignInLink } from "../pages/SignInLink";
 import { DeckList } from "../pages/DeckList";
 import { Editor } from "../pages/Editor";
 import { Landing } from "../pages/Landing";
@@ -32,12 +32,12 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 export function App() {
   const route = useRoute();
   const { isAuthenticated } = useConvexAuth();
-  const [foreignLink, setForeignLink] = useState(linkFromElsewhere ? openedLink : null);
+  const [link, setLink] = useState(openedLink);
 
   // A sign-in link's `pair` stays in the address bar after Convex Auth takes the code: tidy it.
   useEffect(() => {
-    if (!foreignLink) tidyUrl();
-  }, [foreignLink]);
+    if (!link) tidyUrl();
+  }, [link]);
   useEffect(() => {
     if (isAuthenticated) clearPending();
   }, [isAuthenticated]);
@@ -51,7 +51,7 @@ export function App() {
 
   let page: React.ReactNode;
   let params: Record<string, string> | null;
-  if (foreignLink) page = <SignInHere link={foreignLink} onDone={() => (tidyUrl(true), setForeignLink(null))} />;
+  if (link) page = <SignInLink link={link} onDone={() => (tidyUrl(true), setLink(null))} />;
   else if (route.path === "/") page = <Landing />;
   else if (route.path === "/signin") page = <SignIn />;
   else if (route.path === "/play") page = <Play />;
