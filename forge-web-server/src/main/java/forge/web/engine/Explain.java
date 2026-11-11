@@ -73,4 +73,26 @@ public final class Explain {
         }
         return "There's nothing you can do with " + name + " right now.";
     }
+
+    /**
+     * False when this spell or ability needs a target and nothing can be targeted right now
+     * (Forge would let you start it, then quietly give up when you can't pick one).
+     */
+    public static boolean hasTargets(forge.game.spellability.SpellAbility sa, Player me) {
+        try {
+            if (!sa.usesTargeting()) {
+                return true;
+            }
+            forge.game.spellability.TargetRestrictions tr = sa.getTargetRestrictions();
+            if (tr == null || tr.getMinTargets(sa.getHostCard(), sa) == 0) {
+                return true; // "up to": fine with none
+            }
+            if (sa.getActivatingPlayer() == null) {
+                sa.setActivatingPlayer(me);
+            }
+            return tr.hasCandidates(sa);
+        } catch (RuntimeException e) {
+            return true; // when in doubt, let Forge decide
+        }
+    }
 }

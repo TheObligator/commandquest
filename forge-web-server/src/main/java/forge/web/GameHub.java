@@ -262,6 +262,11 @@ public final class GameHub {
         if (card == null || seat == null) {
             return;
         }
+        Player who = seat.player() == null ? null : g.getPlayer(seat.player().getId());
+        if (who != null && priorityInput(ctl) && noTargets(card, who, ability, label)) {
+            notice(c, "Nothing it can target right now.");
+            return;
+        }
         boolean used;
         seat.prefer(ability, label);
         try {
@@ -277,6 +282,23 @@ public final class GameHub {
         }
     }
 
+    /**
+     * Would this click start only things that need a target when there's none? ({@code ability}:
+     * the one picked from the card's menu, else everything the card can do now.)
+     */
+    private static boolean noTargets(Card card, Player me, Integer ability, String label) {
+        List<SpellAbility> options = new ArrayList<>();
+        for (SpellAbility sa : card.getAllPossibleAbilities(me, true)) {
+            if (sa.isManaAbility()) {
+                continue;
+            }
+            if (ability == null || sa.getId() == ability || (label != null && label.equals(sa.getView().getDescription()))) {
+                options.add(sa);
+            }
+        }
+        return !options.isEmpty() && options.stream().noneMatch(sa -> Explain.hasTargets(sa, me));
+    }
+
     /** The card's abilities for its menu: everything Forge lists for this player, and whether each can be used now. */
     private void actions(Conn c, IGameController ctl, int id) {
         Game g = game(c);
@@ -290,9 +312,14 @@ public final class GameHub {
             boolean canAct = priorityInput(ctl) && g.getPhaseHandler().getPriorityPlayer() == me;
             // By id, and by text for abilities Forge rebuilds on each listing (alternative costs).
             Set<Integer> playable = new HashSet<>();
+            boolean noTargets = false;
             Set<String> playableText = new HashSet<>();
             if (canAct) {
                 for (SpellAbility sa : card.getAllPossibleAbilities(me, true)) {
+                    if (!Explain.hasTargets(sa, me)) {
+                        noTargets = true;
+                        continue;
+                    }
                     playable.add(sa.getId());
                     playableText.add(sa.getView().getDescription());
                 }
@@ -309,7 +336,7 @@ public final class GameHub {
                 a.put("enabled", playable.contains(sa.getId()) || playableText.contains(label));
             }
             if (playable.isEmpty()) {
-                o.put("reason", Explain.whyNot(g, me, card, priorityInput(ctl)));
+                o.put("reason", noTargets ? "Nothing it can target right now." : Explain.whyNot(g, me, card, priorityInput(ctl)));
             }
         }
         send(c, o);

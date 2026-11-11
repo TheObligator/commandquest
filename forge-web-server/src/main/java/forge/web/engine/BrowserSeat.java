@@ -275,13 +275,13 @@ public final class BrowserSeat implements IRemote {
             }
             Set<Integer> seen = new HashSet<>();
             for (Card c : p.getCardsIn(PLAYABLE_ZONES)) {
-                if (seen.add(c.getId()) && c.getAllPossibleAbilities(p, true).stream().anyMatch(sa -> !sa.isManaAbility())) {
+                if (seen.add(c.getId()) && c.getAllPossibleAbilities(p, true).stream().anyMatch(sa -> !sa.isManaAbility() && Explain.hasTargets(sa, p))) {
                     ids.add(c.getId());
                 }
             }
             for (Card c : g.getCardsIn(ZoneType.Exile)) { // cards others exiled that you may play
                 if (c.getOwner() != p && seen.add(c.getId()) && !c.mayPlay(p).isEmpty()
-                        && c.getAllPossibleAbilities(p, true).stream().anyMatch(sa -> !sa.isManaAbility())) {
+                        && c.getAllPossibleAbilities(p, true).stream().anyMatch(sa -> !sa.isManaAbility() && Explain.hasTargets(sa, p))) {
                     ids.add(c.getId());
                 }
             }

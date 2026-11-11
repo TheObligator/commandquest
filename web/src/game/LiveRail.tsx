@@ -120,22 +120,43 @@ function RevealedCards({ cards }: { cards: CardView[] }) {
  */
 function OfferedCards({ cards, chosen, onPick }: { cards: CardView[]; chosen: (number | string)[]; onPick: (id: number) => void }) {
   const setPreview = usePreview();
+  // Copies of the same card are one row ("Forest ×16"); clicking it picks the next copy not chosen yet.
+  const groups: CardView[][] = [];
+  const byName = new Map<string, CardView[]>();
+  for (const c of cards) {
+    const key = c.hidden ? `hidden-${c.id}` : c.name ?? String(c.id);
+    let g = byName.get(key);
+    if (!g) {
+      g = [];
+      byName.set(key, g);
+      groups.push(g);
+    }
+    g.push(c);
+  }
   return (
     <ul className="ask-options" aria-label="Cards to choose from">
-      {cards.map((c) => (
-        <li key={c.id}>
-          <button
-            className={`ask-option${chosen.includes(c.id) ? " on" : ""}`}
-            aria-pressed={chosen.includes(c.id)}
-            onClick={() => onPick(c.id)}
-            onMouseEnter={() => setPreview({ card: c })}
-            onMouseLeave={() => setPreview(null)}
-          >
-            {!c.hidden && c.name && <img src={cardImage(c.name, "small")} alt="" />}
-            <span>{c.hidden ? "Hidden card" : c.name}</span>
-          </button>
-        </li>
-      ))}
+      {groups.map((g) => {
+        const c = g[0];
+        const picked = g.filter((x) => chosen.includes(x.id)).length;
+        const next = g.find((x) => !chosen.includes(x.id)) ?? c;
+        return (
+          <li key={c.id}>
+            <button
+              className={`ask-option${picked ? " on" : ""}`}
+              aria-pressed={picked > 0}
+              onClick={() => onPick(next.id)}
+              onMouseEnter={() => setPreview({ card: c })}
+              onMouseLeave={() => setPreview(null)}
+            >
+              {!c.hidden && c.name && <img src={cardImage(c.name, "small")} alt="" />}
+              <span>
+                {c.hidden ? "Hidden card" : c.name}
+                {g.length > 1 && <small> ×{g.length}{picked ? ` · ${picked} chosen` : ""}</small>}
+              </span>
+            </button>
+          </li>
+        );
+      })}
     </ul>
   );
 }
