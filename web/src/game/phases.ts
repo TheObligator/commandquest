@@ -50,9 +50,9 @@ export interface StopPreset {
   seats?: StepId[][];
 }
 
-/** Must match StopPreset.DEFAULT on the server. */
+/** Upkeep and draw are left out: you still get priority there when something goes on the stack. */
 export const DEFAULT_PRESET: StopPreset = {
-  self: ["UPKEEP", "DRAW", "MAIN1", "COMBAT_BEGIN", "COMBAT_DECLARE_BLOCKERS", "MAIN2"],
+  self: ["MAIN1", "COMBAT_BEGIN", "COMBAT_DECLARE_BLOCKERS", "MAIN2"],
   opponents: ["COMBAT_BEGIN", "COMBAT_DECLARE_ATTACKERS", "COMBAT_DECLARE_BLOCKERS", "END_OF_TURN"],
 };
 
