@@ -359,9 +359,10 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
       castDone.current = true;
     }
     const p = game.prompt;
-    if (!castDone.current || !p || game.ask || !isPriorityPrompt(p)) return;
+    // Wait for OK to be enabled: Forge can show the priority buttons disabled for a moment first.
+    if (!castDone.current || !p || game.ask || !isPriorityPrompt(p) || !p.ok.enabled) return;
     castDone.current = false;
-    if (!st.holdPriority && p.ok.enabled) game.ok();
+    if (!st.holdPriority) game.ok();
   }, [game.prompt, game.ask, view, st.holdPriority, game]);
   const ok = () => {
     // Only OK at "you have priority" passes; OK while casting (Auto-pay, skipping convoke, done

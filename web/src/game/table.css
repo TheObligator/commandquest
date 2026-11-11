@@ -93,6 +93,8 @@ button.zone-tile:hover .zt-card { outline: 2px solid var(--accent-2); }
 .crown { position: absolute; top: -7px; left: 50%; translate: -50% 0; color: var(--accent); font-size: max(10px, calc(var(--cw) * .18)); text-shadow: 0 1px 3px #000; }
 .fd-eye { position: absolute; top: 3%; right: 3%; font-size: 10px; background: rgb(0 0 0 / 65%); border-radius: 4px; padding: 0 2px; }
 .pile-count { position: absolute; top: 3%; right: 3%; padding: 0 5px; border-radius: 99px; background: var(--accent); color: var(--accent-ink); font-weight: 800; font-size: max(9px, calc(var(--cw) * .14)); }
+.blk-badge { position: absolute; z-index: 3; left: 50%; bottom: -5px; translate: -50% 0; max-width: 140%; overflow: hidden; text-overflow: ellipsis; padding: 0 5px; border-radius: 99px; background: #7fd1ff; color: #06121a; font-size: 9px; font-weight: 800; white-space: nowrap; }
+.bf-card.blocking { outline: 2px solid #7fd1ff; outline-offset: 1px; }
 .atk-badge { position: absolute; z-index: 3; left: 50%; bottom: -5px; translate: -50% 0; padding: 0 5px; border-radius: 99px; background: var(--danger); color: #1a0606; font-size: 9px; font-weight: 800; white-space: nowrap; }
 
 /* ---- Hand ---- */
@@ -219,6 +221,7 @@ dialog.zone-viewer { width: min(980px, calc(100vw - 32px)); max-height: 86vh; ba
 @keyframes sp-pulse { 50% { opacity: .35; } }
 
 /* Live games: what Forge lets you pick, and clickable player names. */
+.hand-card.chosen { transform: translateY(-14px); box-shadow: 0 0 0 3px #7fd1ff, 0 0 14px rgb(127 209 255 / 55%); border-radius: 6px; }
 .slot.chosen .bf-card { box-shadow: 0 0 0 3px #7fd1ff, 0 0 14px rgb(127 209 255 / 55%); border-radius: 6px; }
 .sb-target { color: var(--accent-2, #ffd27a) !important; text-decoration: underline dotted; text-underline-offset: 3px; }
 .slot.selectable .bf-card, .hand-card.selectable { box-shadow: 0 0 0 2px var(--accent-2, #ffd27a), 0 0 12px rgb(255 210 122 / 45%); border-radius: 6px; }

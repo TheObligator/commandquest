@@ -321,13 +321,14 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
                   {...props.hover(c)}
                 >
                   <div
-                    className={["bf-card", n > 1 && "pile", c.sick && "sick", c.attacking && "attacking"].filter(Boolean).join(" ")}
+                    className={["bf-card", n > 1 && "pile", c.sick && "sick", c.attacking && "attacking", c.blocking && "blocking"].filter(Boolean).join(" ")}
                     style={{ "--n": Math.min(n, 4) } as React.CSSProperties}
                   >
                     <CardFace card={c} size={cw > 120 ? "normal" : "small"} knownFaceDown={c.faceDown && !c.hidden} />
                     <CardBadges card={c} />
                     {n > 1 && <span className="pile-count">×{n}</span>}
                   </div>
+                  {c.blocking && <span className="blk-badge" title={`Blocking ${c.blocking}`}>🛡 {c.blocking}</span>}
                   {c.attacking && <span className="atk-badge" title={`Attacking ${nameOf(c.attacking)}`}>⚔ {c.attacking === props.viewer ? "you" : nameOf(c.attacking)}</span>}
                 </div>
               );

@@ -226,6 +226,14 @@ public final class ViewJson {
             } else if (defender instanceof CardView cd && cd.getController() != null) {
                 o.put("attacking", id(cd.getController()));
             }
+            // Blocking (also while blockers are being declared): the attacker it blocks, by name.
+            for (CardView attacker : combat.getAttackers()) {
+                if (combat.getBlockers(attacker) != null && combat.getBlockers(attacker).contains(c)) {
+                    boolean seen = attacker.canBeShownTo(viewer) && !attacker.isFaceDown();
+                    o.put("blocking", seen ? attacker.getCurrentState().getName() : "a creature");
+                    break;
+                }
+            }
         }
         return o;
     }

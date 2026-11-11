@@ -315,6 +315,7 @@ export function TableBoard(props: {
             onPlay={props.hand.onPlay}
             onClick={props.hand.onClick}
             selectable={props.selectable}
+            chosen={props.chosen}
             playable={props.playable}
             onMenu={openMenu}
           />

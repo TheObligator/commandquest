@@ -36,6 +36,8 @@ export interface CardState {
   sick?: boolean;
   /** The player this creature is attacking. */
   attacking?: string;
+  /** The attacker this creature blocks (its name). */
+  blocking?: string;
 }
 
 export interface PlayerState {
@@ -101,6 +103,7 @@ export interface CardView {
   commander?: boolean;
   sick?: boolean;
   attacking?: string;
+  blocking?: string;
   /** For a face-down card: the players who may look at it. Public, even when the face is hidden. */
   visibleTo?: string[];
   /** Live games: kept from untapping by hand, during its next untap step or never. */
@@ -200,6 +203,7 @@ function redactFace(card: CardState, viewer: string): CardView {
     if (card.tapped) v.tapped = true;
     if (card.counters) v.counters = card.counters;
     if (card.attacking) v.attacking = card.attacking;
+    if (card.blocking) v.blocking = card.blocking;
   }
   return v;
 }
@@ -272,7 +276,7 @@ export interface Pile {
 
 function pileKey(c: CardView): string {
   if (c.hidden || c.commander) return `#${c.id}`;
-  return JSON.stringify([c.name, !!c.tapped, !!c.token, !!c.sick, c.power, c.toughness, c.counters ?? null, c.attacking ?? null]);
+  return JSON.stringify([c.name, !!c.tapped, !!c.token, !!c.sick, c.power, c.toughness, c.counters ?? null, c.attacking ?? null, c.blocking ?? null]);
 }
 
 /** Splits a battlefield into its three rows of piles, each row sorted by column. */

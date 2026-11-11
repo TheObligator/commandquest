@@ -17,6 +17,8 @@ export function HandBar(props: {
   onClick?: (id: number) => void;
   /** Cards that can be picked right now. */
   selectable?: Set<number>;
+  /** Cards chosen so far for the current prompt (e.g. to put on the bottom after a mulligan). */
+  chosen?: Set<number>;
   /** Cards you can use right now. */
   playable?: Set<number>;
   onMenu?: OpenMenu;
@@ -31,7 +33,7 @@ export function HandBar(props: {
           return (
             <button
               key={c.id}
-              className={`hand-card${selected ? " selected" : ""}${props.selectable?.has(c.id) ? " selectable" : ""}${!props.selecting && props.playable?.has(c.id) ? " playable" : ""}`}
+              className={`hand-card${selected ? " selected" : ""}${props.selectable?.has(c.id) ? " selectable" : ""}${props.chosen?.has(c.id) ? " chosen" : ""}${!props.selecting && props.playable?.has(c.id) ? " playable" : ""}`}
               data-card-ids={c.id}
               draggable={!props.selecting}
               aria-pressed={props.selecting ? selected : undefined}
