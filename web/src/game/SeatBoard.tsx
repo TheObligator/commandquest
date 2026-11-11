@@ -301,10 +301,19 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
             {piles.map((pile) => {
               const c = pile.cards[0];
               const n = pile.cards.length;
+              // A pile is several copies: while choosing, a click takes the next copy that can be
+              // chosen and isn't yet (all chosen: it un-chooses the last), so two clicks pick two.
+              const anySelectable = pile.cards.some((x) => props.selectable?.has(x.id));
+              const anyChosen = pile.cards.some((x) => props.chosen?.has(x.id));
+              const clickId = (() => {
+                if (!anySelectable && !anyChosen) return c.id;
+                const next = pile.cards.find((x) => props.selectable?.has(x.id) && !props.chosen?.has(x.id));
+                return next?.id ?? [...pile.cards].reverse().find((x) => props.chosen?.has(x.id))?.id ?? c.id;
+              })();
               return (
                 <div
                   key={pile.key}
-                  className={["slot", c.tapped && "tapped", props.selectable?.has(c.id) && "selectable", props.chosen?.has(c.id) && "chosen", props.playable?.has(c.id) && "playable"].filter(Boolean).join(" ")}
+                  className={["slot", c.tapped && "tapped", anySelectable && "selectable", anyChosen && "chosen", props.playable?.has(c.id) && "playable"].filter(Boolean).join(" ")}
                   style={{ gridColumn: pile.col + 1 }}
                   data-card-ids={pile.cards.map((x) => x.id).join(" ")}
                   draggable
@@ -316,7 +325,7 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
                   }}
                   onDragEnd={() => (setDrag(null), setDropAt(null))}
                   title={props.onCardClick ? `${c.name ?? "Face-down card"}: click to use or choose it, right-click for more, drag to move` : isMe && props.onTap ? `${c.name ?? "Face-down card"}: click to ${c.tapped ? "untap" : "tap"}, drag to move` : undefined}
-                  onClick={() => (props.onCardClick ? props.onCardClick(c.id) : isMe && props.onTap?.(c.id))}
+                  onClick={() => (props.onCardClick ? props.onCardClick(clickId) : isMe && props.onTap?.(c.id))}
                   onContextMenu={props.onMenu && ((e) => props.onMenu!(e, { kind: "card", card: c, where: "battlefield" }))}
                   {...props.hover(c)}
                 >
