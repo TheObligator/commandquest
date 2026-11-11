@@ -109,6 +109,66 @@ public final class ManualActions {
         return true;
     }
 
+    /**
+     * A manual action on your own library: {@code draw}, {@code mill} (to the graveyard),
+     * {@code exile} (face up) the top {@code n} cards, {@code revealTop} to {@code to}, or
+     * {@code shuffle}. Returns false if it doesn't apply (an empty library, say).
+     */
+    public boolean library(Game g, Player me, String action, int n, List<Player> to, Runnable after) {
+        int count = Math.max(1, Math.min(n, 99));
+        int size = me.getCardsIn(ZoneType.Library).size();
+        Runnable change = switch (action) {
+            case "draw" -> size > 0 ? () -> {
+                int drawn = me.drawCards(Math.min(count, size)).size();
+                log(g, me, "drew " + cards(drawn));
+            } : null;
+            case "mill", "exile" -> size > 0 ? () -> {
+                List<Card> top = new ArrayList<>(me.getCardsIn(ZoneType.Library).subList(0, Math.min(count, size)));
+                List<String> names = new ArrayList<>();
+                for (Card c : top) {
+                    Card moved = action.equals("mill")
+                            ? g.getAction().moveToGraveyard(c, null, AbilityKey.newMap())
+                            : g.getAction().moveTo(ZoneType.Exile, c, null, AbilityKey.newMap());
+                    if (moved != null) {
+                        names.add(moved.getName());
+                    }
+                }
+                String what = action.equals("mill") ? "milled " + cards(names.size()) : "exiled the top " + (names.size() == 1 ? "card" : names.size() + " cards") + " of their library";
+                log(g, me, what + ": " + String.join(", ", names));
+            } : null;
+            case "revealTop" -> size > 0 && to != null && !to.isEmpty() ? () -> {
+                Card top = me.getCardsIn(ZoneType.Library).get(0);
+                log(g, me, "revealed the top card of their library: " + top.getName());
+                g.getAction().revealTo(new CardCollection(top), to, me.getName() + " reveals the top of their library", true);
+            } : null;
+            case "shuffle" -> () -> {
+                me.shuffle(null);
+                log(g, me, "shuffled their library");
+            };
+            default -> null;
+        };
+        if (change == null) {
+            return false;
+        }
+        g.getAction().invoke(() -> {
+            try {
+                change.run();
+            } finally {
+                after.run();
+            }
+        });
+        return true;
+    }
+
+    /** Notes in the log that {@code me} searched their library ({@code top} 0) or looked at its top cards. */
+    public static void logLook(Game g, Player me, int top) {
+        log(g, me, top <= 0 ? "searched their library" : "looked at the top " + cards(top) + " of their library");
+    }
+
+    private static String cards(int n) {
+        return n == 1 ? "a card" : n + " cards";
+    }
+
     private static void move(Game g, Player me, Card card, ZoneType to, int libPosition, String what) {
         ZoneType from = g.getZoneOf(card) == null ? null : g.getZoneOf(card).getZoneType();
         boolean hidden = (from == ZoneType.Hand || from == ZoneType.Library) && (to == ZoneType.Hand || to == ZoneType.Library);

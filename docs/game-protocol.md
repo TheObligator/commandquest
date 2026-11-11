@@ -30,7 +30,7 @@ e.g. `goblin|R|1/1`); your tokens are tagged with it. If Forge doesn't know a
 card, the answer is an `error` that lists them.
 
 `freePlay` (default true) allows the things players do by hand at a paper table: `manual`,
-`counter` and `payFree`. When it's false those are refused with a `notice`, and only the cards' own
+`counter`, `payFree`, `library` and `libraryCards`. When it's false those are refused with a `notice`, and only the cards' own
 effects change the game. Free play only ever acts for the browser's own seat, never for AI seats.
 
 One game per user: starting another (or from another tab, which gets `{t:"replaced"}`) ends the
@@ -48,6 +48,7 @@ old one, and so does closing the socket. `MAX_GAMES` (default 4) caps games on t
 | `details` | Answer to `details` (below). Battlefield cards in `state` also carry `untapLock` (`next` or `never`) when kept from untapping by hand. |
 | `notice` | `message`: why your last card click did nothing (e.g. "You can only play a land in a main phase. It's your Upkeep now: press OK to move on."). Forge itself ignores such clicks silently. |
 | `actions` | Answer to `actions`: `{id, actions: [{ability, label, enabled}], reason?}`, everything the card can do in Forge's words, enabled if you can do it now, and `reason` when you can't do any of it. |
+| `libraryCards` | Answer to `libraryCards`: `{top, cards}`, your library's cards top first (all of it when `top` is 0), shown face up to you only. |
 | `error` | `message` to show. |
 | `pong` | Reply to `ping`. |
 
@@ -64,6 +65,8 @@ old one, and so does closing the socket. `MAX_GAMES` (default 4) caps games on t
 | `details` `{id}` | Forge's text for the card as you may see it (`CardDetailUtil.composeCardText`: rules text plus what's changed, like granted abilities). Answered with `details` `{id, text, sick, owner, commanderCasts?}`. |
 | `counter` `{id, type, delta}` | Manual override: put `delta` counters of `type` (Forge's counter name, e.g. `+1/+1`, `Loyalty`, `Charge`; letters, digits, `+ - /` and spaces, up to 24) on a permanent, or take them off when `delta` is negative (±99 at most). Outside the rules, on any permanent; the game log records it ("… (by hand)"). |
 | `payFree` | Free play only: pay the rest of the mana cost you're paying now (a prompt with `pay`) with nothing, for a card whose "without paying its mana cost" isn't scripted right. Other costs (tapping, sacrificing, life) are still asked for. Logged "… without paying its mana cost (by hand)" (`engine/Payment`). If nothing's being paid, the answer is a `notice`. |
+| `library` `{action, n?, to?}` | Free play, your own library, logged "(by hand)": `draw`, `mill` (to the graveyard) or `exile` the top `n` cards (1–99, default 1, names logged for mill and exile), `revealTop` to the player ids in `to`, or `shuffle`. If it doesn't apply (an empty library), the answer is a `notice`. |
+| `libraryCards` `{top, log?}` | Free play: list your library for you only (`top` 0: all of it, a search; else its top `top` cards). With `log`, the game log says you searched it or looked at the top cards; the client sends it when you open the list, and refreshes without it. Answered with `libraryCards`. Move a card out with `manual`, like any card you own. |
 | `yieldsOff` `{off}` | Disable all your auto-yields (or turn them back on) without forgetting them. |
 | `player` `{id}` | Click a player (targets, attacking a player). |
 | `answer` `{id, choice, text?}` | Answer `ask` `id`: `choice` is a list of option indexes (empty for none/cancel), `text` for a `text` question. |

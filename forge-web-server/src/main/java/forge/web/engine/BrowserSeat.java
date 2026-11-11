@@ -91,6 +91,13 @@ public final class BrowserSeat implements IRemote {
         return me;
     }
 
+    /** A card of yours shown face up to you (your library, while you search it). */
+    public ObjectNode revealedCard(CardView c) {
+        IGuiGame g = gui;
+        GameView gv = g == null ? null : g.getGameView();
+        return views.card(gv, c, me, true);
+    }
+
     public boolean freePlay() {
         return freePlay;
     }

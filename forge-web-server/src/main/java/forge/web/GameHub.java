@@ -147,6 +147,8 @@ public final class GameHub {
             case "yield" -> yieldTo(c, m.path("key").asText(""), m.path("autoYield"), m.path("decision").asText(null));
             case "manual" -> manual(c, m);
             case "payFree" -> payFree(c);
+            case "library" -> library(c, m);
+            case "libraryCards" -> libraryCards(c, m.path("top").asInt(0), m.path("log").asBoolean(false));
             case "details" -> details(c, m.path("id").asInt());
             case "counter" -> counter(c, m.path("id").asInt(), m.path("type").asText(""), m.path("delta").asInt());
             case "yieldsOff" -> act(c, ctl -> {
@@ -371,6 +373,70 @@ public final class GameHub {
             if (!seat.manual().run(g, me, card, action, to, seat::refresh)) {
                 notice(c, "That can't be done to this card where it is now.");
             }
+        });
+    }
+
+    /**
+     * A manual action on your own library (docs/game-protocol.md, {@code library}): draw, mill,
+     * exile, reveal the top card, shuffle. Free play only.
+     */
+    private void library(Conn c, JsonNode m) {
+        if (!freePlay(c)) {
+            return;
+        }
+        String action = m.path("action").asText("");
+        int n = m.path("n").asInt(1);
+        act(c, ctl -> {
+            Game g = game(c);
+            BrowserSeat seat = c.seat;
+            Player me = g == null || seat == null || seat.player() == null ? null : g.getPlayer(seat.player().getId());
+            if (me == null) {
+                return;
+            }
+            List<Player> to = new ArrayList<>();
+            for (JsonNode p : m.path("to")) {
+                Player other = g.getPlayer(p.asInt(-1));
+                if (other != null && other != me && !to.contains(other)) {
+                    to.add(other);
+                }
+            }
+            if (!seat.manual().library(g, me, action, n, to, seat::refresh)) {
+                notice(c, "That can't be done to your library now.");
+            }
+        });
+    }
+
+    /**
+     * Your library's cards, top first, shown only to you: all of them ({@code top} 0, a search)
+     * or the top {@code top}. Free play only. {@code log}: note it in the game log (when you open it,
+     * not when the list refreshes).
+     */
+    private void libraryCards(Conn c, int top, boolean log) {
+        if (!freePlay(c)) {
+            return;
+        }
+        act(c, ctl -> {
+            Game g = game(c);
+            BrowserSeat seat = c.seat;
+            Player me = g == null || seat == null || seat.player() == null ? null : g.getPlayer(seat.player().getId());
+            if (me == null) {
+                return;
+            }
+            List<Card> lib = new ArrayList<>(me.getCardsIn(forge.game.zone.ZoneType.Library));
+            if (top > 0) {
+                lib = lib.subList(0, Math.min(top, lib.size()));
+            }
+            ObjectNode o = msg("libraryCards");
+            o.put("top", top);
+            ArrayNode cards = o.putArray("cards");
+            for (Card card : lib) {
+                cards.add(seat.revealedCard(card.getView()));
+            }
+            if (log) {
+                ManualActions.logLook(g, me, top <= 0 ? 0 : lib.size());
+                seat.refresh();
+            }
+            send(c, o);
         });
     }
 

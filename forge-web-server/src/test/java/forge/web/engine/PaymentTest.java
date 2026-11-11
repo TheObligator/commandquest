@@ -83,6 +83,27 @@ public class PaymentTest {
                 : g.getAction().moveTo(zone, c, null, AbilityKey.newMap());
     }
 
+    /** Passes (and keeps the opening hand) until it's your first main phase with priority and an empty stack. */
+    static PlayerView untilMyMain(GameSession session, GameSessionTest.ScriptedBrowser browser) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + 120_000;
+        while (System.currentTimeMillis() < deadline) {
+            Object[] prompt = browser.buttonPrompts.poll(5, TimeUnit.SECONDS);
+            var gv = session.view();
+            if (prompt == null || browser.me == null || !browser.me.contains((PlayerView) prompt[0]) || gv == null) {
+                continue;
+            }
+            PlayerView me = (PlayerView) prompt[0];
+            IGameController ctl = session.controller("You", me);
+            if (me.equals(gv.getPlayerTurn()) && gv.getPhase() == PhaseType.MAIN1 && "OK".equals(prompt[1])
+                    && session.game().getStack().isEmpty()) {
+                return me;
+            }
+            FThreads.invokeInEdtLater(ctl::selectButtonOk);
+        }
+        Assert.fail("never reached your main phase");
+        return null;
+    }
+
     @Test(timeOut = 240_000)
     public void autoPayPrefersBasicsAndFreePlayPaysNothing() throws Exception {
         MyRandom.setRandom(new Random(3));
@@ -91,25 +112,8 @@ public class PaymentTest {
                 new GameSession.Seat("You", deck("Ezuri, Renegade Leader", "Forest"), browser),
                 new GameSession.Seat("AI 1", deck("Talrand, Sky Summoner", "Island"), null)));
         try {
-            // Pass (and keep the opening hand) until it's your first main phase with priority.
-            PlayerView meView = null;
-            IGameController ctl = null;
-            long deadline = System.currentTimeMillis() + 120_000;
-            while (System.currentTimeMillis() < deadline) {
-                Object[] prompt = browser.buttonPrompts.poll(5, TimeUnit.SECONDS);
-                var gv = session.view();
-                if (prompt == null || browser.me == null || !browser.me.contains((PlayerView) prompt[0]) || gv == null) {
-                    continue;
-                }
-                meView = (PlayerView) prompt[0];
-                ctl = session.controller("You", meView);
-                if (meView.equals(gv.getPlayerTurn()) && gv.getPhase() == PhaseType.MAIN1 && "OK".equals(prompt[1])
-                        && session.game().getStack().isEmpty()) {
-                    break;
-                }
-                FThreads.invokeInEdtLater(ctl::selectButtonOk);
-                meView = null;
-            }
+            PlayerView meView = untilMyMain(session, browser);
+            IGameController ctl = session.controller("You", meView);
             Assert.assertNotNull(meView, "reached your main phase");
             Game g = session.game();
             Player me = g.getPlayer(meView.getId());

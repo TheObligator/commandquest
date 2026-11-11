@@ -138,6 +138,11 @@ public final class ViewJson {
     }
 
     public ObjectNode card(GameView gv, CardView c, PlayerView viewer) {
+        return card(gv, c, viewer, false);
+    }
+
+    /** {@code revealed}: show its face to {@code viewer} anyway (your own library while you search it). */
+    public ObjectNode card(GameView gv, CardView c, PlayerView viewer, boolean revealed) {
         ObjectNode o = json.createObjectNode();
         o.put("id", c.getId());
         o.put("owner", id(c.getOwner()));
@@ -148,7 +153,7 @@ public final class ViewJson {
             o.put("faceDown", true);
         }
         CardStateView state = c.getCurrentState();
-        boolean seen = c.canBeShownTo(viewer) && (!c.isFaceDown() || c.canFaceDownBeShownTo(viewer));
+        boolean seen = revealed || c.canBeShownTo(viewer) && (!c.isFaceDown() || c.canFaceDownBeShownTo(viewer));
         if (seen) {
             CardStateView face = c.isFaceDown() && c.getAlternateState() != null ? c.getAlternateState() : state;
             o.put("name", face.getName());
