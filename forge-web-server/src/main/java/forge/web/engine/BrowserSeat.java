@@ -183,6 +183,7 @@ public final class BrowserSeat implements IRemote {
                 emit(msg("waiting"));
             }
             case finishGame, afterGameEnd -> {
+                lastPrompt = null; // nothing to answer any more (Forge then clears the prompt text)
                 pushState();
                 emit(msg("over"));
             }

@@ -169,8 +169,10 @@ export function useLiveGame() {
           case "state":
             setView(m.view as GameView);
             setStatus(m.view.gameOver ? "over" : "playing");
+            if (m.view.gameOver) setPrompt(null);
             break;
           case "prompt":
+            if (statusRef.current === "over") break; // the game has ended: nothing to answer
             setPrompt({ message: m.message, ok: m.ok, cancel: m.cancel, pay: m.pay });
             break;
           case "waiting":

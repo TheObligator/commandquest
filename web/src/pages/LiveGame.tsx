@@ -71,7 +71,7 @@ export function LiveGame() {
       {game.status === "over" && (
         <div className="live-banner">
           <strong>Game over.</strong>
-          <span className="muted">{game.view?.log.at(-1)}</span>
+          <span className="muted">{gameOverText(game.view?.log ?? [], game.view?.players[0]?.name ?? "")}</span>
           <span className="sb-spacer" />
           <button className="btn small" onClick={start} disabled={!deck}>Play again</button>
           <a className="btn small ghost" href="#/play">Back</a>
@@ -121,6 +121,14 @@ export function LiveGame() {
       )}
     </div>
   );
+}
+
+/** Who won, from Forge's game log ("AI 1 has won because all opponents have lost"). */
+function gameOverText(log: string[], me: string): string {
+  const line = [...log].reverse().find((l) => /\bhas won\b|\bhave won\b|\bdraw\b/i.test(l));
+  if (!line) return log.at(-1) ?? "";
+  if (me && line.startsWith(`${me} has won`)) return "You won" + line.slice(`${me} has won`.length);
+  return line.replace(/ has won/, " won");
 }
 
 const STATUS: Record<ReturnType<typeof useLiveGame>["status"], string> = {
