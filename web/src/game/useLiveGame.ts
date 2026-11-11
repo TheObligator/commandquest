@@ -114,6 +114,14 @@ export function useLiveGame() {
   const actionWaiters = useRef(new Map<number, ((a: CardActions) => void)[]>());
   const detailWaiters = useRef(new Map<number, ((d: CardDetails) => void)[]>());
   const [autoPass, setAutoPassState] = useState<AutoPassMode | null>(null);
+  // The server says when an auto-pass has ended (reached its step, or something needed you):
+  // light its button only while it's going.
+  const wasPassing = useRef(false);
+  useEffect(() => {
+    const passing = !!view?.autoPassing;
+    if (wasPassing.current && !passing) setAutoPassState(null);
+    wasPassing.current = passing;
+  }, [view?.autoPassing]);
   const ws = useRef<WebSocket | null>(null);
   const tokenRef = useRef(token);
   tokenRef.current = token;

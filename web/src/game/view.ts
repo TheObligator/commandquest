@@ -132,6 +132,8 @@ export interface GameView {
   viewer: string;
   /** Live games: you've turned off all your auto-yields. */
   autoYieldsOff?: boolean;
+  /** Live games: an auto-pass you started is still going (Forge ends it when it gets there, or when something needs you). */
+  autoPassing?: boolean;
   /** Free play is on in this game: manual overrides and paying mana costs with nothing. */
   freePlay?: boolean;
   /** Live games: your cards you can use right now (cast, play or activate). */

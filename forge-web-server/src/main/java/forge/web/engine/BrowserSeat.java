@@ -61,6 +61,8 @@ public final class BrowserSeat implements IRemote {
     private final ManualActions manual = new ManualActions();
     private volatile PlayerView me;
     private volatile String promptMessage = "";
+    /** The prompt last sent (null while waiting), to resend when its text arrives after its buttons. */
+    private volatile ObjectNode lastPrompt;
     private volatile String lastState;
     private volatile boolean closed;
     /** Free play (chosen when the game starts): manual overrides and paying mana costs with nothing. */
@@ -122,7 +124,23 @@ public final class BrowserSeat implements IRemote {
                 pushState();
             }
             case setGameView, applyDelta -> pushState();
-            case showPromptMessage -> promptMessage = a[1] == null ? "" : String.valueOf(a[1]);
+            case showPromptMessage -> {
+                if (a[0] != null && !a[0].equals(me)) {
+                    return;
+                }
+                String text = a[1] == null ? "" : String.valueOf(a[1]);
+                boolean changed = !text.equals(promptMessage);
+                promptMessage = text;
+                // Forge often sets a prompt's buttons before its text (yes/no questions, mulligans):
+                // resend the prompt so its buttons don't show with the previous question.
+                ObjectNode last = lastPrompt;
+                if (changed && last != null) {
+                    ObjectNode o = last.deepCopy();
+                    o.put("message", text);
+                    lastPrompt = o;
+                    emit(o);
+                }
+            }
             case updateButtons -> {
                 if (a[0] != null && !a[0].equals(me)) {
                     return;
@@ -133,9 +151,13 @@ public final class BrowserSeat implements IRemote {
                 o.set("ok", button((String) a[1], (Boolean) a[3]));
                 o.set("cancel", button((String) a[2], (Boolean) a[4]));
                 payment(o);
+                lastPrompt = o;
                 emit(o);
             }
-            case awaitNextInput -> emit(msg("waiting"));
+            case awaitNextInput -> {
+                lastPrompt = null;
+                emit(msg("waiting"));
+            }
             case finishGame, afterGameEnd -> {
                 pushState();
                 emit(msg("over"));
@@ -246,6 +268,8 @@ public final class BrowserSeat implements IRemote {
             return;
         }
         view.put("autoYieldsOff", ctl.getYieldController().getDisableAutoYields());
+        // An auto-pass (until end of turn, or until a step) is still going; Forge ends it when it gets there or something needs you.
+        view.put("autoPassing", ctl.getYieldController().isYieldActive());
         if (gv.getStack() == null) {
             return;
         }

@@ -589,7 +589,11 @@ public final class GameHub {
             }
             ctl.applyYieldUpdate(new YieldUpdate.ClearMarker(me));
             ctl.applyYieldUpdate(new YieldUpdate.SetAutoPassUntilEndOfTurn(me, false));
+            BrowserSeat seat = c.seat;
             if (mode == null || mode.equals("null")) {
+                if (seat != null) {
+                    seat.refresh();
+                }
                 return;
             }
             Player active = g.getPhaseHandler().getPlayerTurn();
@@ -604,6 +608,9 @@ public final class GameHub {
                     ctl.applyYieldUpdate(new YieldUpdate.SetMarker(before.getView(), PhaseType.END_OF_TURN, false));
                 }
                 default -> { }
+            }
+            if (seat != null) {
+                seat.refresh(); // the view's autoPassing
             }
         });
     }
