@@ -489,3 +489,11 @@ table.hotkeys { width: 100%; border-collapse: collapse; }
 }
 .sent .auth-form { justify-self: stretch; }
 .signin-code { font: 600 1.2rem ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 3px; text-transform: uppercase; }
+
+/* "The site has been updated" popup (UpdateNotice, production only; staging reloads itself) */
+.update-notice {
+  position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 120;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center;
+  background: var(--panel-2); border: 1px solid var(--accent); border-radius: var(--radius);
+  padding: 12px 16px; box-shadow: var(--shadow); width: max-content; max-width: calc(100vw - 32px);
+}
