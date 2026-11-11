@@ -62,6 +62,8 @@ public final class BrowserSeat implements IRemote {
     private volatile PlayerView me;
     private volatile String promptMessage = "";
     private volatile String lastState;
+    /** The prompt on screen now (null while Forge isn't waiting on its buttons), for {@link #replay()}. */
+    private volatile String lastPrompt;
     private volatile boolean closed;
     /** An ability picked from the browser's card menu: answers Forge's "which ability?" for that click. */
     private volatile Preferred preferred;
@@ -70,7 +72,7 @@ public final class BrowserSeat implements IRemote {
     }
 
     /** A question waiting for the browser, with how to turn its answer into Forge's value. */
-    private record Pending(CompletableFuture<Object> answer, List<?> options, GuiGameEvent ev) {
+    private record Pending(CompletableFuture<Object> answer, List<?> options, GuiGameEvent ev, ObjectNode ask) {
     }
 
     public BrowserSeat(ObjectMapper json, Consumer<String> sink) {
@@ -115,10 +117,17 @@ public final class BrowserSeat implements IRemote {
                 o.put("message", promptMessage);
                 o.set("ok", button((String) a[1], (Boolean) a[3]));
                 o.set("cancel", button((String) a[2], (Boolean) a[4]));
-                emit(o);
+                lastPrompt = encode(o);
+                if (lastPrompt != null) {
+                    emitRaw(lastPrompt);
+                }
             }
-            case awaitNextInput -> emit(msg("waiting"));
+            case awaitNextInput -> {
+                lastPrompt = null;
+                emit(msg("waiting"));
+            }
             case finishGame, afterGameEnd -> {
+                lastPrompt = null;
                 pushState();
                 emit(msg("over"));
             }
@@ -250,6 +259,21 @@ public final class BrowserSeat implements IRemote {
         pushState();
     }
 
+    /**
+     * Everything a freshly connected browser needs to carry on (after a reload or reconnect): the
+     * view, the prompt on screen, and every question still waiting for an answer.
+     */
+    public void replay() {
+        refresh();
+        String prompt = lastPrompt;
+        if (prompt != null) {
+            emitRaw(prompt);
+        }
+        pending.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(e -> emit(e.getValue().ask()));
+    }
+
     private static final List<ZoneType> PLAYABLE_ZONES =
             List.of(ZoneType.Hand, ZoneType.Battlefield, ZoneType.Command, ZoneType.Graveyard, ZoneType.Exile);
 
@@ -365,7 +389,7 @@ public final class BrowserSeat implements IRemote {
         o.put("max", max);
         int id = askIds.incrementAndGet();
         o.put("id", id);
-        Pending p = new Pending(new CompletableFuture<>(), options, ev);
+        Pending p = new Pending(new CompletableFuture<>(), options, ev, o);
         pending.put(id, p);
         pushState();
         emit(o);
@@ -524,10 +548,18 @@ public final class BrowserSeat implements IRemote {
     }
 
     private void emit(ObjectNode o) {
+        String s = encode(o);
+        if (s != null) {
+            emitRaw(s);
+        }
+    }
+
+    private String encode(ObjectNode o) {
         try {
-            emitRaw(json.writeValueAsString(o));
+            return json.writeValueAsString(o);
         } catch (Exception e) {
             Logger.warn(e, "Couldn't encode a message");
+            return null;
         }
     }
 
