@@ -183,7 +183,7 @@ function CommandTile(props: {
                 aria-label={onCast ? `Cast ${card.name ?? "your commander"}` : card.name}
                 {...hover(card)}
               >
-                <CardFace card={card} size="small" knownFaceDown={card.faceDown && !card.hidden} />
+                <CardFace card={card} knownFaceDown={card.faceDown && !card.hidden} />
                 <CardBadges card={card} />
                 {card.commander && <CostOverlay card={card} />}
               </Tag>
@@ -224,7 +224,7 @@ function ZoneTile(props: {
       <div className="zt-card" data-card-ids={card?.id}>
         {card ? (
           <>
-            <CardFace card={card} size="small" knownFaceDown={card.faceDown && !card.hidden} />
+            <CardFace card={card} knownFaceDown={card.faceDown && !card.hidden} />
             <CardBadges card={card} />
           </>
         ) : props.back ? (
