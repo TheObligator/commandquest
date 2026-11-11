@@ -218,6 +218,24 @@ export function cachedPrinting(set: string, collectorNumber: string): ScryCard |
   return undefined;
 }
 
+/** A cached printing of this card from this set (any collector number). */
+export function cachedInSet(name: string, set: string): ScryCard | undefined {
+  const s = set.toLowerCase();
+  const n = name.toLowerCase();
+  for (const c of byId.values()) {
+    if (c.set === s && (c.name.toLowerCase() === n || c.card_faces?.[0]?.name.toLowerCase() === n)) return c;
+  }
+  return undefined;
+}
+
+/** The cached card for exactly the printing a deck entry asks for (id, set + number, or set), else by name. */
+export function cachedExact(card: DeckCard): ScryCard | undefined {
+  if (card.scryfallId) return byId.get(card.scryfallId);
+  if (card.set && card.collectorNumber) return cachedPrinting(card.set, card.collectorNumber);
+  if (card.set) return cachedInSet(card.name, card.set);
+  return byName.get(card.name.toLowerCase());
+}
+
 // ---- Endpoints ----------------------------------------------------------------
 
 /** Full-text Scryfall search (supports Scryfall syntax like `t:dragon c:r`). */
@@ -267,20 +285,24 @@ export async function printings(name: string): Promise<ScryCard[]> {
   return res.cards;
 }
 
-type Identifier = { id: string } | { set: string; collector_number: string } | { name: string };
+type Identifier = { id: string } | { set: string; collector_number: string } | { name: string; set?: string };
 
 function identifier(c: DeckCard): Identifier {
   if (c.scryfallId) return { id: c.scryfallId };
   if (c.set && c.collectorNumber) return { set: c.set.toLowerCase(), collector_number: c.collectorNumber };
-  return { name: c.name };
+  // Scryfall's collection lookup doesn't know split cards' "A // B" names, only "A".
+  const name = c.name.split(" // ")[0];
+  if (c.set) return { name, set: c.set.toLowerCase() };
+  return { name };
 }
 
 /**
  * Looks up card data for a decklist (75 cards per request, Scryfall's limit). Returns the names of
- * cards Scryfall didn't recognise. Results are cached, so call `cached()` afterwards.
+ * cards Scryfall didn't recognise. Results are cached, so call `cachedExact()` (falling back to
+ * `cached()` for printings Scryfall didn't know) afterwards.
  */
 export async function resolve(cards: DeckCard[]): Promise<string[]> {
-  const todo = cards.filter((c) => !cached(c));
+  const todo = cards.filter((c) => !cachedExact(c));
   const unique = new Map<string, DeckCard>();
   for (const c of todo) unique.set(JSON.stringify(identifier(c)), c);
   const list = [...unique.values()];
@@ -297,7 +319,7 @@ export async function resolve(cards: DeckCard[]): Promise<string[]> {
     for (const nf of data.not_found) {
       const card = batch.find((c) => JSON.stringify(identifier(c)) === JSON.stringify(nf));
       // A stale printing: try again by name (batched, below).
-      if (card && !("name" in nf)) retry.push({ ...card, scryfallId: undefined, set: undefined, collectorNumber: undefined });
+      if (card && ("set" in nf || "id" in nf)) retry.push({ ...card, scryfallId: undefined, set: undefined, collectorNumber: undefined });
       else missing.push(card?.name ?? ("name" in nf ? nf.name : "?"));
     }
   }

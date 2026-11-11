@@ -31,6 +31,7 @@ export function DeckList() {
 
   const actions = (
     <div className="actions">
+      <a href="#/decks/precons" className="btn ghost">Browse precons</a>
       <a href="#/decks/new?import=1" className="btn ghost">Import deck</a>
       <a href="#/decks/new" className="btn">+ New deck</a>
     </div>
@@ -47,7 +48,7 @@ export function DeckList() {
       ) : decks.length === 0 ? (
         <div className="empty card">
           <h3>No decks yet</h3>
-          <p>Start from scratch, or bring a list over from Moxfield, Archidekt or a text file.</p>
+          <p>Start from scratch, copy a preconstructed deck, or bring a list over from Moxfield, Archidekt or a text file.</p>
           {actions}
         </div>
       ) : (

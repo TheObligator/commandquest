@@ -59,6 +59,12 @@ in the browser (`src/scryfall.ts` keeps requests under Scryfall's rate limit). D
 parsing and export live in `src/decklist.ts`, and format rules in `src/formats/`. These modules have
 no React or DOM imports, so `npm test` covers them directly.
 
+The precon decks players can copy into their account (`#/decks/precons`) come from Forge's
+`forge-gui/res/quest/commanderprecons/` and `quest/precons/` deck files, dated by
+`forge-gui/res/editions/`. `npm run precons` turns them into `web/public/precons.json`, which is
+committed because CI checks out only `web/`. After merging upstream Forge, run it and commit the
+result; `npm test` fails locally while the file is out of date.
+
 ## Opening the dev client from another machine (Tailscale)
 
 Both servers listen on loopback only. To reach the client from another device on your tailnet,

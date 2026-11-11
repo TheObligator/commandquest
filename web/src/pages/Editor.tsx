@@ -110,7 +110,7 @@ function DeckEditor({ initial }: { initial: Draft }) {
     setDeck((d) => {
       let changed = false;
       const next = d.cards.map((c) => {
-        const s = scry.cached(c);
+        const s = scry.cachedExact(c) ?? scry.cached(c);
         if (!s) return c;
         const out = { ...c };
         if (out.name !== scry.deckName(s)) (out.name = scry.deckName(s)), (changed = true);

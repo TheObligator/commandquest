@@ -167,6 +167,18 @@ label.inline select { width: auto; padding: 5px 8px; }
 .deck-meta h3 { margin: 0 0 4px; font-size: 1.05rem; }
 .deck-meta p { margin: 0; }
 
+/* ---- Precons ---- */
+.precon-search { width: min(360px, 100%); }
+.precon-tabs { margin-bottom: 12px; max-width: 420px; }
+.precon-tile:hover { transform: none; }
+.precon-cover { display: block; width: 100%; border: 0; padding: 0; cursor: pointer; color: var(--muted); }
+.precon-set { display: grid; place-items: center; height: 100%; font-size: 1.6rem; font-weight: 700; letter-spacing: .1em; }
+.precon-actions { margin-top: 10px; }
+.precon-dialog .dialog-head { align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.precon-dialog .dialog-head p { margin: 2px 0 0; }
+.precon-list { overflow-y: auto; min-height: 0; flex: 1; padding-right: 6px; }
+.precon-list .board:first-of-type { margin-top: 0; }
+
 /* ---- Editor ---- */
 .editor-head {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
