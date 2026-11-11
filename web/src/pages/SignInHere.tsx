@@ -29,7 +29,8 @@ export function SignInHere({ link, onDone }: { link: { pair: string; code: strin
     setError("");
     try {
       // Convex Auth's sign-in with a link's code (what it does by itself on a link's page).
-      await (signIn as (provider: string | undefined, params: { code: string }) => Promise<unknown>)(undefined, { code: link.code });
+      const r = await (signIn as (provider: string | undefined, params: { code: string }) => Promise<{ signingIn: boolean }>)(undefined, { code: link.code });
+      if (!r.signingIn) throw new Error("code not accepted");
       onDone();
       navigate("/decks", true);
     } catch (err) {

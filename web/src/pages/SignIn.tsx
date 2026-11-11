@@ -43,7 +43,8 @@ export function SignIn() {
     const pair = waiting.pair;
     void (async () => {
       try {
-        await (signIn as (provider: string | undefined, params: { code: string }) => Promise<unknown>)(undefined, { code: handedCode });
+        const r = await (signIn as (provider: string | undefined, params: { code: string }) => Promise<{ signingIn: boolean }>)(undefined, { code: handedCode });
+        if (!r.signingIn) setError("That sign-in link has expired or was already used. Ask for a new one.");
       } catch (err) {
         setError("That sign-in link has expired or was already used. Ask for a new one.");
         console.warn(errorMessage(err));
