@@ -61,15 +61,31 @@ test("battlefield rows: creatures, other permanents, lands; identical cards pile
   assert.deepEqual(creatures.map((p) => p.cards.map((c) => c.id)), [[2, 4]]);
   assert.deepEqual(others.map((p) => p.cards.map((c) => c.id)), [[3]]);
   // A tapped Forest isn't piled with untapped ones.
-  assert.deepEqual(lands.map((p) => p.cards.map((c) => c.id)), [[1], [5], [6]]);
+  assert.deepEqual(lands.map((p) => p.cards.map((c) => c.id)), [[1, 6], [5]]);
 });
 
-test("moving cards to another row and position, and pruning cards that left", () => {
+test("moving cards to any cell; a taken cell swaps; new cards fill the first free cell", () => {
   const cards = [card(1, "A"), card(2, "B"), card(3, "Sol Ring", { types: ["Artifact"] })].map((c) => redact(c, "me"));
-  let arr = moveCards(cards, {}, [3], 0, 2); // the artifact into the creature row, before B
-  assert.deepEqual(arrange(cards, arr)[0].map((p) => p.cards[0].id), [1, 3, 2]);
+  const ids = (r: ReturnType<typeof arrange>[number]) => r.map((p) => [p.cards[0].id, p.col]);
+  assert.deepEqual(ids(arrange(cards, {})[0]), [[1, 0], [2, 1]]);
+  let arr = moveCards(cards, {}, [3], 0, 4); // the artifact into the creature row, with a gap
+  assert.deepEqual(ids(arrange(cards, arr)[0]), [[1, 0], [2, 1], [3, 4]]);
   assert.equal(arrange(cards, arr)[1].length, 0);
-  arr = moveCards(cards, arr, [1], 2); // A to the end of the lands row
-  assert.deepEqual(arrange(cards, arr)[2].map((p) => p.cards[0].id), [1]);
-  assert.deepEqual(Object.keys(prune(arr, cards.slice(1))).map(Number).sort(), [2, 3]);
+  arr = moveCards(cards, arr, [3], 0, 0); // onto A: they swap
+  assert.deepEqual(ids(arrange(cards, arr)[0]), [[3, 0], [2, 1], [1, 4]]);
+  // A new creature takes the first free cell, without moving anything.
+  const more = [...cards, redact(card(4, "C"), "me")];
+  assert.deepEqual(ids(arrange(more, arr)[0]), [[3, 0], [2, 1], [4, 2], [1, 4]]);
+  // Played from hand onto a taken cell: the card there moves right to the next free cell.
+  arr = moveCards(more, arr, [9], 0, 1);
+  assert.deepEqual(arr[9], { row: 0, col: 1 });
+  assert.deepEqual(arr[2], { row: 0, col: 3 });
+  assert.deepEqual(Object.keys(prune(arr, cards.slice(1), [9])).map(Number).sort(), [2, 3, 9]);
+});
+
+test("a new copy of a card joins its pile wherever that pile was moved", () => {
+  const goblin = (id: number) => redact(card(id, "Goblin", { token: true }), "me");
+  const arr = moveCards([goblin(1)], {}, [1], 0, 3);
+  const [row] = arrange([goblin(1), goblin(2)], arr);
+  assert.deepEqual(row.map((p) => [p.col, p.cards.map((c) => c.id)]), [[3, [1, 2]]]);
 });

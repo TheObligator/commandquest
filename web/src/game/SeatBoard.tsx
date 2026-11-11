@@ -2,11 +2,13 @@
 // along the bottom-left their zones as card tiles: library (a card back), top of graveyard, top of
 // exile and the commander, each labelled with its count, plus how many cards they hold.
 //
-// Cards shrink to fit the seat so a board never scrolls until cards would get unreadably small.
-// You can drag cards to another row or position on any board; that only changes your own view.
+// The three battlefield rows share the board's height, and each is a grid of cells (one card or
+// pile per cell, so nothing overlaps). Cards shrink to fit so a board never scrolls until they'd
+// get unreadably small. You can drag cards to any cell on any board; that only changes your view.
 import { useLayoutEffect, useRef, useState } from "react";
 import { CardBack, CardBadges, CardFace, CostOverlay, previewFor, usePreview } from "./cards";
-import { arrange, moveCards, ROW_LABELS, type Arrangement, type CardView, type Pile, type PlayerView, type Row } from "./view";
+import type { OpenMenu } from "./TableBoard";
+import { arrange, moveCards, ROW_LABELS, usedCols, type Arrangement, type CardView, type Pile, type PlayerView, type Row } from "./view";
 
 export type ZoneName = "graveyard" | "exile" | "command" | "library";
 
@@ -23,33 +25,23 @@ export const setDrag = (d: DragData | null) => (currentDrag = d);
 const MIN_CW = 34;
 const ROW_GAP = 6;
 const CARD_GAP = 5;
-const unitsOf = (p: Pile) => (p.cards[0].tapped ? 1.4 : 1) + Math.min(p.cards.length - 1, 3) * 0.08;
+/** Free cells kept at the end of each row, to drop cards into. */
+const SPARE = 1;
 
 /**
- * Picks the card width that fits every row in the box. In `line` mode (short seats) the three
- * groups sit side by side and may wrap onto a few lines.
+ * Picks the card width that fits every row in the box: each row gets a third of the height and
+ * room for its rightmost card plus a spare cell. In `line` mode (short seats) the three rows sit
+ * side by side, one line each.
  */
 function fitWidth(rows: Pile[][], w: number, h: number, max: number, line = false): number {
+  const cols = rows.map((r) => usedCols(r) + SPARE);
+  let cw: number;
   if (line) {
-    const piles = rows.flat();
-    if (!piles.length) return max;
-    const units = piles.reduce((s, p) => s + unitsOf(p), 0);
-    const gaps = CARD_GAP * piles.length + 16 * 2;
-    let best = 0;
-    for (let lines = 1; lines <= 4; lines++) {
-      const byHeight = (h - ROW_GAP * (lines - 1)) / (lines * 1.4);
-      const byWidth = ((w * lines - gaps) / units) * (lines > 1 ? 0.9 : 1); // wrapping wastes some room
-      best = Math.max(best, Math.min(byHeight, byWidth));
-    }
-    return Math.max(MIN_CW, Math.min(max, Math.floor(best)));
-  }
-  const filled = rows.filter((r) => r.length);
-  const empties = rows.length - filled.length;
-  if (!filled.length) return max;
-  let cw = (h - ROW_GAP * (rows.length - 1) - empties * 14) / (filled.length * 1.4);
-  for (const r of filled) {
-    const units = r.reduce((s, p) => s + unitsOf(p), 0);
-    cw = Math.min(cw, (w - CARD_GAP * (r.length - 1)) / units);
+    const total = cols.reduce((a, b) => a + b, 0);
+    cw = Math.min(h / 1.4, (w - CARD_GAP * total - 16 * 2) / total);
+  } else {
+    cw = (h - ROW_GAP * 2) / 3 / 1.4;
+    for (const n of cols) cw = Math.min(cw, (w - CARD_GAP * (n - 1)) / n);
   }
   return Math.max(MIN_CW, Math.min(max, Math.floor(cw)));
 }
@@ -79,6 +71,9 @@ export function SeatBoard(props: {
   onPlayerClick?: (playerId: string) => void;
   /** Cards that can be picked right now. */
   selectable?: Set<number>;
+  /** Your cards you can use right now. */
+  playable?: Set<number>;
+  onMenu?: OpenMenu;
 }) {
   const { player: p, viewer, nameOf, colorOf } = props;
   const isMe = p.id === viewer;
@@ -99,11 +94,11 @@ export function SeatBoard(props: {
     >
       <header className="sb-head">
         {props.onPlayerClick ? (
-          <button className="sb-name sb-pick" onClick={() => props.onPlayerClick?.(p.id)} title={`Choose ${isMe ? "yourself" : p.name}`}>
+          <button className="sb-name sb-pick" data-player-id={p.id} onClick={() => props.onPlayerClick?.(p.id)} title={`Choose ${isMe ? "yourself" : p.name}`}>
             {isMe ? `${p.name} (you)` : p.name}
           </button>
         ) : (
-          <span className="sb-name">{isMe ? `${p.name} (you)` : p.name}</span>
+          <span className="sb-name" data-player-id={p.id}>{isMe ? `${p.name} (you)` : p.name}</span>
         )}
         <span className="sb-life" title="Life">{p.life}</span>
         {p.poison > 0 && <span className="sb-poison" title="Poison counters">☠ {p.poison}</span>}
@@ -127,12 +122,17 @@ export function SeatBoard(props: {
             <i className="mini-card" aria-hidden />
             {p.handCount}
           </span>
-          <ZoneTile label="Lib" count={p.libraryCount} back={p.libraryCount > 0} hint={`Library: ${p.libraryCount} cards`} />
+          <ZoneTile label="Lib" count={p.libraryCount} back={p.libraryCount > 0} hint={`Library: ${p.libraryCount} cards`}
+            onMenu={props.onMenu && ((e) => props.onMenu!(e, { kind: "zone", owner: p.id, zone: "library" }))} />
           <ZoneTile label="GY" count={p.graveyard.length} card={top(p.graveyard)} hover={hover}
-            onClick={() => props.onOpenZone(p.id, "graveyard")} title="See the graveyard" />
+            onClick={() => props.onOpenZone(p.id, "graveyard")} title="See the graveyard"
+            onMenu={props.onMenu && ((e) => props.onMenu!(e, { kind: "zone", owner: p.id, zone: "graveyard" }))} />
           <ZoneTile label="Exile" count={p.exile.length} card={top(p.exile)} hover={hover}
-            onClick={() => props.onOpenZone(p.id, "exile")} title="See exiled cards" />
-<CommandTile
+            onClick={() => props.onOpenZone(p.id, "exile")} title="See exiled cards"
+            onMenu={props.onMenu && ((e) => props.onMenu!(e, { kind: "zone", owner: p.id, zone: "exile" }))} />
+          <CommandTile
+            onMenu={props.onMenu}
+            playable={props.playable}
             cards={p.command.some((c) => c.commander) ? p.command.filter((c) => c.commander) : p.command.slice(-1)}
             tax={p.commanderCasts ? 2 * p.commanderCasts : 0}
             hover={hover}
@@ -150,6 +150,8 @@ function CommandTile(props: {
   tax: number;
   hover: (c: CardView) => { onMouseEnter: () => void; onMouseLeave: () => void };
   onCast?: (id: number) => void;
+  onMenu?: OpenMenu;
+  playable?: Set<number>;
 }) {
   const { cards, tax, hover, onCast } = props;
   return (
@@ -165,8 +167,10 @@ function CommandTile(props: {
             return (
               <Tag
                 key={card.id}
-                className="zt-card"
+                className={`zt-card${props.playable?.has(card.id) ? " playable" : ""}`}
+                data-card-ids={card.id}
                 onClick={onCast ? () => onCast(card.id) : undefined}
+                onContextMenu={props.onMenu && ((e: React.MouseEvent) => props.onMenu!(e, { kind: "card", card, where: "command" }))}
                 title={onCast ? `Cast ${card.name ?? "your commander"}` : card.name}
                 {...hover(card)}
               >
@@ -196,18 +200,19 @@ function ZoneTile(props: {
   onClick?: () => void;
   title?: string;
   hint?: string;
+  onMenu?: (e: React.MouseEvent) => void;
 }) {
   const { card } = props;
   const Tag = props.onClick ? "button" : "div";
   return (
-    <Tag className="zone-tile" onClick={props.onClick} title={props.title ?? props.hint} {...(card && props.hover ? props.hover(card) : {})}>
+    <Tag className="zone-tile" onClick={props.onClick} onContextMenu={props.onMenu} title={props.title ?? props.hint} {...(card && props.hover ? props.hover(card) : {})}>
       <span className="zt-label">
         {props.label}
         {props.count !== undefined && <b>{props.count}</b>}
         {props.extra && <b className="zt-extra">{props.extra}</b>}
         {props.onClick && props.label !== "Cmd" && <i aria-hidden>⌄</i>}
       </span>
-      <div className="zt-card">
+      <div className="zt-card" data-card-ids={card?.id}>
         {card ? (
           <>
             <CardFace card={card} size="small" knownFaceDown={card.faceDown && !card.hidden} />
@@ -228,7 +233,7 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
   const rows = arrange(p.battlefield, arrangement);
   const ref = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 600, h: 300 });
-  const [dropAt, setDropAt] = useState<{ row: Row; before?: number } | null>(null);
+  const [dropAt, setDropAt] = useState<{ row: Row; col: number } | null>(null);
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -240,71 +245,87 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
 
   const cw = fitWidth(rows, box.w, box.h, props.maxCard, props.line);
   const accepts = (d: DragData | null) => !!d && ((d.from === "battlefield" && d.seat === p.id) || (d.from === "hand" && isMe));
+  /** The cell under the pointer in a row's grid. */
+  const cellAt = (e: React.DragEvent, el: HTMLElement) => {
+    const x = e.clientX - el.getBoundingClientRect().left - 4;
+    return Math.max(0, Math.floor((x + CARD_GAP / 2) / (cw + CARD_GAP)));
+  };
 
   const onDrop = (e: React.DragEvent, row: Row) => {
     const d = currentDrag;
+    const col = cellAt(e, e.currentTarget as HTMLElement);
     setDropAt(null);
     if (!accepts(d) || !d) return;
     e.preventDefault();
+    // A card from hand lands in the cell you dropped it on once it's in play.
+    props.onArrange(moveCards(p.battlefield, arrangement, d.ids, row, col));
     if (d.from === "hand") props.onPlayFromHand?.(d.ids[0]);
-    else props.onArrange(moveCards(p.battlefield, arrangement, d.ids, row, dropAt?.row === row ? dropAt.before : undefined));
   };
 
   return (
-    <div ref={ref} className={`battlefield${props.line ? " line" : ""}${cw <= MIN_CW ? " cramped" : ""}`} style={{ "--cw": `${cw}px` } as React.CSSProperties}>
-      {rows.map((piles, r) => (
-        <div
-          key={r}
-          className={`bf-row${piles.length ? "" : " empty"}${dropAt?.row === r ? " drop" : ""}`}
-          data-label={ROW_LABELS[r]}
-          onDragOver={(e) => {
-            if (!accepts(currentDrag)) return;
-            e.preventDefault();
-            if (dropAt?.row !== r || (e.target as HTMLElement) === e.currentTarget) setDropAt({ row: r as Row, before: (e.target as HTMLElement) === e.currentTarget ? undefined : dropAt?.before });
-          }}
-          onDragLeave={(e) => {
-            if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropAt(null);
-          }}
-          onDrop={(e) => onDrop(e, r as Row)}
-        >
-          {piles.map((pile) => {
-            const c = pile.cards[0];
-            const n = pile.cards.length;
-            return (
-              <div
-                key={pile.key}
-                className={["slot", c.tapped && "tapped", props.selectable?.has(c.id) && "selectable", dropAt?.row === r && dropAt.before === c.id && "drop-before"].filter(Boolean).join(" ")}
-                draggable
-                onDragStart={(e) => {
-                  const d: DragData = { from: "battlefield", seat: p.id, ids: pile.cards.map((x) => x.id) };
-                  setDrag(d);
-                  e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(d));
-                  e.dataTransfer.effectAllowed = "move";
-                }}
-                onDragEnd={() => (setDrag(null), setDropAt(null))}
-                onDragOver={(e) => {
-                  if (!accepts(currentDrag)) return;
-                  e.preventDefault();
-                  if (dropAt?.row !== r || dropAt.before !== c.id) setDropAt({ row: r as Row, before: c.id });
-                }}
-                title={props.onCardClick ? `${c.name ?? "Face-down card"}: click to use or choose it, drag to move` : isMe && props.onTap ? `${c.name ?? "Face-down card"}: click to ${c.tapped ? "untap" : "tap"}, drag to move` : undefined}
-                onClick={() => (props.onCardClick ? props.onCardClick(c.id) : isMe && props.onTap?.(c.id))}
-                {...props.hover(c)}
-              >
+    <div
+      ref={ref}
+      className={`battlefield${props.line ? " line" : ""}${cw <= MIN_CW ? " cramped" : ""}`}
+      style={{ "--cw": `${cw}px` } as React.CSSProperties}
+      onContextMenu={props.onMenu && ((e) => props.onMenu!(e, { kind: "board", owner: p.id }))}
+    >
+      {rows.map((piles, r) => {
+        const cols = usedCols(piles) + SPARE;
+        return (
+          <div
+            key={r}
+            className={`bf-row${piles.length ? "" : " empty"}${dropAt?.row === r ? " drop" : ""}`}
+            data-label={ROW_LABELS[r]}
+            style={{ "--cols": cols, flexGrow: props.line ? cols : undefined } as React.CSSProperties}
+            onDragOver={(e) => {
+              if (!accepts(currentDrag)) return;
+              e.preventDefault();
+              const col = cellAt(e, e.currentTarget);
+              if (dropAt?.row !== r || dropAt.col !== col) setDropAt({ row: r as Row, col });
+            }}
+            onDragLeave={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropAt(null);
+            }}
+            onDrop={(e) => onDrop(e, r as Row)}
+          >
+            {dropAt?.row === r && <div className="bf-ghost" style={{ gridColumn: dropAt.col + 1 }} aria-hidden />}
+            {piles.map((pile) => {
+              const c = pile.cards[0];
+              const n = pile.cards.length;
+              return (
                 <div
-                  className={["bf-card", n > 1 && "pile", c.sick && "sick", c.attacking && "attacking"].filter(Boolean).join(" ")}
-                  style={{ "--n": Math.min(n, 4) } as React.CSSProperties}
+                  key={pile.key}
+                  className={["slot", c.tapped && "tapped", props.selectable?.has(c.id) && "selectable", props.playable?.has(c.id) && "playable"].filter(Boolean).join(" ")}
+                  style={{ gridColumn: pile.col + 1 }}
+                  data-card-ids={pile.cards.map((x) => x.id).join(" ")}
+                  draggable
+                  onDragStart={(e) => {
+                    const d: DragData = { from: "battlefield", seat: p.id, ids: pile.cards.map((x) => x.id) };
+                    setDrag(d);
+                    e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(d));
+                    e.dataTransfer.effectAllowed = "move";
+                  }}
+                  onDragEnd={() => (setDrag(null), setDropAt(null))}
+                  title={props.onCardClick ? `${c.name ?? "Face-down card"}: click to use or choose it, right-click for more, drag to move` : isMe && props.onTap ? `${c.name ?? "Face-down card"}: click to ${c.tapped ? "untap" : "tap"}, drag to move` : undefined}
+                  onClick={() => (props.onCardClick ? props.onCardClick(c.id) : isMe && props.onTap?.(c.id))}
+                  onContextMenu={props.onMenu && ((e) => props.onMenu!(e, { kind: "card", card: c, where: "battlefield" }))}
+                  {...props.hover(c)}
                 >
-                  <CardFace card={c} size={cw > 120 ? "normal" : "small"} knownFaceDown={c.faceDown && !c.hidden} />
-                  <CardBadges card={c} />
-                  {n > 1 && <span className="pile-count">×{n}</span>}
+                  <div
+                    className={["bf-card", n > 1 && "pile", c.sick && "sick", c.attacking && "attacking"].filter(Boolean).join(" ")}
+                    style={{ "--n": Math.min(n, 4) } as React.CSSProperties}
+                  >
+                    <CardFace card={c} size={cw > 120 ? "normal" : "small"} knownFaceDown={c.faceDown && !c.hidden} />
+                    <CardBadges card={c} />
+                    {n > 1 && <span className="pile-count">×{n}</span>}
+                  </div>
+                  {c.attacking && <span className="atk-badge" title={`Attacking ${nameOf(c.attacking)}`}>⚔ {c.attacking === props.viewer ? "you" : nameOf(c.attacking)}</span>}
                 </div>
-                {c.attacking && <span className="atk-badge" title={`Attacking ${nameOf(c.attacking)}`}>⚔ {c.attacking === props.viewer ? "you" : nameOf(c.attacking)}</span>}
-              </div>
-            );
-          })}
-        </div>
-      ))}
+              );
+            })}
+          </div>
+        );
+      })}
     </div>
   );
 }

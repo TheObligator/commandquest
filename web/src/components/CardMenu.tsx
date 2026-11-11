@@ -10,6 +10,10 @@ export interface MenuItem {
   /** Keep the menu open after choosing (for + / − quantity steps). */
   keepOpen?: boolean;
   disabled?: boolean;
+  /** Right-click menus: small buttons at the end of the row (e.g. + and − for a counter). Choosing the row itself does `onSelect`. */
+  steppers?: { label: string; title: string; onSelect: () => void }[];
+  /** Right-click menus: a menu that opens beside this item (e.g. "Reveal to ▸"). */
+  submenu?: MenuItem[];
 }
 
 export interface MenuSection {

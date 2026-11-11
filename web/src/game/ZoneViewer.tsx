@@ -4,9 +4,20 @@
 import { useEffect, useRef } from "react";
 import { closeOnBackdrop } from "../carddetails";
 import { CardBadges, CardFace, faceDownNote, usePreview } from "./cards";
+import type { OpenMenu } from "./TableBoard";
 import type { CardView } from "./view";
 
-export function ZoneViewer(props: { title: string; cards: CardView[]; viewer: string; nameOf: (id: string) => string; onClose: () => void }) {
+export function ZoneViewer(props: {
+  title: string;
+  cards: CardView[];
+  viewer: string;
+  nameOf: (id: string) => string;
+  onClose: () => void;
+  /** Live games: click a card to use it (flashback, escape, commander…). */
+  onCardClick?: (id: number) => void;
+  playable?: Set<number>;
+  onMenu?: OpenMenu;
+}) {
   const ref = useRef<HTMLDialogElement>(null);
   const setPreview = usePreview();
   useEffect(() => {
@@ -29,7 +40,14 @@ export function ZoneViewer(props: { title: string; cards: CardView[]; viewer: st
           {cards.map((c) => {
             const note = faceDownNote(c, props.viewer, props.nameOf);
             return (
-              <figure key={c.id} onMouseEnter={() => setPreview({ card: c, note })} onMouseLeave={() => setPreview(null)}>
+              <figure
+                key={c.id}
+                className={props.playable?.has(c.id) ? "playable" : undefined}
+                onMouseEnter={() => setPreview({ card: c, note })}
+                onMouseLeave={() => setPreview(null)}
+                onContextMenu={props.onMenu ? (e) => props.onMenu!(e, { kind: "card", card: c, where: "zone" }) : undefined}
+                onClick={props.onCardClick && props.playable?.has(c.id) ? () => props.onCardClick!(c.id) : undefined}
+              >
                 <div className="zv-card">
                   <CardFace card={c} knownFaceDown={c.faceDown && !c.hidden} />
                   <CardBadges card={c} />

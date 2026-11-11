@@ -1,13 +1,13 @@
-// Left side of the table: the stack, the hovered card, the decision the game wants from you and
+// Left side of the table: the decision the game wants from you and
 // quick auto-pass skips. (The log is under the phase strip, on the right.)
 import { useEffect, useRef } from "react";
 import type { HotkeyAction } from "./hotkeys";
 import { Kbd, useHotkeys } from "./useHotkeys";
-import { CardBack, cardImage, tokenImage, usePreview, type Preview } from "./cards";
+import type { Preview } from "./cards";
 import type { AutoPassMode } from "./phases";
 import { stepLabel } from "./sim";
 import type { SimGame } from "./useSimGame";
-import { commanderTax, type GameView } from "./view";
+import { commanderTax } from "./view";
 
 export const AUTO_PASS: { mode: AutoPassMode; label: string; key: HotkeyAction; title: string }[] = [
   { mode: "END_OF_TURN", label: "End of turn", key: "autoEndOfTurn", title: "Skip the rest of this turn. Your stops apply again next turn." },
@@ -23,22 +23,9 @@ export function ActionRail(props: {
   preview: Preview | null;
   onError: (msg: string) => void;
 }) {
-  const { sim, nameOf, colorOf, preview } = props;
-  const v = sim.view;
+  const { sim } = props;
   return (
     <aside className="action-rail">
-
-      <section className="ar-stack">
-        <header>
-          <h3>Stack</h3>
-          <span className="ar-sub">{v.stack.length ? `${v.stack.length} item${v.stack.length > 1 ? "s" : ""} · top first` : "empty"}</span>
-        </header>
-        <StackList view={v} nameOf={nameOf} colorOf={colorOf} />
-      </section>
-
-      <section className="ar-preview" aria-live="polite">
-        {preview ? <PreviewCard p={preview} /> : <p className="ar-sub">Hover a card to see it here.</p>}
-      </section>
 
       {/* At the bottom, by your hand: the decision, then the skips. */}
       <Decision {...props} />
@@ -146,50 +133,6 @@ function Decision({ sim, nameOf, bottomIds, onError }: Parameters<typeof ActionR
         ))}
       </div>
     </section>
-  );
-}
-
-export function StackList({ view, nameOf, colorOf }: { view: GameView; nameOf: (id: string) => string; colorOf: (id: string) => string }) {
-  const setPreview = usePreview();
-  if (!view.stack.length) return null;
-  return (
-    <ol className="stack-list">
-      {[...view.stack].reverse().map((s, i) => (
-        <li
-          key={s.id}
-          className={i === 0 ? "top" : undefined}
-          style={{ "--seat": colorOf(s.controller) } as React.CSSProperties}
-          onMouseEnter={() => s.card && setPreview({ card: s.card })}
-          onMouseLeave={() => setPreview(null)}
-        >
-          {s.card && (tokenImage(s.card) ?? cardImage(s.card.name, "small")) && <img src={tokenImage(s.card) ?? cardImage(s.card.name, "small")} alt="" />}
-          <div>
-            <strong>{s.name}</strong>
-            <span>{s.kind} · {s.controller === view.viewer ? "you" : nameOf(s.controller)}</span>
-          </div>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-export function PreviewCard({ p }: { p: Preview }) {
-  const src = p.card.hidden ? undefined : p.card.token ? tokenImage(p.card) : cardImage(p.card.name, "normal");
-  return (
-    <figure>
-      {p.card.hidden ? (
-        <div className="ar-preview-back"><CardBack /></div>
-      ) : src ? (
-        <img src={src} alt={p.card.name} />
-      ) : (
-        <div className="ar-preview-token">
-          <strong>{p.card.name}</strong>
-          <span>{p.card.token ? "Token " : ""}{p.card.types?.join(" ")}</span>
-          {p.card.power !== undefined && <span className="big">{p.card.power}/{p.card.toughness}</span>}
-        </div>
-      )}
-      {p.note && <figcaption>{p.note}</figcaption>}
-    </figure>
   );
 }
 

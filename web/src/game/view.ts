@@ -58,6 +58,10 @@ export interface StackItem {
   name: string;
   /** "Spell", "Triggered ability", … */
   kind: string;
+  /** Its rules text as it is on the stack (live games: Forge's, with the chosen targets). */
+  text?: string;
+  /** What it targets: cards (by id) and players. */
+  targets?: { label: string; cardId?: number; playerId?: string }[];
 }
 
 export interface GameState {
@@ -97,6 +101,8 @@ export interface CardView {
   attacking?: string;
   /** For a face-down card: the players who may look at it. Public, even when the face is hidden. */
   visibleTo?: string[];
+  /** Live games: kept from untapping by hand, during its next untap step or never. */
+  untapLock?: "next" | "never";
 }
 
 export interface PlayerView extends PlayerState {
@@ -113,10 +119,21 @@ export interface PlayerView extends PlayerState {
 
 export interface StackItemView extends StackItem {
   card?: CardView;
+  /** Live games, abilities only: Forge's key for "this ability of this card", for auto-yield. */
+  yieldKey?: string;
+  /** You pass priority on this ability (and later ones of the same card) automatically. */
+  autoYield?: boolean;
+  /** Your optional ("you may") trigger: whether Forge asks, or always says yes or no. */
+  optional?: boolean;
+  decision?: "ASK" | "ACCEPT" | "DECLINE";
 }
 
 export interface GameView {
   viewer: string;
+  /** Live games: you've turned off all your auto-yields. */
+  autoYieldsOff?: boolean;
+  /** Live games: your cards you can use right now (cast, play or activate). */
+  playable?: number[];
   /** In turn order, starting with the viewer. */
   players: PlayerView[];
   stack: StackItemView[];
@@ -208,8 +225,11 @@ export function viewFor(state: GameState, viewer: string): GameView {
 
 // ---- Battlefield layout -----------------------------------------------------------------------
 //
-// Each battlefield has three rows: creatures, other permanents, lands. A player can drag cards to
-// another row or position; that's only their own view of the table, so it never goes to the server.
+// Each battlefield has three rows (creatures, other permanents, lands), and each row is a grid of
+// cells, one card (or pile of identical cards) per cell, so cards never overlap. A new card goes in
+// the first free cell of its default row, or onto a pile of identical cards there. A player can
+// drag cards to any cell of any row; that's only their own view of the table, so it never goes to
+// the server.
 
 export type Row = 0 | 1 | 2;
 export const ROW_LABELS = ["Creatures", "Artifacts · enchantments · planeswalkers", "Lands"] as const;
@@ -221,59 +241,96 @@ export function defaultRow(c: CardView): Row {
   return 1;
 }
 
+/** A card's cell: row and column (0 is the left edge). */
 export interface Placement {
   row: Row;
-  pos: number;
+  col: number;
 }
-/** Manual placements by card id. Cards without one go in their default row, after placed cards. */
+/** Manual placements by card id. Cards without one go in the first free cell of their default row. */
 export type Arrangement = Record<number, Placement>;
 
-/** Identical cards next to each other in a row, shown as one pile. */
+/** Identical cards in one cell, shown as one pile. */
 export interface Pile {
   key: string;
+  col: number;
   cards: CardView[];
 }
 
 function pileKey(c: CardView): string {
   if (c.hidden || c.commander) return `#${c.id}`;
-  return JSON.stringify([c.name, !!c.tapped, !!c.token, !!c.sick, c.power, c.toughness, c.counters ?? null]);
+  return JSON.stringify([c.name, !!c.tapped, !!c.token, !!c.sick, c.power, c.toughness, c.counters ?? null, c.attacking ?? null]);
 }
 
-/** Splits a battlefield into its three rows of piles. */
+/** Splits a battlefield into its three rows of piles, each row sorted by column. */
 export function arrange(cards: CardView[], arr: Arrangement): [Pile[], Pile[], Pile[]] {
-  const placed = cards.map((c, i) => ({ c, p: arr[c.id] ?? { row: defaultRow(c), pos: 1e6 + i } }));
-  const rows: [Pile[], Pile[], Pile[]] = [[], [], []];
-  for (const row of [0, 1, 2] as Row[]) {
-    const inRow = placed.filter((x) => x.p.row === row).sort((a, b) => a.p.pos - b.p.pos);
-    for (const { c } of inRow) {
-      const key = pileKey(c);
-      const last = rows[row][rows[row].length - 1];
-      if (last && pileKey(last.cards[0]) === key) last.cards.push(c);
-      else rows[row].push({ key: `${key}@${c.id}`, cards: [c] });
+  const cells: Map<number, Pile>[] = [new Map(), new Map(), new Map()];
+  const put = (row: Row, from: number, c: CardView) => {
+    const key = pileKey(c);
+    for (let col = Math.max(0, Math.floor(from)); ; col++) {
+      const there = cells[row].get(col);
+      if (!there) {
+        cells[row].set(col, { key: `${key}@${c.id}`, col, cards: [c] });
+        return;
+      }
+      if (pileKey(there.cards[0]) === key) {
+        there.cards.push(c);
+        return;
+      }
     }
+  };
+  const unplaced: CardView[] = [];
+  for (const c of cards) {
+    const p = arr[c.id];
+    if (p) put(p.row, p.col, c);
+    else unplaced.push(c);
   }
-  return rows;
+  for (const c of unplaced) {
+    const row = defaultRow(c);
+    const key = pileKey(c);
+    const pile = [...cells[row].values()].find((x) => pileKey(x.cards[0]) === key);
+    if (pile) pile.cards.push(c);
+    else put(row, 0, c);
+  }
+  return cells.map((m) => [...m.values()].sort((a, b) => a.col - b.col)) as [Pile[], Pile[], Pile[]];
 }
+
+/** Columns a row needs: up to its rightmost card. */
+export const usedCols = (row: Pile[]) => (row.length ? row[row.length - 1].col + 1 : 0);
 
 /**
- * Moves cards to `row`, before the pile holding `beforeId` (or to the end). Returns a new
- * arrangement that pins every card in the target row to its new position.
+ * Moves cards (a pile from the battlefield, or a card played from hand) to a cell. Every card on
+ * this battlefield is pinned where it is now, so nothing else shifts. If the cell is taken, its
+ * cards swap to where the moved cards came from (or, coming from the hand, move one cell right).
  */
-export function moveCards(cards: CardView[], arr: Arrangement, ids: number[], row: Row, beforeId?: number): Arrangement {
+export function moveCards(cards: CardView[], arr: Arrangement, ids: number[], row: Row, col: number): Arrangement {
   const rows = arrange(cards, arr);
   const moving = new Set(ids);
-  const order = rows[row].flatMap((p) => p.cards.map((c) => c.id)).filter((id) => !moving.has(id));
-  let at = beforeId === undefined || moving.has(beforeId) ? -1 : order.indexOf(beforeId);
-  if (at < 0) at = order.length;
-  order.splice(at, 0, ...ids);
   const next: Arrangement = { ...arr };
-  order.forEach((id, pos) => (next[id] = { row, pos }));
+  let from: Placement | undefined;
+  let occupant: Pile | undefined;
+  rows.forEach((piles, r) => {
+    for (const pile of piles) {
+      for (const c of pile.cards) next[c.id] = { row: r as Row, col: pile.col };
+      if (pile.cards.some((c) => moving.has(c.id))) from ??= { row: r as Row, col: pile.col };
+      else if (r === row && pile.col === col) occupant = pile;
+    }
+  });
+  col = Math.max(0, Math.floor(col));
+  for (const id of ids) next[id] = { row, col };
+  if (occupant) {
+    let to: Placement = from ?? { row, col: col + 1 };
+    if (!from) {
+      const taken = new Set(rows[row].filter((p) => p !== occupant).map((p) => p.col));
+      while (taken.has(to.col)) to = { row, col: to.col + 1 };
+    }
+    for (const c of occupant.cards) next[c.id] = to;
+  }
   return next;
 }
 
-/** Drops placements for cards that left the battlefield, so a card that comes back starts fresh. */
-export function prune(arr: Arrangement, cards: CardView[]): Arrangement {
-  const here = new Set(cards.map((c) => c.id));
+/** Drops placements for cards that left the battlefield (keeping `keep`, e.g. cards being played from hand). */
+export function prune(arr: Arrangement, cards: CardView[], keep: Iterable<number> = []): Arrangement {
+  const here = new Set([...cards.map((c) => c.id), ...keep]);
   const next: Arrangement = {};
   for (const [id, p] of Object.entries(arr)) if (here.has(Number(id))) next[Number(id)] = p;
   return next;

@@ -2,6 +2,7 @@
 // play it. While choosing cards to put on the bottom after a mulligan, clicking selects instead.
 import { CardFace, CostOverlay, PTOverlay, previewFor, usePreview } from "./cards";
 import { DRAG_TYPE, setDrag, type DragData } from "./SeatBoard";
+import type { OpenMenu } from "./TableBoard";
 import type { CardView } from "./view";
 
 export function HandBar(props: {
@@ -16,6 +17,9 @@ export function HandBar(props: {
   onClick?: (id: number) => void;
   /** Cards that can be picked right now. */
   selectable?: Set<number>;
+  /** Cards you can use right now. */
+  playable?: Set<number>;
+  onMenu?: OpenMenu;
 }) {
   const setPreview = usePreview();
   return (
@@ -27,10 +31,11 @@ export function HandBar(props: {
           return (
             <button
               key={c.id}
-              className={`hand-card${selected ? " selected" : ""}${props.selectable?.has(c.id) ? " selectable" : ""}`}
+              className={`hand-card${selected ? " selected" : ""}${props.selectable?.has(c.id) ? " selectable" : ""}${!props.selecting && props.playable?.has(c.id) ? " playable" : ""}`}
+              data-card-ids={c.id}
               draggable={!props.selecting}
               aria-pressed={props.selecting ? selected : undefined}
-              title={props.selecting ? "Put this on the bottom" : props.onClick ? `${c.name}: click to play or choose it` : `${c.name}: drag to your board or double-click to play`}
+              title={props.selecting ? "Put this on the bottom" : props.onClick ? `${c.name}: click or drag to your board to play it, right-click for more` : `${c.name}: drag to your board or double-click to play`}
               onDragStart={(e) => {
                 const d: DragData = { from: "hand", seat: props.viewer, ids: [c.id] };
                 setDrag(d);
@@ -41,6 +46,7 @@ export function HandBar(props: {
               onDragEnd={() => setDrag(null)}
               onClick={() => (props.selecting ? props.onToggleSelect(c.id) : props.onClick?.(c.id))}
               onDoubleClick={() => !props.selecting && !props.onClick && props.onPlay(c.id)}
+              onContextMenu={props.onMenu && !props.selecting ? (e) => props.onMenu!(e, { kind: "card", card: c, where: "hand" }) : undefined}
               onMouseEnter={() => setPreview(previewFor(c, props.viewer, props.nameOf))}
               onMouseLeave={() => setPreview(null)}
             >

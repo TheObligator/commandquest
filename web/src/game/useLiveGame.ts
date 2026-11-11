@@ -46,6 +46,31 @@ export interface LiveAsk {
   numeric?: boolean;
 }
 
+/** One thing a card can do (Forge's wording), from the game server's `actions` answer. */
+export interface CardAction {
+  ability: number;
+  label: string;
+  enabled: boolean;
+}
+export interface CardActions {
+  actions: CardAction[];
+  /** Why nothing can be done with it right now, when that's the case. */
+  reason?: string;
+}
+
+/** Forge's own text for a card (rules text plus what's changed in this game), from `details`. */
+export interface CardDetails {
+  text?: string;
+  sick?: boolean;
+  owner?: string;
+  commanderCasts?: number;
+}
+
+/** Manual overrides from a card's menu (the server checks they're your cards). */
+export type ManualAction =
+  | "tap" | "untap" | "faceDown" | "faceUp" | "skipUntap" | "neverUntap" | "untapNormally" | "tokenCopy"
+  | "toBattlefield" | "toHand" | "toGraveyard" | "toExile" | "toCommand" | "toLibraryTop" | "toLibraryBottom" | "reveal";
+
 export type LiveStatus = "connecting" | "signing-in" | "ready" | "starting" | "playing" | "over" | "offline";
 
 export interface DeckPayload {
@@ -63,6 +88,10 @@ export function useLiveGame() {
   const [prompt, setPrompt] = useState<LivePrompt | null>(null);
   const [ask, setAsk] = useState<LiveAsk | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Why the last click did nothing (a `notice`), with a counter so the same text shows again. */
+  const [notice, setNotice] = useState<{ message: string; n: number } | null>(null);
+  const actionWaiters = useRef(new Map<number, ((a: CardActions) => void)[]>());
+  const detailWaiters = useRef(new Map<number, ((d: CardDetails) => void)[]>());
   const [autoPass, setAutoPassState] = useState<AutoPassMode | null>(null);
   const ws = useRef<WebSocket | null>(null);
   const tokenRef = useRef(token);
@@ -115,6 +144,21 @@ export function useLiveGame() {
             setError("You started a game somewhere else, so this one ended.");
             setStatus("over");
             break;
+          case "notice":
+            setNotice((n) => ({ message: m.message, n: (n?.n ?? 0) + 1 }));
+            break;
+          case "actions": {
+            const waiters = actionWaiters.current.get(m.id) ?? [];
+            actionWaiters.current.delete(m.id);
+            for (const w of waiters) w({ actions: m.actions ?? [], reason: m.reason });
+            break;
+          }
+          case "details": {
+            const waiters = detailWaiters.current.get(m.id) ?? [];
+            detailWaiters.current.delete(m.id);
+            for (const w of waiters) w({ text: m.text, sick: m.sick, owner: m.owner, commanderCasts: m.commanderCasts });
+            break;
+          }
           case "error":
             setError(m.message);
             if (statusRef.current === "starting") setStatus("ready");
@@ -150,6 +194,7 @@ export function useLiveGame() {
     prompt,
     ask,
     error,
+    notice,
     autoPass,
     signedIn: !!token,
     clearError: () => setError(null),
@@ -165,6 +210,50 @@ export function useLiveGame() {
     ok: () => send({ t: "ok" }),
     cancel: () => send({ t: "cancel" }),
     clickCard: (id: number) => send({ t: "card", id }),
+    /** What this card can do right now (for its right-click menu). */
+    actions(id: number): Promise<CardActions> {
+      return new Promise((resolve) => {
+        const list = actionWaiters.current.get(id) ?? [];
+        list.push(resolve);
+        actionWaiters.current.set(id, list);
+        send({ t: "actions", id });
+        window.setTimeout(() => {
+          const l = actionWaiters.current.get(id);
+          if (l?.includes(resolve)) {
+            actionWaiters.current.set(id, l.filter((x) => x !== resolve));
+            resolve({ actions: [], reason: "The game server didn't answer." });
+          }
+        }, 5000);
+      });
+    },
+    /** Auto-yield to an ability on the stack (by its `yieldKey`), and for an optional trigger, always yes / no / ask. */
+    setYield(key: string, change: { autoYield?: boolean; decision?: "ASK" | "ACCEPT" | "DECLINE" }) {
+      send({ t: "yield", key, ...change });
+    },
+    /** Forge's text for a card, for its details view. */
+    details(id: number): Promise<CardDetails> {
+      return new Promise((resolve) => {
+        const list = detailWaiters.current.get(id) ?? [];
+        list.push(resolve);
+        detailWaiters.current.set(id, list);
+        send({ t: "details", id });
+        window.setTimeout(() => {
+          const l = detailWaiters.current.get(id);
+          if (l?.includes(resolve)) {
+            detailWaiters.current.set(id, l.filter((x) => x !== resolve));
+            resolve({});
+          }
+        }, 5000);
+      });
+    },
+    /** Manual override on one of your cards; `to`: player ids to reveal to. */
+    manual: (id: number, action: ManualAction, to?: string[]) => send({ t: "manual", id, action, to: to?.map(Number) }),
+    /** Manual override: put counters on a permanent (`delta` < 0 takes them off). Logged in the game log. */
+    counter: (id: number, type: string, delta: number) => send({ t: "counter", id, type, delta }),
+    /** Turn all your auto-yields off (or back on) without forgetting them. */
+    setYieldsOff: (off: boolean) => send({ t: "yieldsOff", off }),
+    /** Use one of the card's abilities (from `actions`). */
+    useAbility: (id: number, a: CardAction) => send({ t: "ability", id, ability: a.ability, label: a.label }),
     clickPlayer: (id: string) => send({ t: "player", id: Number(id) }),
     concede: () => send({ t: "concede" }),
     answer(id: number, choice: number[] | null, text?: string) {

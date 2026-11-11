@@ -7,12 +7,14 @@ import { useRoute } from "../app/router";
 import { toast } from "../dom";
 import { useCardData } from "../game/cards";
 import { LiveRail } from "../game/LiveRail";
-import { LayoutPicker, TableBoard, useStored, useTableStops, type LayoutId } from "../game/TableBoard";
+import { LayoutPicker, TableBoard, useStored, useTableStops, type LayoutId, type MenuPart, type MenuTarget } from "../game/TableBoard";
 import { useHotkeys } from "../game/useHotkeys";
 import { useLiveGame, type DeckPayload } from "../game/useLiveGame";
 import { tokenArtMap } from "../tokens";
 import { useDeckTokens } from "../useDeckTokens";
-import type { GameView } from "../game/view";
+import type { CardView, GameView } from "../game/view";
+import type { MenuSection } from "../components/CardMenu";
+import { CounterDialog } from "../game/CounterDialog";
 
 export function LiveGame() {
   const { query } = useRoute();
@@ -31,6 +33,11 @@ export function LiveGame() {
       game.clearError();
     }
   }, [game.error]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Why a click did nothing (e.g. a land in your upkeep), from the game server.
+  useEffect(() => {
+    if (game.notice) toast(game.notice.message);
+  }, [game.notice]);
 
   const start = () => {
     if (!deck) return;
@@ -143,9 +150,120 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
   // paying mana or choosing targets, are left alone.
   const castFrom = useRef<number | null>(null);
   const castDone = useRef(false);
+  // A double-click is two clicks: the second would hit the card again once it's in play (and tap a
+  // land you just played for mana). One click per card per half second.
+  const lastClick = useRef({ id: -1, at: 0 });
   const click = (id: number) => {
+    const now = performance.now();
+    if (lastClick.current.id === id && now - lastClick.current.at < 500) return;
+    lastClick.current = { id, at: now };
     castFrom.current ??= view.stack.length;
     game.clickCard(id);
+  };
+  const playable = useMemo(() => new Set(game.prompt && isPriorityPrompt(game.prompt) && !game.ask ? view.playable ?? [] : []), [view.playable, game.prompt, game.ask]);
+
+  // Right-click menus. Forge's abilities for the card (enabled when you can use them now), then
+  // the things players do by hand at a paper table: tap, counters, move it to another zone…
+  const [counterFor, setCounterFor] = useState<CardView | null>(null);
+  const me = view.viewer;
+  const opponents = view.players.slice(1);
+
+  /** A counter row: "+1/+1 (2)" with + and − buttons. Counters work on any permanent. */
+  const counterRow = (card: CardView, kind: string): MenuSection["items"][number] => {
+    const n = card.counters?.[kind] ?? 0;
+    return {
+      label: `${kind === "Loyalty" ? "Loyalty" : kind}${n ? ` (${n})` : ""}`,
+      keepOpen: true,
+      onSelect: () => game.counter(card.id, kind, 1),
+      steppers: [
+        { label: "+", title: `Add a ${kind} counter`, onSelect: () => game.counter(card.id, kind, 1) },
+        { label: "−", title: `Remove a ${kind} counter`, onSelect: () => n > 0 && game.counter(card.id, kind, -1) },
+      ],
+    };
+  };
+
+  const moves = (card: CardView): MenuSection["items"] => {
+    const go = (action: Parameters<typeof game.manual>[1]) => () => game.manual(card.id, action);
+    const items: MenuSection["items"] = [];
+    if (card.zone !== "battlefield") items.push({ label: "Put onto the battlefield", onSelect: go("toBattlefield") });
+    if (card.zone !== "hand") items.push({ label: card.zone === "battlefield" ? "Return to hand" : "Put into hand", onSelect: go("toHand") });
+    if (card.zone !== "graveyard") items.push({ label: "Put into graveyard", onSelect: go("toGraveyard") });
+    if (card.zone !== "exile") items.push({ label: "Exile", onSelect: go("toExile") });
+    if (card.zone !== "command") items.push({ label: "Command zone", onSelect: go("toCommand") });
+    items.push({ label: "On top of library", onSelect: go("toLibraryTop") });
+    items.push({ label: "On the bottom of library", onSelect: go("toLibraryBottom") });
+    return items;
+  };
+
+  /** Reveal to ▸ Everyone (the only choice 1v1), or one opponent. */
+  const revealItem = (card: CardView): MenuSection["items"][number] => ({
+    label: "👁 Reveal to",
+    onSelect: () => {},
+    submenu: [
+      { label: "Everyone", onSelect: () => game.manual(card.id, "reveal", opponents.map((p) => p.id)) },
+      ...(opponents.length > 1 ? opponents.map((p) => ({ label: p.name, onSelect: () => game.manual(card.id, "reveal", [p.id]) })) : []),
+    ],
+  });
+
+  const manualSection = (card: CardView): MenuSection => {
+    const mine = (card.zone === "battlefield" ? card.controller : card.owner) === me;
+    const items: MenuSection["items"] = [];
+    if (card.zone === "battlefield") {
+      if (mine) {
+        items.push({ label: card.tapped ? "Untap" : "Tap", onSelect: () => game.manual(card.id, card.tapped ? "untap" : "tap") });
+        items.push({ label: card.faceDown ? "Turn face up" : "Turn face down", onSelect: () => game.manual(card.id, card.faceDown ? "faceUp" : "faceDown") });
+      }
+      const kinds = ["+1/+1", ...(card.counters?.["-1/-1"] ? ["-1/-1"] : []), ...(card.types?.includes("Planeswalker") ? ["Loyalty"] : [])];
+      for (const k of Object.keys(card.counters ?? {})) if (!kinds.includes(k)) kinds.push(k);
+      for (const k of kinds) items.push(counterRow(card, k));
+      if (mine) {
+        if (card.untapLock) {
+          items.push({ label: "🔓 Untaps normally", onSelect: () => game.manual(card.id, "untapNormally") });
+        }
+        if (card.untapLock !== "next" && card.untapLock !== "never") items.push({ label: "🔒 Doesn't untap next turn", onSelect: () => game.manual(card.id, "skipUntap") });
+        if (card.untapLock !== "never") items.push({ label: "🔒 Never untaps by itself", onSelect: () => game.manual(card.id, "neverUntap") });
+      }
+      items.push({ label: "Counter…", onSelect: () => setCounterFor(card), steppers: [] });
+      if (mine) items.push({ label: "Create a token copy", onSelect: () => game.manual(card.id, "tokenCopy") });
+      if (mine) items.push(...moves(card));
+    } else if (mine) {
+      if (card.zone === "hand") items.push(revealItem(card));
+      items.push(...moves(card));
+    }
+    return { items };
+  };
+
+  const menuFor = (t: MenuTarget): MenuPart | Promise<MenuPart> => {
+    const passing: MenuPart["sections"] = [
+      {
+        title: "Priority",
+        items: [
+          { label: game.prompt?.ok.label && game.prompt.ok.label !== "OK" ? game.prompt.ok.label : "Pass priority (OK)", disabled: !game.prompt?.ok.enabled, onSelect: ok },
+          { label: "Pass until end of turn", onSelect: () => game.setAutoPass("END_OF_TURN") },
+          { label: "Pass until my turn", onSelect: () => game.setAutoPass("BEFORE_MY_TURN") },
+        ],
+      },
+    ];
+    if (t.kind !== "card") return { sections: passing };
+    const card = t.card;
+    if (card.hidden) return { sections: card.zone === "battlefield" ? [manualSection(card)] : [] };
+    return game.actions(card.id).then(({ actions, reason }) => ({
+      sections: [
+        {
+          title: actions.length ? "Abilities" : undefined,
+          items: actions.map((a) => ({
+            label: a.label,
+            disabled: !a.enabled,
+            onSelect: () => {
+              castFrom.current ??= view.stack.length;
+              game.useAbility(card.id, a);
+            },
+          })),
+        },
+        manualSection(card),
+      ],
+      note: actions.length && !actions.some((a) => a.enabled) ? reason : undefined,
+    }));
   };
   const stepKey = `${view.turn}|${view.step}`;
   useEffect(() => {
@@ -187,6 +305,14 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
   const colorOf = (id: string) => seatOf(id)?.color ?? "#888";
 
   return (
+    <>
+    {counterFor && (
+      <CounterDialog
+        card={counterFor}
+        onClose={() => setCounterFor(null)}
+        onApply={(type, delta) => game.counter(counterFor.id, type, delta)}
+      />
+    )}
     <TableBoard
       view={view}
       layout={layout}
@@ -197,7 +323,31 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
       onCardClick={click}
       onPlayerClick={game.clickPlayer}
       onCastCommander={click}
+      playable={playable}
+      menuFor={menuFor}
+      detailsFor={game.details}
+      stackItemMenu={(s) => {
+        const tick = (on: boolean | undefined, label: string) => `${on ? "✓ " : ""}${label}`;
+        const key = s.yieldKey;
+        return [
+          {
+            items: key
+              ? [
+                  { label: tick(s.autoYield, "Auto-yield"), onSelect: () => game.setYield(key, { autoYield: !s.autoYield }) },
+                  ...(s.optional
+                    ? [
+                        { label: tick(s.decision === "ACCEPT", "Always Yes"), onSelect: () => game.setYield(key, { decision: s.decision === "ACCEPT" ? "ASK" : "ACCEPT" }) },
+                        { label: tick(s.decision === "DECLINE", "Always No"), onSelect: () => game.setYield(key, { decision: s.decision === "DECLINE" ? "ASK" : "DECLINE" }) },
+                      ]
+                    : []),
+                ]
+              : [],
+          },
+          { items: [{ label: tick(view.autoYieldsOff, "Disable auto-yields"), onSelect: () => game.setYieldsOff(!view.autoYieldsOff) }] },
+        ];
+      }}
     />
+    </>
   );
 }
 

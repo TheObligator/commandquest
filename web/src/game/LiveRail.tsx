@@ -1,7 +1,7 @@
-// Left rail for a live game: the stack and the hovered card, then at the bottom Forge's current
+// Left rail for a live game: then at the bottom Forge's current
 // prompt (with Forge's own button labels) or question, and the auto-pass skips.
 import { useEffect, useState } from "react";
-import { AUTO_PASS, PreviewCard, StackList } from "./ActionRail";
+import { AUTO_PASS } from "./ActionRail";
 import { Kbd, useHotkeys } from "./useHotkeys";
 import { cardImage, previewFor, usePreview, type Preview } from "./cards";
 import type { LiveAsk, LiveGame } from "./useLiveGame";
@@ -12,21 +12,9 @@ export function LiveRail(props: {
   colorOf: (id: string) => string;
   preview: Preview | null;
 }) {
-  const { game, nameOf, colorOf, preview } = props;
-  const v = game.view!;
+  const { game, nameOf } = props;
   return (
     <aside className="action-rail">
-      <section className="ar-stack">
-        <header>
-          <h3>Stack</h3>
-          <span className="ar-sub">{v.stack.length ? `${v.stack.length} item${v.stack.length > 1 ? "s" : ""} · top first` : "empty"}</span>
-        </header>
-        <StackList view={v} nameOf={nameOf} colorOf={colorOf} />
-      </section>
-
-      <section className="ar-preview" aria-live="polite">
-        {preview ? <PreviewCard p={preview} /> : <p className="ar-sub">Hover a card to see it here.</p>}
-      </section>
 
       {/* At the bottom, by your hand: what the game wants now, then the skips. */}
       {game.ask ? <AskPanel ask={game.ask} game={game} nameOf={nameOf} /> : <PromptPanel game={game} />}

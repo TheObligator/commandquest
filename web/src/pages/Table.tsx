@@ -93,6 +93,14 @@ function Game({ count, start, layout, myName }: { count: number; start: "new" | 
         onPlay: playCard,
       }}
       onTap={sim.toggleTap}
+      menuFor={(t) => {
+        if (t.kind !== "card" || t.card.controller !== ME) return { sections: [] };
+        const c = t.card;
+        if (t.where === "hand") return { sections: [{ items: [{ label: `Play ${c.name}`, onSelect: () => playCard(c.id) }] }] };
+        if (t.where === "battlefield") return { sections: [{ items: [{ label: c.tapped ? "Untap" : "Tap", onSelect: () => sim.toggleTap(c.id) }] }] };
+        if (t.where === "command") return { sections: [{ items: [{ label: `Cast ${c.name}`, onSelect: () => err(sim.castCommander()) }] }] };
+        return { sections: [] };
+      }}
       onCastCommander={() => err(sim.castCommander())}
     />
   );
