@@ -53,4 +53,11 @@ public class BrowserSeatTest {
         Assert.assertEquals(sent.size(), before + 1, "only 'waiting' was sent");
         seat.close();
     }
+
+    @Test
+    public void colorChoicesReadNaturally() {
+        Assert.assertEquals(BrowserSeat.label("BLACK"), "Black");
+        Assert.assertEquals(BrowserSeat.label("COLORLESS"), "Colorless");
+        Assert.assertEquals(BrowserSeat.label("OK"), "OK");
+    }
 }

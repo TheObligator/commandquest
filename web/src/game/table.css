@@ -34,6 +34,8 @@
 .sb-life { font-weight: 800; font-size: 1.2rem; font-variant-numeric: tabular-nums; }
 .sb-life::before { content: "♥ "; color: #e06b6b; font-size: .75em; }
 .sb-poison { font-size: .78rem; color: var(--ok); font-weight: 700; }
+.sb-pcounter { font-size: .74rem; font-weight: 700; color: var(--text); padding: 1px 6px; border-radius: 999px; background: rgb(255 255 255 / 8%); white-space: nowrap; }
+.sb-pcounter small { font-weight: 500; color: var(--muted); }
 .sb-cmd { font-size: .72rem; padding: 1px 7px; border-radius: 99px; font-weight: 700; color: var(--from); background: color-mix(in srgb, var(--from) 20%, transparent); border: 1px solid color-mix(in srgb, var(--from) 45%, transparent); }
 .sb-count { font-size: .8rem; color: var(--muted); white-space: nowrap; }
 .sb-focus { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px; width: 24px; height: 24px; cursor: pointer; padding: 0; line-height: 1; }
@@ -217,6 +219,8 @@ dialog.zone-viewer { width: min(980px, calc(100vw - 32px)); max-height: 86vh; ba
 @keyframes sp-pulse { 50% { opacity: .35; } }
 
 /* Live games: what Forge lets you pick, and clickable player names. */
+.slot.chosen .bf-card { box-shadow: 0 0 0 3px #7fd1ff, 0 0 14px rgb(127 209 255 / 55%); border-radius: 6px; }
+.sb-target { color: var(--accent-2, #ffd27a) !important; text-decoration: underline dotted; text-underline-offset: 3px; }
 .slot.selectable .bf-card, .hand-card.selectable { box-shadow: 0 0 0 2px var(--accent-2, #ffd27a), 0 0 12px rgb(255 210 122 / 45%); border-radius: 6px; }
 .sb-pick { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }
 .sb-pick:hover { color: var(--accent-2, #ffd27a); text-decoration: underline; }

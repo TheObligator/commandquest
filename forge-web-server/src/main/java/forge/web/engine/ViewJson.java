@@ -96,6 +96,19 @@ public final class ViewJson {
         o.put("color", SEAT_COLORS[seat % SEAT_COLORS.length]);
         o.put("life", p.getLife());
         o.put("poison", p.getCounters(CounterEnumType.POISON));
+        // The player's other counters (energy, experience, rad, tickets…), by Forge's name.
+        if (p.getCounters() != null) {
+            ObjectNode counters = json.createObjectNode();
+            for (CounterType t : p.getCounters().elementSet()) {
+                int n = p.getCounters().count(t);
+                if (n > 0 && !t.is(CounterEnumType.POISON)) {
+                    counters.put(t.getName(), n);
+                }
+            }
+            if (!counters.isEmpty()) {
+                o.set("counters", counters);
+            }
+        }
         ObjectNode cmdDmg = o.putObject("commanderDamage");
         for (PlayerView owner : seating) {
             int total = 0;

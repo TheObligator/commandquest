@@ -63,6 +63,8 @@ public final class BrowserSeat implements IRemote {
     private volatile String promptMessage = "";
     /** The prompt last sent (null while waiting), to resend when its text arrives after its buttons. */
     private volatile ObjectNode lastPrompt;
+    /** What Forge's current prompt lets you click (Forge's setSelection), for the table's highlights. */
+    private volatile forge.gamemodes.match.Selection selection = forge.gamemodes.match.Selection.NONE;
     private volatile String lastState;
     private volatile boolean closed;
     /** Free play (chosen when the game starts): manual overrides and paying mana costs with nothing. */
@@ -154,6 +156,10 @@ public final class BrowserSeat implements IRemote {
                 lastPrompt = o;
                 emit(o);
             }
+            case setSelection -> {
+                selection = a[0] instanceof forge.gamemodes.match.Selection s ? s : forge.gamemodes.match.Selection.NONE;
+                pushState();
+            }
             case awaitNextInput -> {
                 lastPrompt = null;
                 emit(msg("waiting"));
@@ -213,6 +219,10 @@ public final class BrowserSeat implements IRemote {
             ObjectNode view = views.game(gv, me);
             view.set("playable", playable());
             view.put("freePlay", freePlay);
+            ObjectNode sel = selectionJson(selection);
+            if (sel != null) {
+                view.set("selection", sel);
+            }
             untapLocks(live, view);
             yields(gv, view);
             o.set("view", view);
@@ -292,6 +302,42 @@ public final class BrowserSeat implements IRemote {
 
     public ManualActions manual() {
         return manual;
+    }
+
+    /**
+     * Forge's selection as ids: {@code cards} you may pick, {@code players} and {@code stack} items
+     * you may target, what's {@code chosen} so far, and {@code actionable} cards (while paying mana:
+     * the sources that can pay). Null when there's nothing to mark.
+     */
+    private ObjectNode selectionJson(forge.gamemodes.match.Selection s) {
+        if (s == null || (s.cards().isEmpty() && s.targets().isEmpty() && s.chosen().isEmpty() && s.actionable().isEmpty())) {
+            return null;
+        }
+        ObjectNode o = json.createObjectNode();
+        ArrayNode cards = o.putArray("cards");
+        ArrayNode players = o.putArray("players");
+        ArrayNode stack = o.putArray("stack");
+        s.cards().forEach(c -> cards.add(c.getId()));
+        for (Object t : s.targets()) {
+            if (t instanceof CardView c) {
+                cards.add(c.getId());
+            } else if (t instanceof PlayerView p) {
+                players.add(ViewJson.id(p));
+            } else if (t instanceof StackItemView si) {
+                stack.add(si.getId());
+            }
+        }
+        ArrayNode chosen = o.putArray("chosen");
+        for (Object t : s.chosen()) {
+            if (t instanceof CardView c) {
+                chosen.add(c.getId());
+            } else if (t instanceof PlayerView p) {
+                chosen.add(ViewJson.id(p));
+            }
+        }
+        ArrayNode actionable = o.putArray("actionable");
+        new java.util.LinkedHashSet<>(s.actionable()).forEach(c -> actionable.add(c.getId()));
+        return o;
     }
 
     /** Marks permanents kept from untapping by hand: {@code untapLock} "next" or "never". */
@@ -464,11 +510,18 @@ public final class BrowserSeat implements IRemote {
             } else if (item instanceof GameEntityView e) {
                 o.put("label", e.getName());
             } else {
-                o.put("label", display != null ? display.apply(item) : String.valueOf(item));
+                o.put("label", label(display != null ? display.apply(item) : String.valueOf(item)));
             }
             a.add(o);
         }
         return a;
+    }
+
+    private static final java.util.Set<String> COLOR_NAMES = java.util.Set.of("WHITE", "BLUE", "BLACK", "RED", "GREEN", "COLORLESS");
+
+    /** Forge's color choices come as "BLACK": show "Black". */
+    static String label(String s) {
+        return s != null && COLOR_NAMES.contains(s) ? s.charAt(0) + s.substring(1).toLowerCase(java.util.Locale.ROOT) : s;
     }
 
     // ---- browser -> Forge ----

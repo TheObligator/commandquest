@@ -44,6 +44,8 @@ export interface PlayerState {
   color: string;
   life: number;
   poison: number;
+  /** The player's other counters (Energy, Experience, Rad, Ticket…), when they have any. */
+  counters?: Record<string, number>;
   /** Combat damage taken from each player's commander, by the commander owner's id. */
   commanderDamage: Record<string, number>;
   /** Times the commander has been cast from the command zone (tax is 2 per cast). */
@@ -132,6 +134,12 @@ export interface GameView {
   viewer: string;
   /** Live games: you've turned off all your auto-yields. */
   autoYieldsOff?: boolean;
+  /**
+   * Live games: what Forge's current prompt lets you click. `cards` to pick or target, `players` and
+   * `stack` items to target, `chosen` so far (card ids, or player ids as strings), and `actionable`
+   * cards (while paying mana, the sources that can pay).
+   */
+  selection?: { cards: number[]; players: string[]; stack: number[]; chosen: (number | string)[]; actionable: number[] };
   /** Live games: an auto-pass you started is still going (Forge ends it when it gets there, or when something needs you). */
   autoPassing?: boolean;
   /** Free play is on in this game: manual overrides and paying mana costs with nothing. */

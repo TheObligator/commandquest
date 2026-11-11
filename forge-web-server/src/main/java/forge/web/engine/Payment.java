@@ -66,7 +66,9 @@ public final class Payment {
         if (info == null) {
             return false;
         }
-        ManaCostBeingPaid cost = me.getPaidForSA().getManaCostBeingPaid();
+        SpellAbility sa = me.getPaidForSA();
+        ManaCostBeingPaid cost = sa.getManaCostBeingPaid();
+        boolean partly = !sa.getPayingMana().isEmpty();
         for (int guard = 0; guard < 20 && !cost.isPaid(); guard++) {
             List<ManaCostShard> shards = new ArrayList<>();
             cost.getDistinctShards().forEach(shards::add);
@@ -77,11 +79,13 @@ public final class Payment {
         if (!cost.isPaid()) {
             return false;
         }
-        String what = switch (info.kind()) {
-            case "spell" -> "cast " + info.card() + " without paying its mana cost";
-            case "ability" -> "activated " + info.card() + "'s ability without paying its mana cost";
-            default -> "paid " + info.cost() + " for " + info.card() + " with no mana";
-        };
+        String what = partly
+                ? "paid the rest of " + info.card() + "'s mana cost (" + info.cost() + ") with no mana"
+                : switch (info.kind()) {
+                    case "spell" -> "cast " + info.card() + " without paying its mana cost";
+                    case "ability" -> "activated " + info.card() + "'s ability without paying its mana cost";
+                    default -> "paid " + info.cost() + " for " + info.card() + " with no mana";
+                };
         g.getGameLog().add(GameLogEntryType.INFORMATION, me.getName() + " " + what + " (by hand)");
         // The cost is now paid: Forge's Auto button finds nothing left to tap and finishes the payment.
         ctl.selectButtonOk();

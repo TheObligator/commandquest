@@ -148,6 +148,10 @@ export function TableBoard(props: {
   onCastCommander?: (id: number) => void;
   /** Cards Forge lets you pick right now. */
   selectable?: Set<number>;
+  /** Cards chosen so far for the current prompt. */
+  chosen?: Set<number>;
+  /** Players the current prompt lets you choose. */
+  targetPlayers?: Set<string>;
   /** Your cards you can use right now (a green glow). */
   playable?: Set<number>;
   /** The page's items for a right-click menu: right away, or once the game server answers. */
@@ -258,6 +262,8 @@ export function TableBoard(props: {
           focused={opts.focusedView}
           line={layout === "stacked" && !opts.focusedView}
           selectable={props.selectable}
+          chosen={props.chosen}
+          targetable={props.targetPlayers?.has(id)}
           playable={props.playable}
           onMenu={openMenu}
         />

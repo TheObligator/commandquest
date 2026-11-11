@@ -69,6 +69,10 @@ export function SeatBoard(props: {
   onCardClick?: (cardId: number) => void;
   /** Live games: click a player's name to pick them (targets). */
   onPlayerClick?: (playerId: string) => void;
+  /** Forge's prompt lets you choose this player (a target). */
+  targetable?: boolean;
+  /** Cards chosen so far for the current prompt. */
+  chosen?: Set<number>;
   /** Cards that can be picked right now. */
   selectable?: Set<number>;
   /** Your cards you can use right now. */
@@ -94,7 +98,7 @@ export function SeatBoard(props: {
     >
       <header className="sb-head">
         {props.onPlayerClick ? (
-          <button className="sb-name sb-pick" data-player-id={p.id} onClick={() => props.onPlayerClick?.(p.id)} title={`Choose ${isMe ? "yourself" : p.name}`}>
+          <button className={`sb-name sb-pick${props.targetable ? " sb-target" : ""}`} data-player-id={p.id} onClick={() => props.onPlayerClick?.(p.id)} title={`Choose ${isMe ? "yourself" : p.name}`}>
             {isMe ? `${p.name} (you)` : p.name}
           </button>
         ) : (
@@ -102,6 +106,11 @@ export function SeatBoard(props: {
         )}
         <span className="sb-life" title="Life">{p.life}</span>
         {p.poison > 0 && <span className="sb-poison" title="Poison counters">☠ {p.poison}</span>}
+        {Object.entries(p.counters ?? {}).map(([kind, n]) => (
+          <span key={kind} className="sb-pcounter" title={`${n} ${kind.toLowerCase()} counter${n === 1 ? "" : "s"}`}>
+            {PLAYER_COUNTER_ICON[kind.toLowerCase()] ?? "●"} {n} <small>{kind}</small>
+          </span>
+        ))}
         {cmdDmg.map(([from, n]) => (
           <span key={from} className="sb-cmd" style={{ "--from": colorOf(from) } as React.CSSProperties} title={`${n} commander damage from ${nameOf(from)}'s commander (21 loses)`}>
             ♛ {n}
@@ -295,7 +304,7 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
               return (
                 <div
                   key={pile.key}
-                  className={["slot", c.tapped && "tapped", props.selectable?.has(c.id) && "selectable", props.playable?.has(c.id) && "playable"].filter(Boolean).join(" ")}
+                  className={["slot", c.tapped && "tapped", props.selectable?.has(c.id) && "selectable", props.chosen?.has(c.id) && "chosen", props.playable?.has(c.id) && "playable"].filter(Boolean).join(" ")}
                   style={{ gridColumn: pile.col + 1 }}
                   data-card-ids={pile.cards.map((x) => x.id).join(" ")}
                   draggable
@@ -329,3 +338,6 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
     </div>
   );
 }
+
+/** Icons for common player counters (anything else gets a dot and its name). */
+const PLAYER_COUNTER_ICON: Record<string, string> = { energy: "⚡", experience: "★", rad: "☢", ticket: "🎟" };

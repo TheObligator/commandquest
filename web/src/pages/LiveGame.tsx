@@ -175,6 +175,11 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
     castFrom.current ??= view.stack.length;
     game.clickCard(id);
   };
+  // What Forge's prompt lets you click: cards to pick or target, and while paying, your mana sources.
+  const sel = view.selection;
+  const selectable = useMemo(() => new Set([...(sel?.cards ?? []), ...(game.prompt?.pay ? sel?.actionable ?? [] : [])]), [sel, game.prompt?.pay]);
+  const chosen = useMemo(() => new Set((sel?.chosen ?? []).filter((x): x is number => typeof x === "number")), [sel]);
+  const targetPlayers = useMemo(() => new Set(sel?.players ?? []), [sel]);
   const playable = useMemo(() => new Set(game.prompt && isPriorityPrompt(game.prompt) && !game.ask ? view.playable ?? [] : []), [view.playable, game.prompt, game.ask]);
 
   // Right-click menus. Forge's abilities for the card (enabled when you can use them now), then
@@ -359,8 +364,9 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
     if (!st.holdPriority && p.ok.enabled) game.ok();
   }, [game.prompt, game.ask, view, st.holdPriority, game]);
   const ok = () => {
-    // OK while paying mana is Auto-pay, part of casting: keep watching for the cast to land.
-    if (!game.prompt?.pay) {
+    // Only OK at "you have priority" passes; OK while casting (Auto-pay, skipping convoke, done
+    // choosing targets) is part of the cast, so keep watching for it to land.
+    if (game.prompt && isPriorityPrompt(game.prompt)) {
       castFrom.current = null;
       castDone.current = false;
     }
@@ -414,6 +420,9 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
       onPlayerClick={game.clickPlayer}
       onCastCommander={click}
       playable={playable}
+      selectable={selectable}
+      chosen={chosen}
+      targetPlayers={targetPlayers}
       menuFor={menuFor}
       detailsFor={game.details}
       peek={peek ? { title: peek.top > 0 ? `Top ${peek.top === 1 ? "card" : `${peek.top} cards`} of your library` : "Your library (only you see this)", cards: peekCards, onClose: closePeek } : null}
