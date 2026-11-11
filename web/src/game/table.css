@@ -362,6 +362,15 @@ dialog.card-inspect::backdrop, dialog.counter-dialog::backdrop { background: rgb
 .ci-sec { border-top: 1px solid #2e271b; padding-top: 10px; display: grid; gap: 6px; }
 .ci-sec h3 { margin: 0; font-size: .82rem; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; color: #8a826e; }
 .ci-kv { display: flex; justify-content: space-between; font-family: ui-monospace, Menlo, monospace; color: #ece6d8; }
+.ci-rulings summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px; }
+.ci-rulings summary::-webkit-details-marker { display: none; }
+.ci-rulings summary::after { content: "▸"; color: #8a826e; font-size: .8rem; }
+.ci-rulings[open] summary::after { content: "▾"; }
+.ci-rulings ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; max-height: 40vh; overflow: auto; }
+.ci-rulings li { display: grid; gap: 2px; font-size: .9rem; line-height: 1.5; }
+.ci-rulings li .rules p { margin: 0; }
+.ci-rulings time { font-size: .75rem; color: #8a826e; font-variant-numeric: tabular-nums; }
+.ci-rulings .muted { margin: 0; font-size: .9rem; }
 .ci-owner { margin: auto 0 0; padding-top: 10px; border-top: 1px solid #2e271b; font-size: .8rem; color: #8a826e; }
 @media (max-width: 680px) { .ci-grid { grid-template-columns: 1fr; } }
 

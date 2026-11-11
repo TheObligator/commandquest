@@ -5,7 +5,7 @@
 //   Scryfall oracle text next to it (every face), plus what's on it in this game.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { manaCost, rulesText } from "../dom";
-import { cached, imageUrl, type CardFace } from "../scryfall";
+import { cached, imageUrl, rulings, type CardFace, type Ruling } from "../scryfall";
 import { CardBack, tokenImage, type Preview } from "./cards";
 import type { CardDetails } from "./useLiveGame";
 import type { CardView } from "./view";
@@ -126,6 +126,20 @@ export function CardInspect({ card, loadDetails, ownerName, onClose }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [card.id, stateKey]);
 
+  // Official rulings, for real cards whose name we know (not tokens or hidden cards).
+  const [rules, setRules] = useState<Ruling[] | "error" | null>(null);
+  useEffect(() => {
+    if (!card.name || card.token || card.hidden) return;
+    let live = true;
+    rulings(card.name).then(
+      (r) => live && setRules(r),
+      () => live && setRules("error"),
+    );
+    return () => {
+      live = false;
+    };
+  }, [card.name, card.token, card.hidden]);
+
   const sc = card.name && !card.token ? cached({ name: card.name, quantity: 1, board: "main" }) : undefined;
   const faces: CardFace[] = sc ? (sc.card_faces?.length ? sc.card_faces : [sc as CardFace]) : [];
   const src = bigImage(card);
@@ -191,6 +205,29 @@ export function CardInspect({ card, loadDetails, ownerName, onClose }: {
             <section className="ci-sec">
               {facts.map((f) => <h3 key={f}>{f}</h3>)}
             </section>
+          )}
+          {card.name && !card.token && !card.hidden && (
+            <details className="ci-sec ci-rulings" open={Array.isArray(rules) && rules.length <= 4}>
+              <summary>
+                <h3>Rulings{Array.isArray(rules) && ` (${rules.length})`}</h3>
+              </summary>
+              {rules === null ? (
+                <p className="muted">Looking up rulings…</p>
+              ) : rules === "error" ? (
+                <p className="muted">Couldn't load rulings from Scryfall.</p>
+              ) : rules.length === 0 ? (
+                <p className="muted">No rulings for this card.</p>
+              ) : (
+                <ul>
+                  {rules.map((r, i) => (
+                    <li key={i}>
+                      <time dateTime={r.published_at}>{r.published_at}</time>
+                      <Rules text={r.comment} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </details>
           )}
           <p className="ci-owner">
             Owner: {ownerName}

@@ -37,7 +37,7 @@ export function HandBar(props: {
               data-card-ids={c.id}
               draggable={!props.selecting}
               aria-pressed={props.selecting ? selected : undefined}
-              title={props.selecting ? "Put this on the bottom" : props.onClick ? `${c.name}: click or drag to your board to play it, right-click for more` : `${c.name}: drag to your board or double-click to play`}
+              aria-label={props.selecting ? "Put this on the bottom" : props.onClick ? `${c.name}: click or drag to your board to play it, right-click for more` : `${c.name}: drag to your board or double-click to play`}
               onDragStart={(e) => {
                 const d: DragData = { from: "hand", seat: props.viewer, ids: [c.id] };
                 setDrag(d);

@@ -279,6 +279,30 @@ export async function named(name: string): Promise<ScryCard> {
   return remember(await getJson<ScryCard>(`${API}/cards/named?${new URLSearchParams({ exact: name })}`));
 }
 
+export interface Ruling {
+  source: string;
+  published_at: string;
+  comment: string;
+}
+
+const rulingsByName = new Map<string, Promise<Ruling[]>>();
+
+/** A card's official rulings (Gatherer and Scryfall's notes), oldest first; cached for the session. */
+export function rulings(name: string): Promise<Ruling[]> {
+  const key = name.toLowerCase();
+  let hit = rulingsByName.get(key);
+  if (!hit) {
+    hit = (async () => {
+      const card = byName.get(key) ?? (await named(name));
+      const data = await getJson<{ data: Ruling[] }>(`${API}/cards/${card.id}/rulings`);
+      return data.data;
+    })();
+    hit.catch(() => rulingsByName.delete(key)); // try again next time
+    rulingsByName.set(key, hit);
+  }
+  return hit;
+}
+
 /** All printings of a card, newest first. */
 export async function printings(name: string): Promise<ScryCard[]> {
   const res = await search(`!"${name.replace(/"/g, "")}"`, "prints");

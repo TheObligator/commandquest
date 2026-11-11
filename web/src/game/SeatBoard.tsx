@@ -180,7 +180,7 @@ function CommandTile(props: {
                 data-card-ids={card.id}
                 onClick={onCast ? () => onCast(card.id) : undefined}
                 onContextMenu={props.onMenu && ((e: React.MouseEvent) => props.onMenu!(e, { kind: "card", card, where: "command" }))}
-                title={onCast ? `Cast ${card.name ?? "your commander"}` : card.name}
+                aria-label={onCast ? `Cast ${card.name ?? "your commander"}` : card.name}
                 {...hover(card)}
               >
                 <CardFace card={card} size="small" knownFaceDown={card.faceDown && !card.hidden} />
@@ -214,7 +214,7 @@ function ZoneTile(props: {
   const { card } = props;
   const Tag = props.onClick ? "button" : "div";
   return (
-    <Tag className="zone-tile" onClick={props.onClick} onContextMenu={props.onMenu} title={props.title ?? props.hint} {...(card && props.hover ? props.hover(card) : {})}>
+    <Tag className="zone-tile" onClick={props.onClick} onContextMenu={props.onMenu} {...(card && props.hover ? { "aria-label": props.title ?? props.hint } : { title: props.title ?? props.hint })} {...(card && props.hover ? props.hover(card) : {})}>
       <span className="zt-label">
         {props.label}
         {props.count !== undefined && <b>{props.count}</b>}
@@ -324,7 +324,7 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
                     e.dataTransfer.effectAllowed = "move";
                   }}
                   onDragEnd={() => (setDrag(null), setDropAt(null))}
-                  title={props.onCardClick ? `${c.name ?? "Face-down card"}: click to use or choose it, right-click for more, drag to move` : isMe && props.onTap ? `${c.name ?? "Face-down card"}: click to ${c.tapped ? "untap" : "tap"}, drag to move` : undefined}
+                  aria-label={props.onCardClick ? `${c.name ?? "Face-down card"}: click to use or choose it, right-click for more, drag to move` : isMe && props.onTap ? `${c.name ?? "Face-down card"}: click to ${c.tapped ? "untap" : "tap"}, drag to move` : undefined}
                   onClick={() => (props.onCardClick ? props.onCardClick(clickId) : isMe && props.onTap?.(c.id))}
                   onContextMenu={props.onMenu && ((e) => props.onMenu!(e, { kind: "card", card: c, where: "battlefield" }))}
                   {...props.hover(c)}
@@ -333,7 +333,7 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
                     className={["bf-card", n > 1 && "pile", c.sick && "sick", c.attacking && "attacking", c.blocking && "blocking"].filter(Boolean).join(" ")}
                     style={{ "--n": Math.min(n, 4) } as React.CSSProperties}
                   >
-                    <CardFace card={c} size={cw > 120 ? "normal" : "small"} knownFaceDown={c.faceDown && !c.hidden} />
+                    <CardFace card={c} knownFaceDown={c.faceDown && !c.hidden} />
                     <CardBadges card={c} />
                     {n > 1 && <span className="pile-count">×{n}</span>}
                   </div>

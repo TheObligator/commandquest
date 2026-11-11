@@ -59,13 +59,16 @@ The game screen. The board itself is `web/src/game/TableBoard.tsx`, shared by tw
 - If a click does nothing, a message says why (not your turn, not a main phase, the stack isn't
   empty, you've already played a land…).
 - **Hover a card** for a moment (`HOVER_ZOOM_MS` in `game/CardZoom.tsx`, 1.2 s) and a large image of
-  it pops up beside the pointer. It goes away when you move off the card or click.
+  it pops up beside the pointer. It goes away when you move off the card or click. Cards have no
+  browser tooltip (their hints are `aria-label`s), so nothing covers the zoom. Cards on the board use
+  Scryfall's "normal" image (488 px wide) at every size, so their text stays sharp on high-DPI screens.
 - **Right-click** a card for its menu (live games; the browser's own right-click menu is off on the
   table):
   - **📖 Card details:** the card beside its text and what's different about it in this game: in
     live games Forge's text (rules text plus granted abilities and the like), current P/T (green
     when changed), counters, summoning sick, tapped, kept from untapping, owner, and for a
-    commander how many times it's been cast from the command zone.
+    commander how many times it's been cast from the command zone. Then the card's official
+    rulings from Scryfall (`rulings` in `scryfall.ts`), open when there are four or fewer.
   - **Abilities:** everything Forge lets it do, greyed out when you can't do it now, with the
     reason.
   - **By hand** (manual overrides, like a paper table; outside the rules, logged "(by hand)", your
