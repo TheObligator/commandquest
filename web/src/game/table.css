@@ -388,4 +388,4 @@ dialog.counter-dialog { width: min(360px, calc(100vw - 32px)); background: var(-
 .ar-btn.free { background: #1f2a1c; border-color: #4f6b3c; color: #dbe9cc; }
 .pay-hint { margin: 10px 0 0; font-size: .8rem; color: #bfb39b; }
 .live-option { display: flex; gap: 10px; align-items: flex-start; line-height: 1.4; }
-.live-option input { margin-top: 4px; }
+.live-option input { flex: none; width: 16px; height: 16px; padding: 0; margin-top: 3px; }

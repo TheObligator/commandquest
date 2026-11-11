@@ -359,8 +359,11 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
     if (!st.holdPriority && p.ok.enabled) game.ok();
   }, [game.prompt, game.ask, view, st.holdPriority, game]);
   const ok = () => {
-    castFrom.current = null;
-    castDone.current = false;
+    // OK while paying mana is Auto-pay, part of casting: keep watching for the cast to land.
+    if (!game.prompt?.pay) {
+      castFrom.current = null;
+      castDone.current = false;
+    }
     game.ok();
   };
   const cancel = () => {
