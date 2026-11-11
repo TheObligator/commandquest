@@ -32,6 +32,8 @@ export interface LivePay {
   cardId: number;
   kind: "spell" | "ability" | "effect";
   free: boolean;
+  /** Your untapped permanents that can pay, for the table's highlight. */
+  sources?: number[];
 }
 
 export interface AskOption {

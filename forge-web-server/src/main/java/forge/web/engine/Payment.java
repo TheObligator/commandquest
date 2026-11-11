@@ -26,7 +26,7 @@ public final class Payment {
     }
 
     /** What you're paying for right now, or null when Forge isn't waiting for your mana. */
-    public record Info(String cost, String card, int cardId, String kind) {
+    public record Info(String cost, String card, int cardId, String kind, List<Integer> sources) {
     }
 
     /** Forge's current input for this seat, if it's a mana payment. */
@@ -52,7 +52,14 @@ public final class Payment {
         }
         Card host = sa.getHostCard();
         String kind = sa.isSpell() ? "spell" : sa.isActivatedAbility() ? "ability" : "effect";
-        return new Info(cost.toString(), host == null ? "" : host.getName(), host == null ? 0 : host.getId(), kind);
+        // Your untapped permanents that can pay right now, for the table's highlight.
+        List<Integer> sources = new ArrayList<>();
+        for (Card c : me.getCardsIn(forge.game.zone.ZoneType.Battlefield)) {
+            if (!c.isTapped() && !InputPayMana.getAllManaAbilities(c, me).isEmpty()) {
+                sources.add(c.getId());
+            }
+        }
+        return new Info(cost.toString(), host == null ? "" : host.getName(), host == null ? 0 : host.getId(), kind, sources);
     }
 
     /**

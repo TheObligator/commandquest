@@ -177,7 +177,7 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
   };
   // What Forge's prompt lets you click: cards to pick or target, and while paying, your mana sources.
   const sel = view.selection;
-  const selectable = useMemo(() => new Set([...(sel?.cards ?? []), ...(game.prompt?.pay ? sel?.actionable ?? [] : [])]), [sel, game.prompt?.pay]);
+  const selectable = useMemo(() => new Set([...(sel?.cards ?? []), ...(game.prompt?.pay?.sources ?? [])]), [sel, game.prompt?.pay]);
   const chosen = useMemo(() => new Set((sel?.chosen ?? []).filter((x): x is number => typeof x === "number")), [sel]);
   const targetPlayers = useMemo(() => new Set(sel?.players ?? []), [sel]);
   const playable = useMemo(() => new Set(game.prompt && isPriorityPrompt(game.prompt) && !game.ask ? view.playable ?? [] : []), [view.playable, game.prompt, game.ask]);

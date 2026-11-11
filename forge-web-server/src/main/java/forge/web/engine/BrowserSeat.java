@@ -65,6 +65,8 @@ public final class BrowserSeat implements IRemote {
     private volatile ObjectNode lastPrompt;
     /** What Forge's current prompt lets you click (Forge's setSelection), for the table's highlights. */
     private volatile forge.gamemodes.match.Selection selection = forge.gamemodes.match.Selection.NONE;
+    /** Cards Forge is showing you right now (e.g. an opponent revealing their hand), until it hides them. */
+    private volatile List<CardView> revealed = List.of();
     private volatile String lastState;
     private volatile boolean closed;
     /** Free play (chosen when the game starts): manual overrides and paying mana costs with nothing. */
@@ -156,6 +158,22 @@ public final class BrowserSeat implements IRemote {
                 lastPrompt = o;
                 emit(o);
             }
+            case showRevealedCards -> {
+                List<CardView> shown = new ArrayList<>();
+                if (a[0] instanceof Iterable<?> it) {
+                    it.forEach(c -> {
+                        if (c instanceof CardView cv) {
+                            shown.add(cv);
+                        }
+                    });
+                }
+                revealed = shown;
+                pushState();
+            }
+            case hideRevealedCards -> {
+                revealed = List.of();
+                pushState();
+            }
             case setSelection -> {
                 selection = a[0] instanceof forge.gamemodes.match.Selection s ? s : forge.gamemodes.match.Selection.NONE;
                 pushState();
@@ -190,6 +208,8 @@ public final class BrowserSeat implements IRemote {
             pay.put("cardId", info.cardId());
             pay.put("kind", info.kind());
             pay.put("free", freePlay);
+            ArrayNode sources = pay.putArray("sources");
+            info.sources().forEach(sources::add);
         } catch (RuntimeException e) {
             Logger.debug(e, "Couldn't describe the payment");
         }
@@ -219,7 +239,11 @@ public final class BrowserSeat implements IRemote {
             ObjectNode view = views.game(gv, me);
             view.set("playable", playable());
             view.put("freePlay", freePlay);
-            ObjectNode sel = selectionJson(selection);
+            if (!revealed.isEmpty()) {
+                ArrayNode shown = view.putArray("revealed");
+                revealed.forEach(c -> shown.add(views.card(gv, c, me, true))); // Forge chose to show you these
+            }
+            ObjectNode sel = selectionJson(gv, selection);
             if (sel != null) {
                 view.set("selection", sel);
             }
@@ -309,7 +333,7 @@ public final class BrowserSeat implements IRemote {
      * you may target, what's {@code chosen} so far, and {@code actionable} cards (while paying mana:
      * the sources that can pay). Null when there's nothing to mark.
      */
-    private ObjectNode selectionJson(forge.gamemodes.match.Selection s) {
+    private ObjectNode selectionJson(GameView gv, forge.gamemodes.match.Selection s) {
         if (s == null || (s.cards().isEmpty() && s.targets().isEmpty() && s.chosen().isEmpty() && s.actionable().isEmpty())) {
             return null;
         }
@@ -318,6 +342,17 @@ public final class BrowserSeat implements IRemote {
         ArrayNode players = o.putArray("players");
         ArrayNode stack = o.putArray("stack");
         s.cards().forEach(c -> cards.add(c.getId()));
+        // Cards offered from places the table doesn't show (your library while you search it, an
+        // opponent's hand…): their faces, so the prompt can list them. Forge offers them, so you may see them.
+        ArrayNode offer = o.putArray("offer");
+        for (CardView c : s.cards()) {
+            ZoneType z = c.getZone();
+            boolean onTable = z == ZoneType.Battlefield || z == ZoneType.Graveyard || z == ZoneType.Exile || z == ZoneType.Command
+                    || z == ZoneType.Stack || (z == ZoneType.Hand && me != null && me.equals(c.getController() != null ? c.getController() : c.getOwner()));
+            if (!onTable) {
+                offer.add(views.card(gv, c, me, true));
+            }
+        }
         for (Object t : s.targets()) {
             if (t instanceof CardView c) {
                 cards.add(c.getId());

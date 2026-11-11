@@ -5,6 +5,7 @@ import { AUTO_PASS } from "./ActionRail";
 import { Kbd, useHotkeys } from "./useHotkeys";
 import { cardImage, previewFor, usePreview, type Preview } from "./cards";
 import type { LiveAsk, LiveGame } from "./useLiveGame";
+import type { CardView } from "./view";
 
 export function LiveRail(props: {
   game: LiveGame;
@@ -74,6 +75,10 @@ function PromptPanel({ game }: { game: LiveGame }) {
       <div className="ar-ribbon">Decision</div>
       <h3>{title || "Your move"}</h3>
       {rest.length > 0 && <p className="ar-prompt-text">{rest.join("\n")}</p>}
+      {!!game.view?.revealed?.length && <RevealedCards cards={game.view.revealed} />}
+      {!!game.view?.selection?.offer?.length && (
+        <OfferedCards cards={game.view.selection.offer} chosen={game.view.selection.chosen} onPick={game.clickCard} />
+      )}
       <div className="ar-actions">
         {p.ok.label && (
           <button className="ar-btn primary" disabled={!p.ok.enabled} onClick={game.ok}>
@@ -89,6 +94,49 @@ function PromptPanel({ game }: { game: LiveGame }) {
         )}
       </div>
     </section>
+  );
+}
+
+/** Cards Forge is showing you with this prompt (an opponent revealing their hand…). */
+function RevealedCards({ cards }: { cards: CardView[] }) {
+  const setPreview = usePreview();
+  return (
+    <ul className="ask-options" aria-label="Revealed cards">
+      {cards.map((c) => (
+        <li key={c.id}>
+          <div className="ask-option info" onMouseEnter={() => setPreview({ card: c })} onMouseLeave={() => setPreview(null)}>
+            {!c.hidden && c.name && <img src={cardImage(c.name, "small")} alt="" />}
+            <span>{c.hidden ? "Hidden card" : c.name}</span>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * Cards the prompt offers from places the table doesn't show (your library while you search it…):
+ * click one to choose it, like a card on the table.
+ */
+function OfferedCards({ cards, chosen, onPick }: { cards: CardView[]; chosen: (number | string)[]; onPick: (id: number) => void }) {
+  const setPreview = usePreview();
+  return (
+    <ul className="ask-options" aria-label="Cards to choose from">
+      {cards.map((c) => (
+        <li key={c.id}>
+          <button
+            className={`ask-option${chosen.includes(c.id) ? " on" : ""}`}
+            aria-pressed={chosen.includes(c.id)}
+            onClick={() => onPick(c.id)}
+            onMouseEnter={() => setPreview({ card: c })}
+            onMouseLeave={() => setPreview(null)}
+          >
+            {!c.hidden && c.name && <img src={cardImage(c.name, "small")} alt="" />}
+            <span>{c.hidden ? "Hidden card" : c.name}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }
 
