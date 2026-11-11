@@ -1,12 +1,13 @@
-// Settings (#/settings): the game hotkeys. Changes apply right away, are kept in this browser, and
+// Settings (#/settings): your username and the game hotkeys. Changes apply right away, are kept in this browser, and
 // are saved to your account when you're signed in, so they follow you to other devices.
-import { useConvexAuth, useMutation } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { errorMessage } from "../app/errors";
 import { toast } from "../dom";
 import { bind, changedKeys, DEFAULT_HOTKEYS, HOTKEY_ACTIONS, keyLabel, keyName, MODIFIER_KEYS, RESERVED_KEYS, type HotkeyAction, type Hotkeys } from "../game/hotkeys";
 import { setHotkeys, useHotkeyMap } from "../game/useHotkeys";
+import { checkUsername, USERNAME_MAX } from "../username";
 
 export function Settings() {
   const keys = useHotkeyMap();
@@ -68,6 +69,7 @@ export function Settings() {
   return (
     <div className="settings">
       <h1>Settings</h1>
+      <UsernameSection />
       <section className="card settings-section">
         <h2>Game hotkeys</h2>
         <p className="muted small">
@@ -106,5 +108,74 @@ export function Settings() {
         <p className="muted small">Escape always closes an enlarged board or dialog.</p>
       </section>
     </div>
+  );
+}
+
+/** The name other players see in games. Signed-in only; stored on the account. */
+function UsernameSection() {
+  const { isAuthenticated, isLoading } = useConvexAuth();
+  const me = useQuery(api.users.me, isAuthenticated ? {} : "skip");
+  const setUsername = useMutation(api.users.setUsername);
+  const [draft, setDraft] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const value = draft ?? me?.username ?? "";
+
+  if (isLoading) return null;
+  if (!isAuthenticated) {
+    return (
+      <section className="card settings-section" id="username">
+        <h2>Username</h2>
+        <p className="muted small"><a href="#/signin">Sign in</a> to choose the name other players see in games.</p>
+      </section>
+    );
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const check = checkUsername(value);
+    if (!check.ok) return setError(check.error);
+    setSaving(true);
+    try {
+      const saved = await setUsername({ username: check.username });
+      setDraft(null);
+      setError("");
+      toast(`Your username is now ${saved}.`);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const unchanged = me != null && value.trim() === (me.username ?? "");
+  return (
+    <section className="card settings-section" id="username">
+      <h2>Username</h2>
+      <p className="muted small">
+        The name other players see in games.{me && !me.hasUsername && <> Until you choose one you're shown as “{me.name}”.</>}{" "}
+        3–20 letters, numbers, spaces, hyphens or underscores.
+      </p>
+      <form className="username-form" onSubmit={(e) => void submit(e)}>
+        <input
+          aria-label="Username"
+          value={value}
+          maxLength={USERNAME_MAX + 10}
+          placeholder="Choose a username"
+          autoComplete="nickname"
+          spellCheck={false}
+          aria-invalid={error ? true : undefined}
+          aria-describedby="username-error"
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setError("");
+          }}
+        />
+        <button className="btn small" type="submit" disabled={saving || unchanged || !value.trim()}>
+          {me?.hasUsername ? "Change" : "Save"}
+        </button>
+      </form>
+      <p className="form-error small" id="username-error" role="alert">{error}</p>
+    </section>
   );
 }

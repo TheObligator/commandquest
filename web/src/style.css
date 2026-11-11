@@ -459,6 +459,9 @@ kbd { font-family: var(--font-mono, ui-monospace, monospace); font-size: .72rem;
 .settings-section { display: grid; gap: 12px; justify-items: start; }
 .settings-section h2 { margin: 0; font-size: 1.1rem; }
 .settings-section > p { margin: 0; }
+.username-form { display: flex; gap: 8px; width: 100%; max-width: 420px; }
+.username-form input { flex: 1; }
+.username-prompt { margin: 0 0 16px; padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--bg-2); border-radius: 0 6px 6px 0; }
 table.hotkeys { width: 100%; border-collapse: collapse; }
 .hotkeys th, .hotkeys td { padding: 8px 6px; border-top: 1px solid var(--line); vertical-align: middle; }
 .hotkeys th { text-align: left; font-weight: 600; }

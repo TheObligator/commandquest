@@ -148,5 +148,10 @@ while the Mac is down. The functions are in `web/convex/`. The pure logic behind
   `AUTH_DISCORD_ID/SECRET`, `SITE_URL` (where sign-in links send people back to), `JWT_PRIVATE_KEY`
   and `JWKS` (Convex Auth's signing keys, generated with `jose`), and `MOXFIELD_USER_AGENT` (optional).
 - Sign-in sessions last 10 years (`convex/auth.ts`). Nothing on the site needs re-authentication.
+- Players pick a **username** in Settings (`users.setUsername`, rules in `src/username.ts`: 3–20
+  letters, digits, spaces, `-` or `_`, unique regardless of case, not starting with "AI "). It's
+  stored on Convex Auth's `users` table (extended in `convex/schema.ts`). `users.me` returns `name`
+  as the username, else the sign-in provider's name, else "Player", and never the email address;
+  that `name` is what games show. Signed-in players without one see a prompt linking to Settings.
 - Staging (`robust-barracuda-45`) is a dev-type deployment. Its `SITE_URL` is currently the tailnet
   dev URL, and needs updating once staging has its own address.

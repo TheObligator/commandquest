@@ -17,6 +17,17 @@ export default defineSchema({
   // users, sessions, accounts, … from Convex Auth
   ...authTables,
 
+  /** Convex Auth's users table, plus the username players pick in Settings (src/username.ts). */
+  users: defineTable({
+    ...authTables.users.validator.fields,
+    username: v.optional(v.string()),
+    /** Lower-cased username, so usernames are unique regardless of case. */
+    usernameKey: v.optional(v.string()),
+  })
+    .index("email", ["email"])
+    .index("phone", ["phone"])
+    .index("by_username_key", ["usernameKey"]),
+
   decks: defineTable({
     userId: v.id("users"),
     name: v.string(),

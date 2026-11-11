@@ -20,7 +20,10 @@ export function Layout({ children, full }: { children: React.ReactNode; full?: b
         </nav>
         <Account />
       </header>
-      <main id="view" className={full ? "full" : undefined}>{children}</main>
+      <main id="view" className={full ? "full" : undefined}>
+        {!full && path !== "/settings" && <UsernamePrompt />}
+        {children}
+      </main>
       <footer className="footer">
         Rules engine by <a href="https://github.com/Card-Forge/forge" target="_blank" rel="noopener">Forge</a>. Card data and images from{" "}
         <a href="https://scryfall.com" target="_blank" rel="noopener">Scryfall</a> (not endorsed by Scryfall).
@@ -51,5 +54,17 @@ function Account() {
       <span className="user">{me?.name ?? ""}</span>
       <button className="btn ghost small" onClick={() => void signOut().then(() => navigate("/"))}>Sign out</button>
     </div>
+  );
+}
+
+/** A gentle nudge for signed-in players who haven't picked a username (shown in games instead). */
+function UsernamePrompt() {
+  const { isAuthenticated } = useConvexAuth();
+  const me = useQuery(api.users.me, isAuthenticated ? {} : "skip");
+  if (!me || me.hasUsername) return null;
+  return (
+    <p className="username-prompt small">
+      Other players see you as “{me.name}”. <a href="#/settings" className="link">Choose a username</a> in Settings.
+    </p>
   );
 }
