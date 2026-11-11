@@ -23,6 +23,7 @@ import forge.web.engine.BrowserSeat;
 import forge.web.engine.Decks;
 import forge.web.engine.Explain;
 import forge.web.engine.ManualActions;
+import forge.web.engine.AutoPay;
 import forge.web.engine.Payment;
 import forge.web.engine.ForgeEngine;
 import forge.web.engine.GameSession;
@@ -111,7 +112,7 @@ public final class GameHub {
         }
         switch (t) {
             case "start" -> start(c, m);
-            case "ok" -> act(c, IGameController::selectButtonOk);
+            case "ok" -> act(c, ctl -> ok(c, ctl));
             case "cancel" -> act(c, IGameController::selectButtonCancel);
             case "concede" -> act(c, IGameController::concede);
             case "card" -> {
@@ -438,6 +439,17 @@ public final class GameHub {
             }
             send(c, o);
         });
+    }
+
+    /** OK: while you're paying mana it's Auto-pay (our planner, else Forge's); otherwise Forge's OK. */
+    private void ok(Conn c, IGameController ctl) {
+        BrowserSeat seat = c.seat;
+        Game g = game(c);
+        if (Payment.input(ctl) != null && seat != null && seat.player() != null && g != null) {
+            AutoPay.run(ctl, g.getPlayer(seat.player().getId()), ctl::selectButtonOk);
+        } else {
+            ctl.selectButtonOk();
+        }
     }
 
     /** Is free play on in this game? If not, tells the browser that manual overrides are off. */

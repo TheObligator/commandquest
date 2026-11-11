@@ -30,7 +30,7 @@ public final class Payment {
     }
 
     /** Forge's current input for this seat, if it's a mana payment. */
-    static InputPayMana input(IGameController ctl) {
+    public static InputPayMana input(IGameController ctl) {
         if (ctl instanceof PlayerControllerHuman h) {
             Input in = h.getInputProxy().getInput();
             if (in instanceof InputPayMana pay && !pay.isPaid()) {

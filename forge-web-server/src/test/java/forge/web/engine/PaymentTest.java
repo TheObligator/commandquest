@@ -140,7 +140,7 @@ public class PaymentTest {
             Assert.assertTrue(info.cost().contains("G"), "cost " + info.cost());
 
             onUiThread(() -> {
-                controller.selectButtonOk(); // Auto
+                AutoPay.run(controller, me, controller::selectButtonOk); // the Auto-pay button
                 return null;
             });
             waitFor(() -> Payment.info(controller, me) == null && !g.getStack().isEmpty(), "the Elves on the stack");
@@ -164,6 +164,49 @@ public class PaymentTest {
             Assert.assertFalse(savannah.isTapped(), "free play taps nothing");
             Assert.assertTrue(g.getGameLog().getAllEntries().stream().anyMatch(e -> e.message().contains("without paying its mana cost (by hand)")), "logged");
             Assert.assertNull(Payment.info(controller, me), "nothing left to pay");
+        } finally {
+            session.abort();
+        }
+    }
+
+    @Test(timeOut = 240_000)
+    public void autoPayAvoidsSourcesWithDrawbacks() throws Exception {
+        MyRandom.setRandom(new Random(5));
+        GameSessionTest.ScriptedBrowser browser = new GameSessionTest.ScriptedBrowser();
+        GameSession session = GameSession.startCommander(List.of(
+                new GameSession.Seat("You", deck("Ezuri, Renegade Leader", "Forest"), browser),
+                new GameSession.Seat("AI 1", deck("Talrand, Sky Summoner", "Island"), null)));
+        try {
+            PlayerView meView = untilMyMain(session, browser);
+            IGameController controller = session.controller("You", meView);
+            Game g = session.game();
+            Player me = g.getPlayer(meView.getId());
+            Card[] cards = onGameThread(g, () -> {
+                Card[] made = {
+                    make(me, "Talisman of Creativity", ZoneType.Battlefield),
+                    make(me, "Mystic Monastery", ZoneType.Battlefield),
+                    make(me, "Furycalm Snarl", ZoneType.Battlefield),
+                    make(me, "Plains", ZoneType.Battlefield),
+                    make(me, "Mantis Rider", ZoneType.Hand),
+                };
+                for (Card c : made) {
+                    if (c.isTapped()) {
+                        c.untap(); // Mystic Monastery enters tapped
+                    }
+                }
+                return made;
+            });
+            int life = me.getLife();
+            onUiThread(() -> controller.selectCard(cards[4].getView(), null, null));
+            waitFor(() -> Payment.info(controller, me) != null, "the mana payment");
+            onUiThread(() -> {
+                AutoPay.run(controller, me, controller::selectButtonOk);
+                return null;
+            });
+            waitFor(() -> Payment.info(controller, me) == null && !g.getStack().isEmpty(), "Mantis Rider on the stack");
+            Assert.assertEquals(me.getLife(), life, "no Talisman damage");
+            Assert.assertFalse(cards[0].isTapped(), "the Talisman stays untapped: the lands pay {U}{R}{W}");
+            Assert.assertTrue(cards[1].isTapped() && cards[2].isTapped() && cards[3].isTapped(), "the three lands paid");
         } finally {
             session.abort();
         }
