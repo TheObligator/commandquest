@@ -82,6 +82,9 @@ public class ManualEffectsTest {
             Assert.assertFalse(ManualActions.allowed(elves, me, "eot:control"), "you already control it");
             Assert.assertTrue(ManualActions.allowed(talrand, me, "eot:pt:-1:-1"), "effects go on opponents' permanents too");
             Assert.assertFalse(ManualActions.allowed(talrand, me, "tap"), "but tapping is for your own");
+            run(manual, g, me, talrand, "goad", null);
+            Assert.assertTrue(talrand.isGoaded(), "goaded");
+            Assert.assertFalse(manual.run(g, me, elves, "goad", null, () -> { }), "you don't goad your own creature");
             run(manual, g, me, talrand, "eot:control", null);
             Assert.assertEquals(talrand.getController(), me, "stole Talrand for the turn");
             Assert.assertFalse(manual.run(g, me, talrand, "attack", List.of(ai), () -> { }), "no attacking outside combat");

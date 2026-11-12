@@ -380,7 +380,7 @@ dialog.card-detail { width: min(860px, calc(100vw - 32px)); max-height: 90vh; ba
 .tile-menu { position: absolute; top: 7px; right: 7px; width: 30px; height: 16px; border-radius: 4px; background: rgb(14 16 22 / 50%); border-color: rgb(255 255 255 / 20%); color: #fff; }
 .card-tile:hover .tile-menu, .tile-menu:focus-visible, .tile-menu.open { opacity: 1; }
 .tile-menu:hover, .tile-menu.open { background: rgb(14 16 22 / 68%); border-color: var(--accent); }
-.card-menu { position: fixed; z-index: 60; min-width: 200px; max-width: 280px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); padding: 4px; color-scheme: dark; }
+.card-menu { position: fixed; z-index: 60; max-height: calc(100dvh - 16px); overflow-y: auto; overscroll-behavior: contain; min-width: 200px; max-width: 280px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); padding: 4px; color-scheme: dark; }
 .card-menu-section + .card-menu-section { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 4px; }
 .card-menu-title { padding: 6px 10px 4px; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card-menu button { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 7px 10px; border-radius: 6px; cursor: pointer; font-size: .9rem; color: var(--text); }

@@ -407,7 +407,10 @@ public final class BrowserSeat implements IRemote {
         return o;
     }
 
-    /** Marks permanents kept from untapping by hand: {@code untapLock} "next" or "never". */
+    /**
+     * Marks permanents kept from untapping by hand ({@code untapLock} "next" or "never") and
+     * double-faced ones that can transform ({@code transformable}, for the menu's Transform).
+     */
     private void untapLocks(Game g, ObjectNode view) {
         if (g == null) {
             return;
@@ -418,6 +421,9 @@ public final class BrowserSeat implements IRemote {
                 String lock = card == null ? null : manual.untapLock(card);
                 if (lock != null) {
                     ((ObjectNode) c).put("untapLock", lock);
+                }
+                if (card != null && card.isTransformable()) {
+                    ((ObjectNode) c).put("transformable", true);
                 }
             }
         }

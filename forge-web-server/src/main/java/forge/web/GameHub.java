@@ -515,7 +515,7 @@ public final class GameHub {
 
     /**
      * A manual action on your own library (docs/game-protocol.md, {@code library}): draw, mill,
-     * exile, reveal the top card, shuffle. Free play only.
+     * exile, reveal the top card, shuffle, scry or surveil ({@code top} / {@code away} ids). Free play only.
      */
     private void library(Conn c, JsonNode m) {
         if (!freePlay(c)) {
@@ -536,6 +536,16 @@ public final class GameHub {
                 if (other != null && other != me && !to.contains(other)) {
                     to.add(other);
                 }
+            }
+            if (action.equals("scry") || action.equals("surveil")) {
+                List<Integer> top = new ArrayList<>();
+                List<Integer> away = new ArrayList<>();
+                m.path("top").forEach(x -> top.add(x.asInt()));
+                m.path("away").forEach(x -> away.add(x.asInt()));
+                if (!seat.manual().arrange(g, me, action, top, away, seat::refresh)) {
+                    notice(c, "Your library changed: look at the top cards again.");
+                }
+                return;
             }
             if (!seat.manual().library(g, me, action, n, to, seat::refresh)) {
                 notice(c, "That can't be done to your library now.");

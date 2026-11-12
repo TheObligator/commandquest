@@ -53,11 +53,18 @@ export function HoverZoom({ preview }: { preview: Preview | null }) {
   useLayoutEffect(() => {
     const el = ref.current;
     if (!shown || !el) return;
-    const r = el.getBoundingClientRect();
-    const { x, y } = pointer.current;
-    const left = x + 24 + r.width < innerWidth - 8 ? x + 24 : Math.max(8, x - 24 - r.width);
-    const top = Math.max(8, Math.min(y - r.height / 2, innerHeight - r.height - 8));
-    setPos({ left, top });
+    // Beside the pointer, inside the window; again whenever its size changes (a note, a late image).
+    const place = () => {
+      const r = el.getBoundingClientRect();
+      const { x, y } = pointer.current;
+      const left = x + 24 + r.width < innerWidth - 8 ? x + 24 : Math.max(8, x - 24 - r.width);
+      const top = Math.max(8, Math.min(y - r.height / 2, innerHeight - r.height - 8));
+      setPos((p) => (p && p.left === left && p.top === top ? p : { left, top }));
+    };
+    place();
+    const ro = new ResizeObserver(place);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [shown]);
 
   if (!shown) return null;

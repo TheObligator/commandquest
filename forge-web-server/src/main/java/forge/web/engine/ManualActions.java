@@ -81,7 +81,7 @@ public final class ManualActions {
     public static boolean allowed(Card card, Player me, String action) {
         // Effects on a permanent, like counters, may go on anyone's (an opponent's creature can't block,
         // gets -2/-2, comes over to you for the turn...). Everything else: your own cards only.
-        if (card.isInPlay() && (action.startsWith("eot:") || action.equals("removeFromCombat"))) {
+        if (card.isInPlay() && (action.startsWith("eot:") || action.equals("removeFromCombat") || action.equals("goad"))) {
             return !action.equals("eot:control") || card.getController() != me;
         }
         return card.isInPlay() ? card.getController() == me : card.getOwner() == me;
@@ -149,6 +149,32 @@ public final class ManualActions {
                 g.updateCombatForView();
                 g.fireEvent(new GameEventCombatChanged());
                 log(g, me, "removed " + card.getName() + " from combat");
+            } : null;
+            case "goad" -> inPlay && card.isCreature() && card.getController() != me ? () -> {
+                resolve(card, me, "DB$ Goad | Defined$ Self");
+                log(g, me, "goaded " + card.getName());
+            } : null;
+            case "phaseOut" -> inPlay && !card.isPhasedOut() ? () -> {
+                String name = card.getName();
+                resolve(card, me, "DB$ Phases | Defined$ Self");
+                log(g, me, "phased out " + name);
+            } : null;
+            case "transform" -> inPlay && card.isTransformable() ? () -> {
+                String name = card.getName();
+                resolve(card, me, "DB$ SetState | Defined$ Self | Mode$ Transform");
+                log(g, me, "transformed " + name + " into " + g.getCardState(card).getName());
+            } : null;
+            case "plot" -> zone == ZoneType.Hand ? () -> {
+                Card moved = g.getAction().moveTo(ZoneType.Exile, card, null, AbilityKey.newMap());
+                if (moved != null) {
+                    moved.setPlotted(true);
+                    log(g, me, "plotted " + moved.getName() + " (cast it free on a later turn, as a sorcery)");
+                }
+            } : null;
+            case "discard" -> zone == ZoneType.Hand ? () -> {
+                if (me.discard(card, null, false, AbilityKey.newMap()) != null) {
+                    log(g, me, "discarded " + card.getName());
+                }
             } : null;
             case "tap" -> inPlay && !card.isTapped() ? () -> {
                 card.tap(null, me);
@@ -269,6 +295,43 @@ public final class ManualActions {
         return true;
     }
 
+    /**
+     * Scry or surveil by hand ({@code kind} "scry" or "surveil"): {@code top} (top first) stays on
+     * top and {@code away} goes to the bottom (scry) or the graveyard (surveil). Between them they
+     * must be exactly your library's top cards. Done as Forge's own Scry / Surveil, so "whenever you
+     * scry" triggers and the like happen. Returns false if it doesn't apply.
+     */
+    public boolean arrange(Game g, Player me, String kind, List<Integer> top, List<Integer> away, Runnable after) {
+        int n = top.size() + away.size();
+        List<Card> lib = new ArrayList<>(me.getCardsIn(ZoneType.Library));
+        if (!(kind.equals("scry") || kind.equals("surveil")) || n < 1 || n > 99 || n > lib.size()
+                || !(me.getController() instanceof WebPlayerController ctl)) {
+            return false;
+        }
+        java.util.Set<Integer> want = new java.util.HashSet<>(top);
+        want.addAll(away);
+        java.util.Set<Integer> topIds = new java.util.HashSet<>();
+        lib.subList(0, n).forEach(c -> topIds.add(c.getId()));
+        if (want.size() != n || !want.equals(topIds)) {
+            return false;
+        }
+        Card host = lib.get(0);
+        g.getAction().invoke(() -> {
+            try {
+                ctl.arrangeNext(new WebPlayerController.Arrangement(List.copyOf(top), java.util.Set.copyOf(away)));
+                SpellAbility sa = AbilityFactory.getAbility(kind.equals("scry") ? "DB$ Scry | ScryNum$ " + n : "DB$ Surveil | Amount$ " + n, host);
+                sa.setActivatingPlayer(me);
+                AbilityUtils.resolve(sa);
+                ctl.arrangeNext(null);
+                log(g, me, (kind.equals("scry") ? "scried " : "surveilled ") + n + ": " + top.size() + " on top, " + away.size()
+                        + (kind.equals("scry") ? " on the bottom" : " into the graveyard"));
+            } finally {
+                after.run();
+            }
+        });
+        return true;
+    }
+
     /** Notes in the log that {@code me} searched their library ({@code top} 0) or looked at its top cards. */
     public static void logLook(Game g, Player me, int top) {
         log(g, me, top <= 0 ? "searched their library" : "looked at the top " + cards(top) + " of their library");
@@ -293,6 +356,14 @@ public final class ManualActions {
         if (moved != null) {
             g.getGameLog().add(GameLogEntryType.ZONE_CHANGE, me.getName() + " " + String.format(what, name).replace("the library", "their library") + " (by hand)");
         }
+    }
+
+    /** Runs a Forge ability script on {@code card} as if {@code me} activated it. */
+    private static void resolve(Card card, Player me, String script) {
+        SpellAbility sa = AbilityFactory.getAbility(script, card);
+        sa.setActivatingPlayer(me);
+        AbilityUtils.resolve(sa);
+        card.getGame().getAction().checkStaticAbilities();
     }
 
     private static void lock(Game g, Card card) {

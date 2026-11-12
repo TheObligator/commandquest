@@ -108,6 +108,8 @@ export interface CardView {
   visibleTo?: string[];
   /** Live games: kept from untapping by hand, during its next untap step or never. */
   untapLock?: "next" | "never";
+  /** Live games: a double-faced permanent that can transform (by hand). */
+  transformable?: boolean;
 }
 
 export interface PlayerView extends PlayerState {

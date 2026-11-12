@@ -17,6 +17,7 @@ import type { MenuSection } from "../components/CardMenu";
 import { CounterDialog } from "../game/CounterDialog";
 import { PayPrompt } from "../game/PayPrompt";
 import { LibraryDialog, type LibraryCountAction } from "../game/LibraryDialog";
+import { ScryDialog, type ArrangeKind } from "../game/ScryDialog";
 
 /** Combat steps once attackers are declared: when a creature can be put into combat attacking. */
 const AFTER_ATTACKERS = new Set<string>(["COMBAT_DECLARE_ATTACKERS", "COMBAT_DECLARE_BLOCKERS", "COMBAT_FIRST_STRIKE_DAMAGE", "COMBAT_DAMAGE"]);
@@ -355,28 +356,54 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
     : peek.ids ? game.libraryList.cards.filter((c) => peek.ids!.has(c.id)) : game.libraryList.cards;
   const librarySection = (): MenuSection => {
     const empty = myLibrary === 0;
+    /** N = 1…5 (as many as there are), then "X…" for the dialog. */
+    const counts = (action: "scry" | "surveil" | "mill", run: (n: number) => void): MenuSection["items"] => [
+      ...[1, 2, 3, 4, 5].filter((n) => n <= myLibrary).map((n) => ({ label: `${action[0].toUpperCase()}${action.slice(1)} ${n}`, onSelect: () => run(n) })),
+      { label: "X…", onSelect: () => setLibDialog(action) },
+    ];
     return {
       title: "Library (by hand)",
       items: [
         { label: "Draw a card", disabled: empty, onSelect: () => game.library("draw", 1) },
         { label: "🔍 Search library", disabled: empty, onSelect: () => openPeek(0) },
         { label: "Look at the top cards…", disabled: empty, onSelect: () => setLibDialog("look") },
+        { label: "Scry", disabled: empty, onSelect: () => {}, submenu: counts("scry", (n) => startArrange("scry", n)) },
+        { label: "Surveil", disabled: empty, onSelect: () => {}, submenu: counts("surveil", (n) => startArrange("surveil", n)) },
+        { label: "Mill", disabled: empty, onSelect: () => {}, submenu: counts("mill", (n) => game.library("mill", n)) },
         {
-          label: "👁 Reveal the top card to",
-          disabled: empty,
+          label: "More",
           onSelect: () => {},
           submenu: [
-            { label: "Everyone", onSelect: () => game.library("revealTop", 1, opponents.map((p) => p.id)) },
-            ...(opponents.length > 1 ? opponents.map((p) => ({ label: p.name, onSelect: () => game.library("revealTop", 1, [p.id]) })) : []),
+            {
+              label: "👁 Reveal the top card to",
+              disabled: empty,
+              onSelect: () => {},
+              submenu: [
+                { label: "Everyone", onSelect: () => game.library("revealTop", 1, opponents.map((p) => p.id)) },
+                ...(opponents.length > 1 ? opponents.map((p) => ({ label: p.name, onSelect: () => game.library("revealTop", 1, [p.id]) })) : []),
+              ],
+            },
+            { label: "Exile the top card", disabled: empty, onSelect: () => game.library("exile", 1) },
+            { label: "Draw, mill or exile several…", disabled: empty, onSelect: () => setLibDialog("draw") },
           ],
         },
-        { label: "Mill a card", disabled: empty, onSelect: () => game.library("mill", 1) },
-        { label: "Exile the top card", disabled: empty, onSelect: () => game.library("exile", 1) },
-        { label: "Draw, mill or exile several…", disabled: empty, onSelect: () => setLibDialog("draw") },
         { label: "🔀 Shuffle", onSelect: () => game.library("shuffle") },
       ],
     };
   };
+
+  // Scry / surveil by hand: fetch the top N (only you see them), then the dialog sends the split.
+  const [arrange, setArrange] = useState<{ kind: ArrangeKind; n: number; cards?: CardView[] } | null>(null);
+  const startArrange = (kind: ArrangeKind, n: number) => {
+    game.clearLibraryList();
+    setArrange({ kind, n });
+    game.listLibrary(n, false);
+  };
+  useEffect(() => {
+    const list = game.libraryList;
+    if (arrange && !arrange.cards && list && list.top === arrange.n) setArrange({ ...arrange, cards: list.cards.slice(0, arrange.n) });
+  }, [game.libraryList, arrange]);
+
 
   /** Until end of turn ▸ for a permanent: groups of effects, creature ones only on creatures. */
   const eotItem = (card: CardView): MenuSection["items"][number] => {
@@ -404,42 +431,51 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
     return items;
   };
 
+  /** A submenu row (its own click does nothing; it opens the submenu). */
+  const sub = (label: string, submenu: MenuSection["items"]): MenuSection["items"][number] => ({ label, onSelect: () => {}, submenu });
+
   const manualSection = (card: CardView): MenuSection => {
     if (view.freePlay === false) return { items: [] };
     const mine = (card.zone === "battlefield" ? card.controller : card.owner) === me;
+    const go = (action: Parameters<typeof game.manual>[1]) => () => game.manual(card.id, action);
     const items: MenuSection["items"] = [];
     if (card.zone === "battlefield") {
-      if (mine) {
-        items.push({ label: card.tapped ? "Untap" : "Tap", onSelect: () => game.manual(card.id, card.tapped ? "untap" : "tap") });
-        items.push({ label: card.faceDown ? "Turn face up" : "Turn face down", onSelect: () => game.manual(card.id, card.faceDown ? "faceUp" : "faceDown") });
-      }
+      // The common things up front; the rest under More ▸ and Move to ▸ so the menu stays short.
+      if (mine) items.push({ label: card.tapped ? "Untap" : "Tap", onSelect: go(card.tapped ? "untap" : "tap") });
       const kinds = ["+1/+1", ...(card.counters?.["-1/-1"] ? ["-1/-1"] : []), ...(card.types?.includes("Planeswalker") ? ["Loyalty"] : [])];
       for (const k of Object.keys(card.counters ?? {})) if (!kinds.includes(k)) kinds.push(k);
       for (const k of kinds) items.push(counterRow(card, k));
-      items.push({
-        label: "Add a counter",
-        onSelect: () => {},
-        submenu: QUICK_COUNTERS.filter((k) => !kinds.includes(k)).map((k) => ({ label: k, onSelect: () => game.counter(card.id, k, 1) })),
-      });
+      items.push(sub("Add a counter", [
+        ...QUICK_COUNTERS.filter((k) => !kinds.includes(k)).map((k) => ({ label: k, onSelect: () => game.counter(card.id, k, 1) })),
+        { label: "Other / several…", onSelect: () => setCounterFor(card) },
+      ]));
       items.push(eotItem(card));
       items.push(...combatItems(card, mine));
+      const more: MenuSection["items"] = [];
+      if (mine) more.push({ label: card.faceDown ? "Turn face up" : "Turn face down", onSelect: go(card.faceDown ? "faceUp" : "faceDown") });
+      if (mine && card.transformable) more.push({ label: "Transform", onSelect: go("transform") });
+      if (!mine && card.types?.includes("Creature")) more.push({ label: "Goad (attacks each combat, not you, until your next turn)", onSelect: go("goad") });
       if (mine) {
-        if (card.untapLock) {
-          items.push({ label: "🔓 Untaps normally", onSelect: () => game.manual(card.id, "untapNormally") });
-        }
-        if (card.untapLock !== "next" && card.untapLock !== "never") items.push({ label: "🔒 Doesn't untap next turn", onSelect: () => game.manual(card.id, "skipUntap") });
-        if (card.untapLock !== "never") items.push({ label: "🔒 Never untaps by itself", onSelect: () => game.manual(card.id, "neverUntap") });
+        more.push({ label: "Phase out", onSelect: go("phaseOut") });
+        if (card.untapLock) more.push({ label: "🔓 Untaps normally", onSelect: go("untapNormally") });
+        if (card.untapLock !== "next" && card.untapLock !== "never") more.push({ label: "🔒 Doesn't untap next turn", onSelect: go("skipUntap") });
+        if (card.untapLock !== "never") more.push({ label: "🔒 Never untaps by itself", onSelect: go("neverUntap") });
+        more.push({ label: "Create a token copy", onSelect: go("tokenCopy") });
       }
-      items.push({ label: "Counter…", onSelect: () => setCounterFor(card), steppers: [] });
-      if (mine) items.push({ label: "Create a token copy", onSelect: () => game.manual(card.id, "tokenCopy") });
-      if (mine) items.push(...moves(card));
+      if (more.length) items.push(sub("More", more));
+      if (mine) items.push(sub("Move to", moves(card)));
     } else if (mine) {
-      if (card.zone === "hand" && isPermanentCard(card)) items.push({ label: "⤵ Put onto the battlefield (don't cast)", onSelect: () => game.manual(card.id, "toBattlefield") });
-      if (card.zone === "hand") items.push(revealItem(card));
-      items.push(...moves(card));
+      if (card.zone === "hand" && isPermanentCard(card)) items.push({ label: "⤵ Put onto the battlefield (don't cast)", onSelect: go("toBattlefield") });
+      if (card.zone === "hand") {
+        items.push(revealItem(card));
+        items.push({ label: "Discard", onSelect: go("discard") });
+        items.push(sub("More", [{ label: "Plot (exile it; cast it free on a later turn as a sorcery)", onSelect: go("plot") }]));
+      }
+      items.push(sub("Move to", moves(card)));
     }
     return { items };
   };
+
 
   const menuFor = (t: MenuTarget): MenuPart | Promise<MenuPart> => {
     const passing: MenuPart["sections"] = [
@@ -532,7 +568,15 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
         size={myLibrary}
         initial={libDialog}
         onClose={() => setLibDialog(null)}
-        onApply={(action, n) => (action === "look" ? openPeek(n) : game.library(action, n))}
+        onApply={(action, n) => (action === "look" ? openPeek(n) : action === "scry" || action === "surveil" ? startArrange(action, n) : game.library(action, n))}
+      />
+    )}
+    {arrange?.cards && (
+      <ScryDialog
+        kind={arrange.kind}
+        cards={arrange.cards}
+        onClose={() => (setArrange(null), game.clearLibraryList())}
+        onApply={(top, away) => game.arrange(arrange.kind, top, away)}
       />
     )}
     {counterFor && (

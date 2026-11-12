@@ -12,7 +12,10 @@ import forge.game.player.PlayerView;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 import forge.player.PlayerControllerHuman;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import org.apache.commons.lang3.tuple.ImmutablePair;
 import java.util.function.Consumer;
 
 /**
@@ -97,5 +100,47 @@ public class WebPlayerController extends PlayerControllerHuman {
             }
         }
         return keep;
+    }
+
+    /** A scry or surveil done by hand: the cards to keep on top (top first) and the ones to put away, by id. */
+    public record Arrangement(List<Integer> top, Collection<Integer> away) { }
+
+    /** Set just before a scry or surveil by hand ({@link ManualActions#arrange}); used once, by the next one. */
+    private volatile Arrangement arrangement;
+
+    void arrangeNext(Arrangement a) {
+        arrangement = a;
+    }
+
+    /** The planned split of {@code topN}: cards the plan doesn't name stay on top, after the ones it does. */
+    private ImmutablePair<CardCollection, CardCollection> planned(CardCollection topN) {
+        Arrangement a = arrangement;
+        arrangement = null;
+        if (a == null) {
+            return null;
+        }
+        CardCollection top = new CardCollection();
+        CardCollection away = new CardCollection();
+        for (int id : a.top()) {
+            topN.stream().filter(c -> c.getId() == id).findFirst().ifPresent(top::add);
+        }
+        List<Card> rest = new ArrayList<>(topN);
+        rest.removeAll(top);
+        for (Card c : rest) {
+            (a.away().contains(c.getId()) ? away : top).add(c);
+        }
+        return ImmutablePair.of(top, away);
+    }
+
+    @Override
+    public ImmutablePair<CardCollection, CardCollection> arrangeForScry(CardCollection topN) {
+        ImmutablePair<CardCollection, CardCollection> p = planned(topN);
+        return p != null ? p : super.arrangeForScry(topN);
+    }
+
+    @Override
+    public ImmutablePair<CardCollection, CardCollection> arrangeForSurveil(CardCollection topN) {
+        ImmutablePair<CardCollection, CardCollection> p = planned(topN);
+        return p != null ? p : super.arrangeForSurveil(topN);
     }
 }

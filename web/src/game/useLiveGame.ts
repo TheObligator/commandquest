@@ -99,6 +99,8 @@ export type ManualAction =
   | "toBattlefield" | "toHand" | "toGraveyard" | "toExile" | "toCommand" | "toLibraryTop" | "toLibraryBottom" | "reveal"
   /** Combat by hand: put your creature into combat attacking (`to`: the player), or take any creature out. */
   | "attack" | "removeFromCombat"
+  /** More by hand: goad (someone else's creature), phase out, transform, and from hand plot or discard. */
+  | "goad" | "phaseOut" | "transform" | "plot" | "discard"
   /** Until end of turn, on any permanent: `eot:<key>` (see EOT_GROUPS in pages/LiveGame.tsx) or `eot:pt:+2:+2`. */
   | `eot:${string}`;
 
@@ -353,6 +355,8 @@ export function useLiveGame() {
     cancel: () => send({ t: "cancel" }),
     /** Free play: draw, mill or exile the top `n` cards of your library, reveal its top card to `to`, or shuffle it. */
     library: (action: LibraryAction, n = 1, to?: string[]) => send({ t: "library", action, n, to: to?.map(Number) }),
+    /** Scry or surveil by hand: `top` (top first) stays, `away` goes to the bottom / graveyard. */
+    arrange: (kind: "scry" | "surveil", top: number[], away: number[]) => send({ t: "library", action: kind, top, away }),
     /** Free play: list your library for you (`top` 0: search all of it). `log`: tell the table (when you open it). */
     listLibrary: (top: number, log: boolean) => send({ t: "libraryCards", top, log }),
     clearLibraryList: () => setLibraryList(null),

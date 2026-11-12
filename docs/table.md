@@ -84,23 +84,36 @@ The game screen. The board itself is `web/src/game/TableBoard.tsx`, shared by tw
   - **Abilities:** everything Forge lets it do, greyed out when you can't do it now, with the
     reason.
   - **By hand** (manual overrides, like a paper table; outside the rules, logged "(by hand)", your
-    own cards only, except counters which go on any permanent): on the battlefield Tap/Untap, Turn
-    face down/up, counter rows with + and − (+1/+1, loyalty on planeswalkers, and any already on
-    it), Add a counter ▸ (common kinds: shield, stun, charge, lore, time, oil, finality, keyword
-    counters…), ⏳ Until end of turn ▸ (on any permanent, like counters: Power / toughness ±N and
-    switch; Evasion and combat: can't be blocked, flying, menace, trample, first/double strike,
-    vigilance, haste, lifelink, deathtouch, reach; Restrictions: can't block, can't attack, must be
-    blocked, lure, prevent damage; Protection: indestructible, hexproof, shroud, protection from a
-    color or everything; on someone else's permanent, Gain control (untapped, with haste); creature
-    groups only on creatures), ⚔ Put into combat attacking (your creature, on your turn once
-    attackers are declared: tapped and attacking the opponent you pick, unblocked if blockers are
-    already declared, for "put onto the battlefield attacking" and the like), Remove from combat
-    (any attacking or blocking creature), 🔒 Doesn't untap next turn, 🔒 Never untaps by itself,
-    Counter… (any kind and number), Create a token copy, and moving it: to hand, graveyard, exile, command zone, top or bottom of
-    the library. In hand: ⤵ Put onto the battlefield (don't cast) first, for permanent cards only
-    (for effects like "put a creature card from your hand onto the battlefield"), then 👁 Reveal to ▸
-    Everyone (or one opponent, with more than one) and the same moves. Put onto the battlefield is
-    offered from other zones too, also for permanent cards only.
+    own cards only, except counters, until-end-of-turn effects, goad and remove from combat, which go
+    on any permanent). Common things are up front; the rest is in submenus so the menu stays short.
+    - On the battlefield: Tap/Untap; counter rows with + and − (+1/+1, loyalty on planeswalkers,
+      any already on it); **Add a counter ▸** (shield, stun, charge, lore, time, oil, finality,
+      keyword counters…, and Other / several…); **⏳ Until end of turn ▸** (Power / toughness ±N
+      and switch; Evasion and combat: can't be blocked, flying, menace, trample, first/double
+      strike, vigilance, haste, lifelink, deathtouch, reach; Restrictions: can't block, can't
+      attack, must be blocked, lure, prevent damage; Protection: indestructible, hexproof, shroud,
+      protection from a color or everything; on someone else's permanent, Gain control, untapped
+      with haste; creature groups only on creatures); **⚔ Put into combat attacking** (your
+      creature, on your turn once attackers are declared: tapped and attacking the opponent you
+      pick, unblocked if blockers are already declared); **Remove from combat** (any attacking or
+      blocking creature); **More ▸** (turn face down/up, Transform for double-faced cards, Goad on
+      someone else's creature, Phase out, 🔒 Doesn't untap next turn, 🔒 Never untaps by itself,
+      Create a token copy); **Move to ▸** hand, graveyard, exile, command zone, top or bottom of the
+      library.
+    - In hand: **⤵ Put onto the battlefield (don't cast)** (permanent cards only, for effects like
+      "put a creature card from your hand onto the battlefield"), 👁 Reveal to ▸ Everyone (or one
+      opponent), **Discard** (a real discard, so madness and "whenever you discard" work), **More ▸**
+      Plot (exiled and plotted: Forge then lets you cast it free on a later turn as a sorcery),
+      and **Move to ▸** (including Put onto the battlefield from other zones, permanents only).
+- **Right-click your library** (free play): Draw a card, 🔍 Search, Look at the top cards…,
+  **Scry ▸** / **Surveil ▸** / **Mill ▸** 1 to 5 or X…, More ▸ (reveal the top card, exile the top
+  card, draw / mill / exile several), 🔀 Shuffle. Scry and surveil open a window with the top cards
+  (only you see them): keep each on top, in the order shown (left is the top card), or send it to
+  the bottom (scry) or graveyard (surveil). The server does it as Forge's own scry or surveil, so
+  "whenever you scry / surveil" triggers happen.
+- **Menus and the hover card stay on screen:** a menu near an edge opens the other way, a submenu
+  opens on whichever side has room and moves up to fit, and a menu taller than the window scrolls.
+  The large hover card fits the window's height and moves as its image loads.
 - **Right-click a zone tile or a board** to view the zone, enlarge the board,
   reset its layout, or pass priority.
 - **The stack** is a floating window over the table (`game/StackWindow.tsx`), shown while
