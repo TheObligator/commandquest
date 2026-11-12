@@ -18,6 +18,7 @@ import { CounterDialog } from "../game/CounterDialog";
 import { PayPrompt } from "../game/PayPrompt";
 import { LibraryDialog, type LibraryCountAction } from "../game/LibraryDialog";
 import { ScryDialog, type ArrangeKind } from "../game/ScryDialog";
+import { CostDialog } from "../game/CostDialog";
 
 /** Combat steps once attackers are declared: when a creature can be put into combat attacking. */
 const AFTER_ATTACKERS = new Set<string>(["COMBAT_DECLARE_ATTACKERS", "COMBAT_DECLARE_BLOCKERS", "COMBAT_FIRST_STRIKE_DAMAGE", "COMBAT_DAMAGE"]);
@@ -397,12 +398,33 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
             },
             { label: "Exile the top card", disabled: empty, onSelect: () => game.library("exile", 1) },
             { label: "Draw, mill or exile several…", disabled: empty, onSelect: () => setLibDialog("draw") },
+            {
+              label: "Let an opponent search it",
+              onSelect: () => {},
+              submenu: opponents.map((p) => ({ label: p.name, onSelect: () => game.letSearch(p.id) })),
+            },
           ],
         },
         { label: "🔀 Shuffle", onSelect: () => game.library("shuffle") },
       ],
     };
   };
+
+  // Another player let you search their library: open it (the log says you searched it), keep it
+  // current as their library changes, and closing it ends the search (the server shuffles it).
+  const searchOf = view.searching?.[0] ?? null;
+  const searchPlayer = searchOf ? view.players.find((p) => p.id === searchOf) : undefined;
+  const searchKey = `${searchOf}|${searchPlayer?.libraryCount}|${view.log.length}`;
+  const searchShown = useRef<string | null>(null);
+  useEffect(() => {
+    if (!searchOf) {
+      searchShown.current = null;
+      return;
+    }
+    game.listSearch(searchOf, searchShown.current !== searchOf);
+    searchShown.current = searchOf;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchKey]);
 
   // Scry / surveil by hand: fetch the top N (only you see them), then the dialog sends the split.
   const [arrange, setArrange] = useState<{ kind: ArrangeKind; n: number; cards?: CardView[] } | null>(null);
@@ -443,6 +465,22 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
     return items;
   };
 
+  /** May you be let cast it by hand: your card in exile or graveyard, or a face-down exiled card you may look at. */
+  const castable = (card: CardView) =>
+    ((card.zone === "exile" || card.zone === "graveyard") && card.owner === me)
+    || (card.zone === "exile" && !!card.faceDown && !!card.visibleTo?.includes(me));
+  /** Let me cast it ▸: for cards an effect lets you cast that Forge doesn't know about. */
+  const castItem = (card: CardView): MenuSection["items"][number] => ({
+    label: "▶ Let me cast it",
+    onSelect: () => {},
+    submenu: [
+      { label: "Paying its mana cost", onSelect: () => game.manual(card.id, "cast:pay") },
+      { label: "Without paying its mana cost", onSelect: () => game.manual(card.id, "cast:free") },
+      { label: "For another cost… (e.g. a foretell cost)", onSelect: () => setCostFor(card) },
+    ],
+  });
+  const [costFor, setCostFor] = useState<CardView | null>(null);
+
   /** A submenu row (its own click does nothing; it opens the submenu). */
   const sub = (label: string, submenu: MenuSection["items"]): MenuSection["items"][number] => ({ label, onSelect: () => {}, submenu });
 
@@ -481,9 +519,20 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
       if (card.zone === "hand") {
         items.push(revealItem(card));
         items.push({ label: "Discard", onSelect: go("discard") });
-        items.push(sub("More", [{ label: "Plot (exile it; cast it free on a later turn as a sorcery)", onSelect: go("plot") }]));
+        items.push(sub("More", [
+          { label: "Plot (exile it; cast it free on a later turn as a sorcery)", onSelect: go("plot") },
+          { label: "Foretell (exile it face down; only you may look)", onSelect: go("foretell") },
+          sub("Suspend with time counters", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => ({ label: `${n} time counter${n === 1 ? "" : "s"}`, onSelect: go(`suspend:${n}`) }))),
+        ]));
       }
+      if (castable(card)) items.push(castItem(card));
       items.push(sub("Move to", moves(card)));
+    } else if (card.zone === "library" && view.searching?.includes(card.owner)) {
+      // Searching someone's library they let you search: take cards into their exile.
+      items.push({ label: "Exile face down (only you may look at it)", onSelect: () => game.manual(card.id, "exileFaceDown", [me]) });
+      items.push({ label: "Exile face up", onSelect: go("toExile") });
+    } else if (castable(card)) {
+      items.push(castItem(card)); // a face-down card in someone's exile that you may look at
     }
     return { items };
   };
@@ -592,6 +641,13 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
         onApply={(top, away) => game.arrange(arrange.kind, top, away)}
       />
     )}
+    {costFor && (
+      <CostDialog
+        name={costFor.name ?? "it"}
+        onClose={() => setCostFor(null)}
+        onApply={(cost) => game.manual(costFor.id, `cast:cost:${cost}`)}
+      />
+    )}
     {counterFor && (
       <CounterDialog
         card={counterFor}
@@ -620,7 +676,9 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
       menuFor={menuFor}
       detailsFor={game.details}
       gameMenu={gameMenu}
-      peek={peek ? { title: peek.top > 0 ? `Top ${peek.top === 1 ? "card" : `${peek.top} cards`} of your library` : "Your library (only you see this)", cards: peekCards, onClose: closePeek } : null}
+      peek={searchOf && game.searchList?.owner === searchOf
+        ? { title: `${searchPlayer?.name ?? "Their"}'s library (they let you search it; right-click a card to exile it)`, cards: game.searchList.cards, onClose: () => game.endSearch(searchOf) }
+        : peek ? { title: peek.top > 0 ? `Top ${peek.top === 1 ? "card" : `${peek.top} cards`} of your library` : "Your library (only you see this)", cards: peekCards, onClose: closePeek } : null}
       stackItemMenu={(s) => {
         const tick = (on: boolean | undefined, label: string) => `${on ? "✓ " : ""}${label}`;
         const key = s.yieldKey;

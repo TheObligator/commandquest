@@ -180,4 +180,64 @@ public class LibraryActionsTest {
             session.abort();
         }
     }
+
+    private static void ok(ManualActions manual, Game g, Player me, Card card, String action, List<Player> to) throws InterruptedException {
+        CountDownLatch done = new CountDownLatch(1);
+        Assert.assertTrue(manual.run(g, me, card, action, to, done::countDown), action + " applies");
+        Assert.assertTrue(done.await(10, TimeUnit.SECONDS), action + " ran");
+    }
+
+    /** Foretell and suspend from hand, letting a card be cast from exile, and exiling from someone else's library. */
+    @Test(timeOut = 240_000)
+    public void foretellSuspendCastAndSearchersExile() throws Exception {
+        MyRandom.setRandom(new Random(8));
+        Deck mine = deck("Ezuri, Renegade Leader", "Forest");
+        mine.getMain().add("Grizzly Bears", 3);
+        GameSessionTest.ScriptedBrowser browser = new GameSessionTest.ScriptedBrowser();
+        GameSession session = GameSession.startCommander(List.of(
+                new GameSession.Seat("You", mine, browser),
+                new GameSession.Seat("AI 1", deck("Talrand, Sky Summoner", "Island"), null)));
+        try {
+            PlayerView meView = PaymentTest.untilMyMain(session, browser);
+            Game g = session.game();
+            Player me = g.getPlayer(meView.getId());
+            Player ai = g.getPlayers().stream().filter(p -> p != me).findFirst().orElseThrow();
+            ManualActions manual = new ManualActions();
+            List<Card> bears = me.getAllCards().stream().filter(c -> c.getName().equals("Grizzly Bears")).toList();
+            for (Card b : bears) {
+                ok(manual, g, me, g.getCardState(b), "toHand", null);
+            }
+
+            // Foretell: face down in exile, foretold, only you may look.
+            ok(manual, g, me, g.getCardState(bears.get(0)), "foretell", null);
+            Card foretold = g.getCardState(bears.get(0));
+            Assert.assertTrue(foretold.isInZone(ZoneType.Exile) && foretold.isFaceDown() && foretold.isForetold(), "foretold");
+            Assert.assertTrue(foretold.getView().canFaceDownBeShownTo(me.getView()) && !foretold.getView().canFaceDownBeShownTo(ai.getView()), "only you look");
+
+            // Suspend 3: exiled with three time counters and gains suspend.
+            ok(manual, g, me, g.getCardState(bears.get(1)), "suspend:3", null);
+            Card suspended = g.getCardState(bears.get(1));
+            Assert.assertEquals(suspended.getCounters(forge.game.card.CounterEnumType.TIME), 3, "three time counters");
+            Assert.assertTrue(suspended.hasKeyword(forge.game.keyword.Keyword.SUSPEND), "gains suspend");
+
+            // Let yourself cast an exiled card for free: Forge then offers casting it from exile.
+            ok(manual, g, me, g.getCardState(bears.get(2)), "toExile", null);
+            Card exiled = g.getCardState(bears.get(2));
+            ok(manual, g, me, exiled, "cast:free", null);
+            Assert.assertFalse(exiled.mayPlay(me).isEmpty(), "you may cast it");
+            Assert.assertFalse(manual.run(g, me, exiled, "cast:cost:DROP TABLE", null, () -> { }), "a cost must be mana symbols");
+            Assert.assertFalse(manual.run(g, ai, exiled, "cast:free", null, () -> { }), "not someone else's face-up card");
+
+            // The AI "searches" your library and exiles a card face down that only it may look at.
+            Card top = me.getCardsIn(ZoneType.Library).getFirst();
+            ok(manual, g, ai, top, "exileFaceDown", List.of(ai));
+            Card taken = g.getCardState(top);
+            Assert.assertTrue(taken.isInZone(ZoneType.Exile) && taken.getOwner() == me, "in your exile");
+            Assert.assertTrue(taken.getView().canFaceDownBeShownTo(ai.getView()) && !taken.getView().canFaceDownBeShownTo(me.getView()), "only the searcher looks");
+            Assert.assertTrue(ManualActions.castable(taken, ai), "the searcher may be let cast it");
+            Assert.assertFalse(ManualActions.castable(foretold, ai), "but not your foretold card");
+        } finally {
+            session.abort();
+        }
+    }
 }

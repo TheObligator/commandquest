@@ -84,8 +84,27 @@ public final class ManualActions {
         if (card.isInPlay() && (action.startsWith("eot:") || action.equals("removeFromCombat") || action.equals("goad"))) {
             return !action.equals("eot:control") || card.getController() != me;
         }
+        if (action.startsWith("cast:")) {
+            return castable(card, me);
+        }
         return card.isInPlay() ? card.getController() == me : card.getOwner() == me;
     }
+
+    /**
+     * May {@code me} be let cast this card by hand ({@code cast:}): your own card in exile or your
+     * graveyard, or a face-down exiled card you may look at (one you exiled while searching
+     * someone's library, say).
+     */
+    static boolean castable(Card card, Player me) {
+        ZoneType z = card.getZone() == null ? null : card.getZone().getZoneType();
+        if (z == ZoneType.Graveyard) {
+            return card.getOwner() == me;
+        }
+        return z == ZoneType.Exile && (card.getOwner() == me || card.isFaceDown() && card.getView().mayPlayerLook(me.getView()));
+    }
+
+    private static final Pattern MANA_COST = Pattern.compile("^[0-9WUBRGCXS/ ]{1,30}$");
+    private static final Pattern SUSPEND = Pattern.compile("^suspend:(\\d{1,2})$");
 
     /** The log text and Forge script for an {@code eot:} action, or null if it's not one we know. */
     static String[] eot(String action) {
@@ -117,6 +136,41 @@ public final class ManualActions {
         boolean inPlay = card.isInPlay();
         ZoneType zone = g.getZoneOf(card) == null ? null : g.getZoneOf(card).getZoneType();
         String[] effect = eot(action);
+        Matcher suspend = SUSPEND.matcher(action);
+        if (suspend.matches() && zone == ZoneType.Hand) {
+            int n = Math.max(1, Math.min(Integer.parseInt(suspend.group(1)), 20));
+            return invoke(g, after, () -> {
+                Card moved = g.getAction().moveTo(ZoneType.Exile, card, null, AbilityKey.newMap());
+                if (moved == null) {
+                    return;
+                }
+                moved.addCounterInternal(forge.game.card.CounterEnumType.TIME, n, me, false, null, null);
+                // Like Jhoira of the Ghitu: if it doesn't have suspend, it gains suspend.
+                if (!moved.hasKeyword(forge.game.keyword.Keyword.SUSPEND)) {
+                    resolve(moved, me, "DB$ Pump | Defined$ Self | KW$ Suspend | PumpZone$ Exile | Duration$ Permanent");
+                }
+                log(g, me, "suspended " + moved.getName() + " with " + n + " time counter" + (n == 1 ? "" : "s"));
+            });
+        }
+        if (action.startsWith("cast:")) {
+            String how = action.substring(5);
+            String extra = how.equals("pay") ? "" : how.equals("free") ? " | MayPlayWithoutManaCost$ True"
+                    : how.startsWith("cost:") && MANA_COST.matcher(how.substring(5).trim()).matches() ? " | MayPlayAltManaCost$ " + how.substring(5).trim() : null;
+            if (extra == null || !castable(card, me) || zone == null) {
+                return false;
+            }
+            String desc = how.equals("pay") ? "paying its mana cost" : how.equals("free") ? "without paying its mana cost" : "for " + how.substring(5).trim();
+            return invoke(g, after, () -> {
+                SpellAbility sa = AbilityFactory.getAbility("DB$ Effect | RememberObjects$ Self | StaticAbilities$ WebMayPlay | ExileOnMoved$ " + zone.name() + " | Duration$ Permanent", card);
+                sa.setActivatingPlayer(me);
+                sa.setSVar("WebMayPlay", "Mode$ Continuous | Affected$ Card.IsRemembered | AffectedZone$ Exile,Graveyard | MayPlay$ True" + extra
+                        + " | Description$ You may cast it " + desc + " (by hand).");
+                AbilityUtils.resolve(sa);
+                g.getAction().checkStaticAbilities();
+                String name = card.isFaceDown() ? "a face-down card" : card.getName();
+                log(g, me, "may now cast " + name + " from " + (zone == ZoneType.Exile ? "exile " : "their graveyard ") + desc);
+            });
+        }
         Combat combat = g.getCombat();
         Player defender = to == null || to.isEmpty() ? null : to.get(0);
         Runnable change = effect != null ? (inPlay ? () -> {
@@ -163,6 +217,23 @@ public final class ManualActions {
                 String name = card.getName();
                 resolve(card, me, "DB$ SetState | Defined$ Self | Mode$ Transform");
                 log(g, me, "transformed " + name + " into " + g.getCardState(card).getName());
+            } : null;
+            // Foretell by hand, as Forge's Foretell does: exiled face down, you may look at it, and it's
+            // foretold (a card with foretell can then be cast for its foretell cost; any other card:
+            // "Cast it ▸ for another cost").
+            case "foretell" -> zone == ZoneType.Hand ? () -> {
+                Card moved = g.getAction().moveTo(ZoneType.Exile, card, null, AbilityKey.newMap());
+                if (moved != null) {
+                    moved.setForetold(true);
+                    moved.turnFaceDown(true);
+                    moved.addMayLookFaceDownExile(me);
+                    me.addForetoldThisTurn();
+                    if (!moved.hasKeyword(forge.game.keyword.Keyword.FORETELL)) {
+                        moved.setForetoldCostByEffect(true);
+                    }
+                    g.fireEvent(new forge.game.event.GameEventCardForetold(me.getView()));
+                    log(g, me, "foretold a card");
+                }
             } : null;
             // Exile face down; only the players in {@code to} may look at it (none: nobody).
             case "exileFaceDown" -> zone != ZoneType.Exile ? () -> {
@@ -372,6 +443,17 @@ public final class ManualActions {
         if (moved != null) {
             g.getGameLog().add(GameLogEntryType.ZONE_CHANGE, me.getName() + " " + String.format(what, name).replace("the library", "their library") + " (by hand)");
         }
+    }
+
+    private static boolean invoke(Game g, Runnable after, Runnable change) {
+        g.getAction().invoke(() -> {
+            try {
+                change.run();
+            } finally {
+                after.run();
+            }
+        });
+        return true;
     }
 
     /** Runs a Forge ability script on {@code card} as if {@code me} activated it. */

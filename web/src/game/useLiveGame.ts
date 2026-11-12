@@ -103,6 +103,10 @@ export type ManualAction =
   | "goad" | "phaseOut" | "transform" | "plot" | "discard"
   /** Exile face down; only the players in `to` may look at it (you, for foretell or hideaway). */
   | "exileFaceDown"
+  /** From hand: foretell (face down, foretold), or suspend with N time counters (`suspend:3`). */
+  | "foretell" | `suspend:${number}`
+  /** Let yourself cast it from exile or your graveyard: `cast:pay`, `cast:free`, or `cast:cost:2 U`. */
+  | `cast:${string}`
   /** Until end of turn, on any permanent: `eot:<key>` (see EOT_GROUPS in pages/LiveGame.tsx) or `eot:pt:+2:+2`. */
   | `eot:${string}`;
 
@@ -113,6 +117,8 @@ export type LibraryAction = "draw" | "mill" | "exile" | "revealTop" | "shuffle";
 export interface LibraryList {
   top: number;
   cards: CardView[];
+  /** Whose library (yours, or one you're searching). */
+  owner?: string;
 }
 
 /**
@@ -142,6 +148,9 @@ export function useLiveGame() {
   const [error, setError] = useState<string | null>(null);
   /** Why the last click did nothing (a `notice`), with a counter so the same text shows again. */
   const [libraryList, setLibraryList] = useState<LibraryList | null>(null);
+  /** Another player's library you're searching (they let you). */
+  const [searchList, setSearchList] = useState<LibraryList | null>(null);
+  const searchOwner = useRef<string | null>(null);
   const [notice, setNotice] = useState<{ message: string; n: number } | null>(null);
   const actionWaiters = useRef(new Map<number, ((a: CardActions) => void)[]>());
   const detailWaiters = useRef(new Map<number, ((d: CardDetails) => void)[]>());
@@ -267,7 +276,8 @@ export function useLiveGame() {
             setStatus("over");
             break;
           case "libraryCards":
-            setLibraryList({ top: m.top ?? 0, cards: m.cards ?? [] });
+            if (m.owner && m.owner === searchOwner.current) setSearchList({ top: 0, cards: m.cards ?? [], owner: m.owner });
+            else setLibraryList({ top: m.top ?? 0, cards: m.cards ?? [], owner: m.owner });
             break;
           case "notice":
             setNotice((n) => ({ message: m.message, n: (n?.n ?? 0) + 1 }));
@@ -339,6 +349,7 @@ export function useLiveGame() {
     notice,
     autoPass,
     libraryList,
+    searchList,
     signedIn: !!token,
     clearError: () => setError(null),
     /** Brings the game back to this tab after it was opened in another one. */
@@ -362,6 +373,19 @@ export function useLiveGame() {
     /** Free play: list your library for you (`top` 0: search all of it). `log`: tell the table (when you open it). */
     listLibrary: (top: number, log: boolean) => send({ t: "libraryCards", top, log }),
     clearLibraryList: () => setLibraryList(null),
+    /** Let another player search your library (free play). */
+    letSearch: (to: string) => send({ t: "letSearch", to: Number(to) }),
+    /** List the library of a player who lets you search it; `log` when you open it. */
+    listSearch: (owner: string, log: boolean) => {
+      searchOwner.current = owner;
+      send({ t: "libraryCards", top: 0, log, owner: Number(owner) });
+    },
+    /** Finish searching that player's library (it's shuffled). */
+    endSearch: (owner: string) => {
+      searchOwner.current = null;
+      setSearchList(null);
+      send({ t: "endSearch", owner: Number(owner) });
+    },
     /** Free play: pay the mana cost you're paying now with nothing. */
     payFree: () => send({ t: "payFree" }),
     clickCard: (id: number) => send({ t: "card", id }),

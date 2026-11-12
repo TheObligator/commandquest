@@ -104,7 +104,18 @@ The game screen. The board itself is `web/src/game/TableBoard.tsx`, shared by tw
       "put a creature card from your hand onto the battlefield"), 👁 Reveal to ▸ Everyone (or one
       opponent), **Discard** (a real discard, so madness and "whenever you discard" work), **More ▸**
       Plot (exiled and plotted: Forge then lets you cast it free on a later turn as a sorcery),
-      and **Move to ▸** (including Put onto the battlefield from other zones, permanents only).
+      Foretell (as Forge does it: face down, foretold, only you may look; a card with foretell can
+      then be cast for its foretell cost, any other card through Let me cast it), Suspend with 1–10
+      time counters (it gains suspend if it hasn't got it, like Jhoira of the Ghitu, so the upkeep
+      countdown and free cast happen), and **Move to ▸** (including Put onto the battlefield from other zones, permanents only).
+    - **▶ Let me cast it ▸** on your card in exile or your graveyard (or a face-down exiled card
+      you may look at): Paying its mana cost, Without paying its mana cost, or For another cost…
+      (type it, e.g. {1}{U}). For cards a new effect lets you cast that Forge doesn't know about. It
+      lasts until the card leaves that zone; then click the card to cast it as usual.
+    - **Let an opponent search it** (library ▸ More): that player's table opens your library for
+      them (the log says they searched it). They can right-click a card to exile it face down so
+      only they may look at it, or face up; it goes to your exile. Closing the window ends the
+      search and shuffles your library. They can then use Let me cast it on those cards.
     - **Exile face down ▸** (in Move to, from any zone but exile): Only you may look at it (foretell,
       hideaway), Only <opponent> may look at it, or Nobody. Forge keeps that permission while it's
       in exile; hovering it says who can see it. You can still right-click your own face-down

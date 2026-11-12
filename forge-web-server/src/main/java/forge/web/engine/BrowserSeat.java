@@ -59,6 +59,8 @@ public final class BrowserSeat implements IRemote {
     private volatile ProtocolGuiGame gui;
     private volatile java.util.function.Supplier<Game> game = () -> null;
     private final ManualActions manual = new ManualActions();
+    /** Players (ids) who let this player search their library right now (free play). */
+    private final java.util.Set<Integer> searching = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private volatile PlayerView me;
     private volatile String promptMessage = "";
     /**
@@ -252,6 +254,10 @@ public final class BrowserSeat implements IRemote {
                 view.set("selection", sel);
             }
             untapLocks(live, view);
+            if (!searching.isEmpty()) {
+                ArrayNode s = view.putArray("searching"); // players whose library you may search
+                searching.forEach(id -> s.add(String.valueOf(id)));
+            }
             yields(gv, view);
             o.set("view", view);
             state = json.writeValueAsString(o);
@@ -326,6 +332,20 @@ public final class BrowserSeat implements IRemote {
                 o.put("decision", String.valueOf(ctl.getTriggerDecision(s.getKey())));
             }
         }
+    }
+
+    /** Lets this player search {@code ownerId}'s library, or ends that ({@code on} false). Returns whether it changed. */
+    public boolean letSearch(int ownerId, boolean on) {
+        boolean changed = on ? searching.add(ownerId) : searching.remove(ownerId);
+        if (changed) {
+            refresh();
+        }
+        return changed;
+    }
+
+    /** May this player search {@code ownerId}'s library right now? */
+    public boolean maySearch(int ownerId) {
+        return searching.contains(ownerId);
     }
 
     public ManualActions manual() {

@@ -217,7 +217,9 @@ public final class GameHub {
             case "manual" -> manual(c, m);
             case "payFree" -> payFree(c);
             case "library" -> library(c, m);
-            case "libraryCards" -> libraryCards(c, m.path("top").asInt(0), m.path("log").asBoolean(false));
+            case "libraryCards" -> libraryCards(c, m.path("top").asInt(0), m.path("log").asBoolean(false), m.path("owner").asInt(-1));
+            case "letSearch" -> letSearch(c, m.path("to").asInt(-1), true);
+            case "endSearch" -> letSearch(c, m.path("owner").asInt(-1), false);
             case "details" -> details(c, m.path("id").asInt());
             case "counter" -> counter(c, m.path("id").asInt(), m.path("type").asText(""), m.path("delta").asInt());
             case "yieldsOff" -> act(c, ctl -> {
@@ -496,8 +498,18 @@ public final class GameHub {
                 return;
             }
             Player me = g.getPlayer(seat.player().getId());
-            if (!ManualActions.allowed(card, me, action)) {
+            // Searching someone's library they let you search: you may exile cards from it, face down
+            // so only you may look at them (they stay in that player's exile), or face up.
+            boolean searcher = card.isInZone(forge.game.zone.ZoneType.Library) && card.getOwner() != me && seat.maySearch(card.getOwner().getId())
+                    && (action.equals("exileFaceDown") || action.equals("toExile"));
+            if (!searcher && !ManualActions.allowed(card, me, action)) {
                 notice(c, "You can only do that to your own cards.");
+                return;
+            }
+            if (searcher && action.equals("exileFaceDown")) {
+                if (!seat.manual().run(g, me, card, action, List.of(me), seat::refresh)) {
+                    notice(c, "That can't be done to this card where it is now.");
+                }
                 return;
             }
             List<Player> to = new ArrayList<>();
@@ -559,7 +571,47 @@ public final class GameHub {
      * or the top {@code top}. Free play only. {@code log}: note it in the game log (when you open it,
      * not when the list refreshes).
      */
-    private void libraryCards(Conn c, int top, boolean log) {
+    /**
+     * Free play: let another player at the table search your library ({@code on}, {@code id} is
+     * theirs), or, from the searcher, end it ({@code id} is the library's owner; then it's shuffled).
+     * While it lasts they can list your library and exile cards from it, face down so only they
+     * may look at them (in your exile).
+     */
+    private void letSearch(Conn c, int id, boolean on) {
+        if (!freePlay(c)) {
+            return;
+        }
+        Hosted host = c.game;
+        act(c, ctl -> {
+            Game g = game(c);
+            BrowserSeat seat = seat(c);
+            Player me = g == null || seat == null || seat.player() == null ? null : g.getPlayer(seat.player().getId());
+            Player other = g == null ? null : g.getPlayer(id);
+            if (me == null || other == null || other == me) {
+                return;
+            }
+            if (on) {
+                Hosted them = games.values().stream()
+                        .filter(h -> h.session == host.session && h.seat != null && h.seat.player() != null && h.seat.player().getId() == id)
+                        .findFirst().orElse(null);
+                if (them == null) {
+                    notice(c, other.getName() + " isn't a person at this table, so they can't search it.");
+                    return;
+                }
+                if (them.seat.letSearch(me.getId(), true)) {
+                    g.getGameLog().add(GameLogEntryType.INFORMATION, me.getName() + " lets " + other.getName() + " search their library (by hand)");
+                    seat.refresh();
+                }
+            } else if (seat.letSearch(other.getId(), false)) {
+                other.shuffle(null);
+                g.getGameLog().add(GameLogEntryType.INFORMATION, me.getName() + " finished searching " + other.getName() + "'s library, and it was shuffled (by hand)");
+                seat.refresh();
+                games.values().stream().filter(h -> h.session == host.session && h.seat != null).forEach(h -> h.seat.refresh());
+            }
+        });
+    }
+
+    private void libraryCards(Conn c, int top, boolean log, int ownerId) {
         if (!freePlay(c)) {
             return;
         }
@@ -570,18 +622,32 @@ public final class GameHub {
             if (me == null) {
                 return;
             }
-            List<Card> lib = new ArrayList<>(me.getCardsIn(forge.game.zone.ZoneType.Library));
-            if (top > 0) {
-                lib = lib.subList(0, Math.min(top, lib.size()));
+            Player owner = me;
+            int n = top;
+            if (ownerId >= 0 && ownerId != me.getId()) {
+                owner = g.getPlayer(ownerId);
+                if (owner == null || !seat.maySearch(ownerId)) {
+                    notice(c, "You can't search that library now.");
+                    return;
+                }
+                n = 0; // a search: all of it
+            }
+            List<Card> lib = new ArrayList<>(owner.getCardsIn(forge.game.zone.ZoneType.Library));
+            if (n > 0) {
+                lib = lib.subList(0, Math.min(n, lib.size()));
             }
             ObjectNode o = msg("libraryCards");
-            o.put("top", top);
+            o.put("top", n);
+            o.put("owner", String.valueOf(owner.getId()));
             ArrayNode cards = o.putArray("cards");
             for (Card card : lib) {
                 cards.add(seat.revealedCard(card.getView()));
             }
-            if (log) {
-                ManualActions.logLook(g, me, top <= 0 ? 0 : lib.size());
+            if (log && owner != me) {
+                g.getGameLog().add(GameLogEntryType.INFORMATION, me.getName() + " searched " + owner.getName() + "'s library (by hand)");
+                seat.refresh();
+            } else if (log) {
+                ManualActions.logLook(g, me, n <= 0 ? 0 : lib.size());
                 seat.refresh();
             }
             send(c, o);

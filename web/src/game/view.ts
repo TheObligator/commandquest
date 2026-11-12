@@ -151,6 +151,8 @@ export interface GameView {
   autoPassing?: boolean;
   /** Free play is on in this game: manual overrides and paying mana costs with nothing. */
   freePlay?: boolean;
+  /** Players (ids) who let you search their library right now. */
+  searching?: string[];
   /** Live games: your cards you can use right now (cast, play or activate). */
   playable?: number[];
   /** In turn order, starting with the viewer. */
