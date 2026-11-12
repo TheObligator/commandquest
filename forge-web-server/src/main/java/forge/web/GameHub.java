@@ -503,7 +503,8 @@ public final class GameHub {
             List<Player> to = new ArrayList<>();
             for (JsonNode p : m.path("to")) {
                 Player other = g.getPlayer(p.asInt(-1));
-                if (other != null && other != me && !to.contains(other)) {
+                // You can be one of those who may look at a card you exile face down.
+                if (other != null && (other != me || action.equals("exileFaceDown")) && !to.contains(other)) {
                     to.add(other);
                 }
             }

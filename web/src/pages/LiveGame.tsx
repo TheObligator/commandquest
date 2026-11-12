@@ -305,7 +305,19 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
     if (card.zone !== "battlefield" && card.zone !== "hand" && isPermanentCard(card)) items.push({ label: "Put onto the battlefield", onSelect: go("toBattlefield") });
     if (card.zone !== "hand") items.push({ label: card.zone === "battlefield" ? "Return to hand" : "Put into hand", onSelect: go("toHand") });
     if (card.zone !== "graveyard") items.push({ label: "Put into graveyard", onSelect: go("toGraveyard") });
-    if (card.zone !== "exile") items.push({ label: "Exile", onSelect: go("toExile") });
+    if (card.zone !== "exile") {
+      items.push({ label: "Exile", onSelect: go("toExile") });
+      const faceDown = (to: string[]) => () => game.manual(card.id, "exileFaceDown", to);
+      items.push({
+        label: "Exile face down",
+        onSelect: () => {},
+        submenu: [
+          { label: "Only you may look at it (foretell, hideaway)", onSelect: faceDown([me]) },
+          ...opponents.map((p) => ({ label: `Only ${p.name} may look at it`, onSelect: faceDown([p.id]) })),
+          { label: "Nobody may look at it", onSelect: faceDown([]) },
+        ],
+      });
+    }
     if (card.zone !== "command") items.push({ label: "Command zone", onSelect: go("toCommand") });
     items.push({ label: "On top of library", onSelect: go("toLibraryTop") });
     items.push({ label: "On the bottom of library", onSelect: go("toLibraryBottom") });
@@ -496,7 +508,8 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
     }
     if (t.kind !== "card") return { sections: passing };
     const card = t.card;
-    if (card.hidden) return { sections: card.zone === "battlefield" ? [manualSection(card)] : [] };
+    // A face-down card you can't look at: still yours to move by hand (on the battlefield, or exiled face down).
+    if (card.hidden) return { sections: card.zone === "battlefield" || (card.zone === "exile" && card.owner === me) ? [manualSection(card)] : [] };
     return game.actions(card.id).then(({ actions, reason }) => ({
       sections: [
         {

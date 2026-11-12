@@ -164,6 +164,21 @@ public final class ManualActions {
                 resolve(card, me, "DB$ SetState | Defined$ Self | Mode$ Transform");
                 log(g, me, "transformed " + name + " into " + g.getCardState(card).getName());
             } : null;
+            // Exile face down; only the players in {@code to} may look at it (none: nobody).
+            case "exileFaceDown" -> zone != ZoneType.Exile ? () -> {
+                boolean wasHidden = zone == ZoneType.Hand || zone == ZoneType.Library;
+                String name = wasHidden || card.isFaceDown() ? "a card" : card.getName();
+                Card moved = g.getAction().moveTo(ZoneType.Exile, card, null, AbilityKey.newMap());
+                if (moved != null) {
+                    moved.turnFaceDown(true);
+                    List<String> names = new ArrayList<>();
+                    for (Player p : to == null ? List.<Player>of() : to) {
+                        moved.addMayLookFaceDownExile(p);
+                        names.add(p.getName());
+                    }
+                    log(g, me, "exiled " + name + " face down (" + (names.isEmpty() ? "nobody" : "only " + String.join(" and ", names)) + " may look at it)");
+                }
+            } : null;
             case "plot" -> zone == ZoneType.Hand ? () -> {
                 Card moved = g.getAction().moveTo(ZoneType.Exile, card, null, AbilityKey.newMap());
                 if (moved != null) {
@@ -344,7 +359,8 @@ public final class ManualActions {
     private static void move(Game g, Player me, Card card, ZoneType to, int libPosition, String what) {
         ZoneType from = g.getZoneOf(card) == null ? null : g.getZoneOf(card).getZoneType();
         boolean hidden = (from == ZoneType.Hand || from == ZoneType.Library) && (to == ZoneType.Hand || to == ZoneType.Library);
-        String name = hidden ? "a card" : card.isFaceDown() && card.isInPlay() ? "a face-down card" : card.getName();
+        boolean toHidden = to == ZoneType.Hand || to == ZoneType.Library;
+        String name = hidden ? "a card" : card.isFaceDown() && (card.isInPlay() || toHidden) ? "a face-down card" : card.getName();
         Card moved;
         if (to == ZoneType.Library) {
             moved = g.getAction().moveToLibrary(card, libPosition, null, AbilityKey.newMap());

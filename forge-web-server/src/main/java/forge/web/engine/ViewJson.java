@@ -164,6 +164,13 @@ public final class ViewJson {
         boolean onBattlefield = c.getZone() == ZoneType.Battlefield;
         if (c.isFaceDown()) {
             o.put("faceDown", true);
+            // Who may look at it (a face-down exiled card: foretell, hideaway, or exiled so by hand). Public.
+            ArrayNode lookers = null;
+            for (PlayerView p : gv.getPlayers()) {
+                if (c.mayPlayerLook(p)) {
+                    (lookers == null ? lookers = o.putArray("visibleTo") : lookers).add(id(p));
+                }
+            }
         }
         CardStateView state = c.getCurrentState();
         boolean seen = revealed || c.canBeShownTo(viewer) && (!c.isFaceDown() || c.canFaceDownBeShownTo(viewer));

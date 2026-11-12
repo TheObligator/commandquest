@@ -101,6 +101,8 @@ export type ManualAction =
   | "attack" | "removeFromCombat"
   /** More by hand: goad (someone else's creature), phase out, transform, and from hand plot or discard. */
   | "goad" | "phaseOut" | "transform" | "plot" | "discard"
+  /** Exile face down; only the players in `to` may look at it (you, for foretell or hideaway). */
+  | "exileFaceDown"
   /** Until end of turn, on any permanent: `eot:<key>` (see EOT_GROUPS in pages/LiveGame.tsx) or `eot:pt:+2:+2`. */
   | `eot:${string}`;
 

@@ -114,6 +114,16 @@ public class LibraryActionsTest {
             Assert.assertTrue(manual.run(g, me, forest, "discard", null, d1::countDown), "discard");
             Assert.assertTrue(d1.await(10, TimeUnit.SECONDS));
             Assert.assertEquals(me.getCardsIn(ZoneType.Graveyard).size(), grave + 1, "discarded");
+            // Exile face down so only you may look at it (foretell, hideaway): hidden from the AI.
+            Card secret = me.getCardsIn(ZoneType.Hand).getFirst();
+            Player ai = g.getPlayers().stream().filter(p -> p != me).findFirst().orElseThrow();
+            CountDownLatch d3 = new CountDownLatch(1);
+            Assert.assertTrue(manual.run(g, me, secret, "exileFaceDown", List.of(me), d3::countDown), "exile face down");
+            Assert.assertTrue(d3.await(10, TimeUnit.SECONDS));
+            Card hidden = g.getCardState(secret);
+            Assert.assertTrue(hidden.isInZone(ZoneType.Exile) && hidden.isFaceDown(), "face down in exile");
+            Assert.assertTrue(hidden.getView().canFaceDownBeShownTo(me.getView()), "you may look at it");
+            Assert.assertFalse(hidden.getView().canFaceDownBeShownTo(ai.getView()), "the AI may not");
             Card inPlay = g.getCardState(elves);
             CountDownLatch d2 = new CountDownLatch(1);
             Assert.assertTrue(manual.run(g, me, inPlay, "phaseOut", null, d2::countDown), "phase out");

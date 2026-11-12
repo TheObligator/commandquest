@@ -98,13 +98,18 @@ The game screen. The board itself is `web/src/game/TableBoard.tsx`, shared by tw
       pick, unblocked if blockers are already declared); **Remove from combat** (any attacking or
       blocking creature); **More ▸** (turn face down/up, Transform for double-faced cards, Goad on
       someone else's creature, Phase out, 🔒 Doesn't untap next turn, 🔒 Never untaps by itself,
-      Create a token copy); **Move to ▸** hand, graveyard, exile, command zone, top or bottom of the
-      library.
+      Create a token copy); **Move to ▸** hand, graveyard, exile, **Exile face down ▸**, command zone,
+      top or bottom of the library.
     - In hand: **⤵ Put onto the battlefield (don't cast)** (permanent cards only, for effects like
       "put a creature card from your hand onto the battlefield"), 👁 Reveal to ▸ Everyone (or one
       opponent), **Discard** (a real discard, so madness and "whenever you discard" work), **More ▸**
       Plot (exiled and plotted: Forge then lets you cast it free on a later turn as a sorcery),
       and **Move to ▸** (including Put onto the battlefield from other zones, permanents only).
+    - **Exile face down ▸** (in Move to, from any zone but exile): Only you may look at it (foretell,
+      hideaway), Only <opponent> may look at it, or Nobody. Forge keeps that permission while it's
+      in exile; hovering it says who can see it. You can still right-click your own face-down
+      exiled card to move it even when you may not look at it, and moving it to your hand or
+      library doesn't name it in the log.
 - **Right-click your library** (free play): Draw a card, 🔍 Search, Look at the top cards…,
   **Scry ▸** / **Surveil ▸** / **Mill ▸** 1 to 5 or X…, More ▸ (reveal the top card, exile the top
   card, draw / mill / exile several), 🔀 Shuffle. Scry and surveil open a window with the top cards
