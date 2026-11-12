@@ -239,7 +239,6 @@ function ZoneTile(props: {
 
 function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; hover: (c: CardView) => object }) {
   const { player: p, arrangement, isMe, nameOf } = props;
-  const rows = arrange(p.battlefield, arrangement);
   const ref = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 600, h: 300 });
   const [dropAt, setDropAt] = useState<{ row: Row; col: number } | null>(null);
@@ -252,7 +251,12 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
     return () => ro.disconnect();
   }, []);
 
-  const cw = fitWidth(rows, box.w, box.h, props.maxCard, props.line);
+  // Size the cards for what's on the board, then center it in the columns that fit across: every
+  // row has the same columns, so lands line up under creatures. (Side-by-side rows aren't centered.)
+  const packed = arrange(p.battlefield, arrangement);
+  const cw = fitWidth(packed, box.w, box.h, props.maxCard, props.line);
+  const width = props.line ? 0 : Math.max(1, Math.floor((box.w - 8 + CARD_GAP) / (cw + CARD_GAP)));
+  const rows = props.line ? packed : arrange(p.battlefield, arrangement, width);
   const accepts = (d: DragData | null) => !!d && ((d.from === "battlefield" && d.seat === p.id) || (d.from === "hand" && isMe));
   /** The cell under the pointer in a row's grid. */
   const cellAt = (e: React.DragEvent, el: HTMLElement) => {
@@ -267,7 +271,7 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
     if (!accepts(d) || !d) return;
     e.preventDefault();
     // A card from hand lands in the cell you dropped it on once it's in play.
-    props.onArrange(moveCards(p.battlefield, arrangement, d.ids, row, col));
+    props.onArrange(moveCards(p.battlefield, arrangement, d.ids, row, col, width));
     if (d.from === "hand") props.onPlayFromHand?.(d.ids[0]);
   };
 
@@ -279,7 +283,7 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
       onContextMenu={props.onMenu && ((e) => props.onMenu!(e, { kind: "board", owner: p.id }))}
     >
       {rows.map((piles, r) => {
-        const cols = usedCols(piles) + SPARE;
+        const cols = Math.max(width, usedCols(piles) + SPARE);
         return (
           <div
             key={r}

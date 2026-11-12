@@ -279,8 +279,13 @@ function pileKey(c: CardView): string {
   return JSON.stringify([c.name, !!c.tapped, !!c.token, !!c.sick, c.power, c.toughness, c.counters ?? null, c.attacking ?? null, c.blocking ?? null]);
 }
 
-/** Splits a battlefield into its three rows of piles, each row sorted by column. */
-export function arrange(cards: CardView[], arr: Arrangement): [Pile[], Pile[], Pile[]] {
+/**
+ * Splits a battlefield into its three rows of piles, each row sorted by column. Cards moved by hand
+ * keep their cell. `width`: the columns a row shows. Given, the other cards are centered: a row
+ * nobody arranged is laid out in the middle, and a new card joins an arranged row in the free cell
+ * nearest the middle. Without it (0), they fill the first free cells from the left.
+ */
+export function arrange(cards: CardView[], arr: Arrangement, width = 0): [Pile[], Pile[], Pile[]] {
   const cells: Map<number, Pile>[] = [new Map(), new Map(), new Map()];
   const put = (row: Row, from: number, c: CardView) => {
     const key = pileKey(c);
@@ -302,13 +307,50 @@ export function arrange(cards: CardView[], arr: Arrangement): [Pile[], Pile[], P
     if (p) put(p.row, p.col, c);
     else unplaced.push(c);
   }
+  // Cards nobody has moved: join a pile of identical cards, or start a new one.
+  const fresh: CardView[][][] = [[], [], []];
   for (const c of unplaced) {
     const row = defaultRow(c);
     const key = pileKey(c);
-    const pile = [...cells[row].values()].find((x) => pileKey(x.cards[0]) === key);
+    const pile = [...cells[row].values()].find((x) => pileKey(x.cards[0]) === key)
+      ?? fresh[row].map((cs) => ({ cards: cs })).find((x) => pileKey(x.cards[0]) === key);
     if (pile) pile.cards.push(c);
-    else put(row, 0, c);
+    else fresh[row].push([c]);
   }
+  fresh.forEach((piles, row) => {
+    const place = (col: number, cs: CardView[]) => cells[row].set(col, { key: `${pileKey(cs[0])}@${cs[0].id}`, col, cards: cs });
+    if (!width) {
+      // No width known: from the left, in the first free cells.
+      for (const cs of piles) {
+        let col = 0;
+        while (cells[row].has(col)) col++;
+        place(col, cs);
+      }
+    } else if (cells[row].size === 0) {
+      // Nothing moved by hand in this row: the row is centered.
+      const start = Math.max(0, Math.floor((width - piles.length) / 2));
+      piles.forEach((cs, i) => place(start + i, cs));
+    } else {
+      // Around cards placed by hand: the free cell nearest the middle of the cards already there,
+      // then nearest the middle of the row, then the left one, so the group grows evenly.
+      const boardMid = (width - 1) / 2;
+      for (const cs of piles) {
+        const used = [...cells[row].keys()];
+        const mid = (Math.min(...used) + Math.max(...used)) / 2;
+        const score = (col: number) => [Math.abs(col - mid), Math.abs(col - boardMid), col];
+        let best = -1;
+        for (let col = 0; col <= Math.max(width, ...used) + 1; col++) {
+          if (cells[row].has(col)) continue;
+          if (best < 0) best = col;
+          else {
+            const [a, b] = [score(col), score(best)];
+            if (a[0] < b[0] || (a[0] === b[0] && (a[1] < b[1] || (a[1] === b[1] && a[2] < b[2])))) best = col;
+          }
+        }
+        place(best, cs);
+      }
+    }
+  });
   return cells.map((m) => [...m.values()].sort((a, b) => a.col - b.col)) as [Pile[], Pile[], Pile[]];
 }
 
@@ -320,8 +362,8 @@ export const usedCols = (row: Pile[]) => (row.length ? row[row.length - 1].col +
  * this battlefield is pinned where it is now, so nothing else shifts. If the cell is taken, its
  * cards swap to where the moved cards came from (or, coming from the hand, move one cell right).
  */
-export function moveCards(cards: CardView[], arr: Arrangement, ids: number[], row: Row, col: number): Arrangement {
-  const rows = arrange(cards, arr);
+export function moveCards(cards: CardView[], arr: Arrangement, ids: number[], row: Row, col: number, width = 0): Arrangement {
+  const rows = arrange(cards, arr, width);
   const moving = new Set(ids);
   const next: Arrangement = { ...arr };
   let from: Placement | undefined;

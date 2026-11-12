@@ -11,7 +11,7 @@ import type { CardDetails } from "./useLiveGame";
 import type { CardView } from "./view";
 
 /** How long the pointer rests on a card before it's shown large. */
-export const HOVER_ZOOM_MS = 1200;
+export const HOVER_ZOOM_MS = 2000;
 
 function bigImage(card: CardView): string | undefined {
   if (card.hidden) return undefined;

@@ -10,27 +10,33 @@ The game screen. The board itself is `web/src/game/TableBoard.tsx`, shared by tw
   hands) or the default mid-game (turn 9, full boards).
 
 ```
- ┌ action rail ┐ ┌──────────── seats ────────────┐ ┌ phase strip ─┐
- │             │ │ Opp 1      Opp 2      Opp 3   │ │ Your turn T9 │
+ ┌ left rail ──┐ ┌──────────── seats ────────────┐ ┌ ☰ Menu ──────┐
+ │ Log         │ │ Opp 1      Opp 2      Opp 3   │ │ Your turn T9 │
  │             │ │  (stack: a floating window)   │ │ Untap …      │
  │             │ │ You                           │ │ Save stops   │
  │ Decision    │ │                               │ │ Hold priority│
- │ Auto-pass   │ └ Hand (upright, from the left) ┘ └ Log          ┘
+ │ Auto-pass   │ └ Hand (upright, from the left) ┘ └──────────────┘
 ```
 
 ## Layout
 
-- **Action rail (left):** at the bottom the decision the game wants (mulligan, bottoming cards, respond to the stack, your
-  turn) and the auto-pass skips (docs/stops.md).
-- **Right column:** the phase strip with stops per step, split you / opponents (docs/stops.md),
-  then the hold-priority toggle and the log.
+- **Left rail:** the log fills the top; at the bottom the decision the game wants (mulligan,
+  bottoming cards, respond to the stack, your turn) and the auto-pass skips (docs/stops.md).
+- **Right column:** the ☰ Menu button (live games), the phase strip with stops per step, split you /
+  opponents (docs/stops.md), then the hold-priority toggle.
+- **No toolbar in a live game:** while a game is on, the site's bars and the page's toolbar are
+  hidden (`body.in-game`) so the table gets the whole window. Their controls are in the **Game
+  menu**: the ☰ Menu button, right-clicking a board, or right-clicking anywhere on the table that
+  has no menu of its own (not on cards or zones, so Concede is never one slip away from a card
+  action). It has Layout ▸, Full screen, Hotkeys and settings (a new tab), Leave (the game is kept
+  for 5 minutes), and Concede. Banners (reconnecting, game over) still show.
 - **Hotkeys** are the player's own (Settings, `#/settings`; `web/src/game/hotkeys.ts`), and every
   button shows the key it's bound to. Defaults: Space pass priority / OK, X the second button
   (Cancel, Mulligan, End Turn), Shift hold priority (tapped on its own), C cast your commander, and
   E / B / M / R the auto-pass skips. Esc closes an enlarged board. They're saved to the account (Convex
   `settings`) and in the browser, so they also work signed out.
 - **Seats** are always in turn order, starting from the player after you. Four layouts, chosen in
-  the toolbar and remembered per browser:
+  the Game menu (the toolbar on `#/table`) and remembered per browser:
   - **Pod:** opponents in a row across the top, you below.
   - **Focus:** pod with your board much larger.
   - **Stacked:** one row per player: you, then each opponent. Short seats put the three
@@ -47,8 +53,11 @@ The game screen. The board itself is `web/src/game/TableBoard.tsx`, shared by tw
   in hand. Click graveyard or exile to see every card in it.
 - Battlefield in three rows that share the board's height: creatures, other permanents, lands. Each
   row is a grid of cells, one card or pile per cell, so cards never overlap (a tapped card turns
-  sideways and shrinks to fit its cell). A new card takes the first free cell of its default row,
-  or joins a pile of identical cards (×N badge). Drag a card to any cell of any row: onto another
+  sideways and shrinks to fit its cell). Every row has the columns that fit across the board, so
+  lands line up under creatures. Cards nobody has moved are centered in their row; a new card joins
+  a pile of identical cards (×N badge), or, in a row you've arranged, takes the free cell nearest
+  the middle of the cards there (alternating sides, so the group stays centered). Rows side by side
+  (stacked layout, short seats) fill from the left. Drag a card to any cell of any row: onto another
   card swaps them, and a card dragged from your hand lands in that cell once it's in play. Cards
   shrink to fit the seat. Arranging is only your view and never goes to the server; right-click
   the board to put everything back.
@@ -58,7 +67,7 @@ The game screen. The board itself is `web/src/game/TableBoard.tsx`, shared by tw
   play or activate now, in hand, on the battlefield, in the command zone, graveyard or exile.
 - If a click does nothing, a message says why (not your turn, not a main phase, the stack isn't
   empty, you've already played a land…).
-- **Hover a card** for a moment (`HOVER_ZOOM_MS` in `game/CardZoom.tsx`, 1.2 s) and a large image of
+- **Hover a card** for a moment (`HOVER_ZOOM_MS` in `game/CardZoom.tsx`, 2 s) and a large image of
   it pops up beside the pointer. It goes away when you move off the card or click. Cards have no
   browser tooltip (their hints are `aria-label`s), so nothing covers the zoom. Cards on the board use
   Scryfall's "normal" image (488 px wide) at every size, so their text stays sharp on high-DPI screens.

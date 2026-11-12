@@ -19,6 +19,15 @@
 .seat-cell { min-width: 0; min-height: 0; display: flex; }
 .seat-cell > * { flex: 1; }
 .focus-overlay { position: absolute; inset: 0; z-index: 5; display: flex; padding: 0; background: rgb(8 10 14 / 82%); backdrop-filter: blur(3px); animation: cq-fade .15s ease-out; }
+.focus-overlay > .seat-cell { flex: 1; } /* the enlarged board fills the table, not just its content's width */
+
+/* In a game the site's bars and the game toolbar are hidden: the table gets the whole window.
+   Their controls (layout, concede, full screen…) are in the Game menu. */
+body.in-game .topbar, body.in-game .footer, body.in-game .game-toolbar { display: none; }
+body.in-game #view.full { padding: 8px 10px; }
+body.in-game .game { height: calc(100dvh - 16px); }
+.game-menu-btn { flex: none; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: #12151d; color: var(--muted); font: inherit; font-size: .74rem; letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
+.game-menu-btn:hover { color: var(--text); border-color: #4a5266; }
 @keyframes cq-fade { from { opacity: 0; } }
 
 /* ---- Seat ---- */
@@ -142,9 +151,12 @@ button.zone-tile:hover .zt-card { outline: 2px solid var(--accent-2); }
 .strip-col { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
 .strip-actions { display: flex; gap: 4px; }
 .strip-actions .btn { flex: 1; padding: 4px 6px; font-size: .74rem; }
-.strip-col .ar-log { flex: 0 0 auto; border: 1px solid var(--line); border-radius: 10px; background: #12151d; padding: 8px; }
-.strip-col .ar-log h3 { font-size: .68rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin: 0 0 4px; }
-.strip-col .ar-log ol { max-height: 160px; font-size: .7rem; }
+/* Left column: the log fills the space above the decision and auto-pass panels. */
+.rail-col { display: flex; flex-direction: column; gap: 8px; min-height: 0; min-width: 0; }
+.rail-col > .ar-log { flex: 1 1 0; min-height: 90px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; background: #12151d; padding: 8px; }
+.rail-col > .ar-log h3 { font-size: .68rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin: 0 0 4px; }
+.rail-col > .ar-log ol { flex: 1; min-height: 0; max-height: none; font-size: .74rem; }
+.rail-col > .action-rail { flex: 0 1 auto; }
 .phase-strip { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: #0f1218; }
 .ps-turn { text-align: center; padding: 4px; border-radius: 6px; border: 1px solid color-mix(in srgb, var(--active) 55%, var(--line)); background: color-mix(in srgb, var(--active) 8%, #12151d); }
 .ps-turn strong { display: block; color: var(--active); letter-spacing: .14em; text-transform: uppercase; font-size: .7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

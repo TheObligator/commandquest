@@ -162,6 +162,9 @@ export function TableBoard(props: {
   stackItemMenu?: (s: StackItemView) => MenuSection[];
   /** Live games: cards the page shows you in a viewer (your library while you search it). */
   peek?: { title: string; cards: CardView[]; onClose: () => void } | null;
+  /** The game's own menu (layout, full screen, concede…): on the board's and the background's
+   *  right-click menus, and the ☰ button. Live games, where the page has no toolbar. */
+  gameMenu?: MenuSection[];
 }) {
   const { view: v, layout, stops: st } = props;
   const me = v.viewer;
@@ -223,6 +226,7 @@ export function TableBoard(props: {
           : t.owner === me ? "Your board" : `${seatOf(t.owner)?.name}'s board`;
     const base = { x: e.clientX, y: e.clientY, title };
     const own = boardItems(t);
+    const game = t.kind === "board" ? (props.gameMenu ?? []) : [];
     // Card details first, like a card's own menu at a paper table: what it says and what's on it.
     const first: MenuSection[] =
       t.kind === "card" && !t.card.hidden ? [{ items: [{ label: "📖 Card details", onSelect: () => setInspect((t as { card: CardView }).card) }] }] : [];
@@ -230,11 +234,19 @@ export function TableBoard(props: {
     if (part instanceof Promise) {
       setMenu({ ...base, sections: [...first, ...own], loading: true });
       void part.then((p) => {
-        if (menuSeq.current === seq) setMenu({ ...base, sections: [...first, ...p.sections, ...own], note: p.note });
+        if (menuSeq.current === seq) setMenu({ ...base, sections: [...first, ...p.sections, ...own, ...game], note: p.note });
       });
     } else {
-      setMenu({ ...base, sections: [...first, ...(part?.sections ?? []), ...own], note: part?.note });
+      setMenu({ ...base, sections: [...first, ...(part?.sections ?? []), ...own, ...game], note: part?.note });
     }
+  };
+
+  /** Just the game's menu: right-click anywhere else on the table, or the ☰ button. */
+  const openGameMenu = (x: number, y: number) => {
+    if (!props.gameMenu) return;
+    setPreview(null);
+    ++menuSeq.current;
+    setMenu({ x, y, title: "Game", sections: props.gameMenu });
   };
 
   const seat = (id: string, opts: { area?: string; focusedView?: boolean } = {}) => {
@@ -293,8 +305,18 @@ export function TableBoard(props: {
   return (
     <PreviewContext.Provider value={setPreview}>
       {/* The table has its own right-click menus, so the browser's is off here. */}
-      <div className="game-main" onContextMenu={(e) => e.preventDefault()}>
-        {props.rail(preview)}
+      <div
+        className="game-main"
+        onContextMenu={(e) => {
+          e.preventDefault();
+          openGameMenu(e.clientX, e.clientY); // a card, zone or board opens its own menu and stops this
+        }}
+      >
+        {/* Left: the log, then (by your hand) the decision and the auto-pass skips. */}
+        <div className="rail-col">
+          <Log lines={v.log} />
+          {props.rail(preview)}
+        </div>
 
         <div className="game-center">
           <StackWindow view={v} nameOf={nameOf} colorOf={colorOf} itemMenu={props.stackItemMenu} />
@@ -322,6 +344,18 @@ export function TableBoard(props: {
         </div>
 
         <div className="strip-col">
+          {props.gameMenu && (
+            <button
+              className="game-menu-btn"
+              aria-haspopup="menu"
+              onClick={(e) => {
+                const r = e.currentTarget.getBoundingClientRect();
+                openGameMenu(r.left, r.bottom + 4);
+              }}
+            >
+              ☰ Menu
+            </button>
+          )}
           <PhaseStrip
             me={meSeat}
             opponents={oppSeats}
@@ -339,7 +373,6 @@ export function TableBoard(props: {
             <button className="btn small ghost" onClick={() => void st.reset()}>Reset</button>
           </div>
           <HoldPriority on={st.holdPriority} onChange={st.setHoldPriority} />
-          <Log lines={v.log} />
         </div>
       </div>
 

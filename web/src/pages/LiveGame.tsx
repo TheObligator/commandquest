@@ -3,11 +3,11 @@
 import { useConvexAuth, useQuery } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
-import { useRoute } from "../app/router";
+import { navigate, useRoute } from "../app/router";
 import { toast } from "../dom";
 import { useCardData } from "../game/cards";
 import { LiveRail } from "../game/LiveRail";
-import { LayoutPicker, TableBoard, useStored, useTableStops, type LayoutId, type MenuPart, type MenuTarget } from "../game/TableBoard";
+import { LAYOUTS, LayoutPicker, TableBoard, useStored, useTableStops, type LayoutId, type MenuPart, type MenuTarget } from "../game/TableBoard";
 import { useHotkeys } from "../game/useHotkeys";
 import { useLiveGame, type DeckPayload } from "../game/useLiveGame";
 import { tokenArtMap } from "../tokens";
@@ -49,6 +49,45 @@ export function LiveGame() {
   };
 
   const playing = game.view && (game.status === "playing" || game.status === "reconnecting" || game.status === "moved" || game.status === "over");
+
+  // While a game is on, the site's bars and this page's toolbar are hidden (table.css): the table
+  // gets the whole window, and their controls move to the Game menu.
+  useEffect(() => {
+    if (!playing) return;
+    document.body.classList.add("in-game");
+    return () => document.body.classList.remove("in-game");
+  }, [playing]);
+  const [fullscreen, setFullscreen] = useState(!!document.fullscreenElement);
+  useEffect(() => {
+    const on = () => setFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", on);
+    return () => document.removeEventListener("fullscreenchange", on);
+  }, []);
+
+  const gameMenu: MenuSection[] = [
+    {
+      title: "Game",
+      items: [
+        {
+          label: "Layout",
+          onSelect: () => {},
+          submenu: LAYOUTS.map((l) => ({ label: `${l.id === layout ? "✓ " : ""}${l.label}`, onSelect: () => setLayout(l.id) })),
+        },
+        {
+          label: fullscreen ? "Exit full screen" : "Full screen",
+          onSelect: () => void (fullscreen ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => undefined),
+        },
+        { label: "Hotkeys and settings (new tab)", onSelect: () => window.open("#/settings", "_blank", "noopener") },
+        {
+          label: game.status === "over" ? "Back to Play" : "Leave (the game is kept 5 minutes)",
+          onSelect: () => navigate("/play"),
+        },
+        ...(game.status === "playing"
+          ? [{ label: "Concede", danger: true, onSelect: () => confirm("Concede this game?") && game.concede() }]
+          : []),
+      ],
+    },
+  ];
 
   return (
     <div className="game">
@@ -94,7 +133,7 @@ export function LiveGame() {
       )}
 
       {playing ? (
-        <LiveTable game={game} view={game.view!} layout={layout} />
+        <LiveTable game={game} view={game.view!} layout={layout} gameMenu={gameMenu} />
       ) : (
         <div className="card live-start">
           {!deckId ? (
@@ -158,7 +197,7 @@ const STATUS: Record<ReturnType<typeof useLiveGame>["status"], string> = {
   offline: "Game server offline, retrying…",
 };
 
-function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame>; view: GameView; layout: LayoutId }) {
+function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof useLiveGame>; view: GameView; layout: LayoutId; gameMenu: MenuSection[] }) {
   const oppIds = useMemo(() => view.players.slice(1).map((p) => p.id), [view.players.map((p) => p.id).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
   const st = useTableStops(view.viewer, oppIds);
   const names = useMemo(() => {
@@ -453,6 +492,7 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
       targetPlayers={targetPlayers}
       menuFor={menuFor}
       detailsFor={game.details}
+      gameMenu={gameMenu}
       peek={peek ? { title: peek.top > 0 ? `Top ${peek.top === 1 ? "card" : `${peek.top} cards`} of your library` : "Your library (only you see this)", cards: peekCards, onClose: closePeek } : null}
       stackItemMenu={(s) => {
         const tick = (on: boolean | undefined, label: string) => `${on ? "✓ " : ""}${label}`;
