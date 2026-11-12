@@ -124,6 +124,17 @@ public final class ViewJson {
             casts += p.getCommanderCast(c);
         }
         o.put("commanderCasts", casts);
+        // Mana in their pool (floating), by symbol: W U B R G C. Public, like at a paper table.
+        ObjectNode pool = json.createObjectNode();
+        for (byte b : forge.card.mana.ManaAtom.MANATYPES) {
+            int n = p.getMana(b);
+            if (n > 0) {
+                pool.put(forge.card.MagicColor.toShortString(b), n);
+            }
+        }
+        if (!pool.isEmpty()) {
+            o.set("mana", pool);
+        }
         o.put("libraryCount", p.getZoneSize(ZoneType.Library));
         o.put("handCount", p.getZoneSize(ZoneType.Hand));
         o.set("hand", cards(gv, p.equals(viewer) ? p.getHand() : null, viewer));

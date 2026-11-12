@@ -113,6 +113,8 @@ export interface CardView {
 }
 
 export interface PlayerView extends PlayerState {
+  /** Live games: mana in their pool (floating), by symbol W U B R G C. */
+  mana?: Record<string, number>;
   libraryCount: number;
   handCount: number;
   /** Only the viewer's own hand has cards; everyone else's is just `handCount`. */

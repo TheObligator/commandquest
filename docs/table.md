@@ -138,6 +138,18 @@ The game screen. The board itself is `web/src/game/TableBoard.tsx`, shared by tw
   searching an opponent's library they let you search: exile them face down or face up. For cards
   that are all yours, wherever they are: Move them to ▸. Each card is still its own action on the
   server, logged by hand.
+- **Tap several cards for mana** (select your untapped permanents, right-click one): **💧 Tap for
+  mana…** opens a window with the mana they'll add by color. ▲ / ▼ by a color moves one mana to or
+  from another color (a dual land switches), and each card's own choice is listed underneath.
+  Cards can also be tapped for another permanent's "Tap an untapped artifact you control: Add {U}"
+  (Urza, Lord High Artificer): the menu offers **💧 Tap each for Urza…: {U} each** directly. It's
+  each card's real mana ability (with its triggers), allowed whenever you could tap for mana: with
+  priority, while paying, or any time with free play. Abilities with other costs (life, mana,
+  sacrifice) aren't offered; tap those one at a time. "Tap them all (by hand, no mana)" is the
+  free-play tap that makes no mana.
+- **Your mana pool** shows by your name (and everyone's by theirs) when it has mana. While you pay
+  a cost, click a symbol there to pay one of that color, or **Use floating** in the pay window for
+  as much as it can pay.
 - **Find a card in a card viewer** (your library while you search it, a graveyard, exile…): type in
   the box at the top. Words match the name; Scryfall's search syntax works too, run on the cards'
   Scryfall data (`game/scryquery.ts`): `t:` type, `o:` rules text (`~` is the card's name), `c:`

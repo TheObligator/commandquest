@@ -148,6 +148,8 @@ export function TableBoard(props: {
   /** Click on any card on any board (live games). Without it, clicking your own permanent taps it. */
   onCardClick?: (id: number) => void;
   onPlayerClick?: (id: string) => void;
+  /** While you pay a cost: use one mana of this color from your pool (click it by your name). */
+  onPayPool?: (color: string) => void;
   onTap?: (id: number) => void;
   /** Cast a commander from your command zone (by card id: partners are two). */
   onCastCommander?: (id: number) => void;
@@ -305,6 +307,7 @@ export function TableBoard(props: {
           onTap={isMe ? props.onTap : undefined}
           onCardClick={props.onCardClick}
           onPlayerClick={props.onPlayerClick}
+          onPayPool={isMe ? props.onPayPool : undefined}
           onCastCommander={isMe ? props.onCastCommander : undefined}
           onFocus={() => setFocused(opts.focusedView ? null : id)}
           focused={opts.focusedView}

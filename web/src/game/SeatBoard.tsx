@@ -6,6 +6,7 @@
 // pile per cell, so nothing overlaps). Cards shrink to fit so a board never scrolls until they'd
 // get unreadably small. You can drag cards to any cell on any board; that only changes your view.
 import { useLayoutEffect, useRef, useState } from "react";
+import { ManaCost } from "../components/ManaCost";
 import { CardBack, CardBadges, CardFace, CostOverlay, previewFor, usePreview } from "./cards";
 import { isMarkClick, useMarks, useMarquee } from "./marks";
 import type { OpenMenu } from "./TableBoard";
@@ -64,6 +65,8 @@ export function SeatBoard(props: {
   /** Shift+drag from hand: put it onto the battlefield without casting it. */
   onPutFromHand?: (cardId: number) => void;
   onTap?: (cardId: number) => void;
+  /** While you pay a cost: use one mana of this color from your pool. */
+  onPayPool?: (color: string) => void;
   /** Cast one of your commanders (partners are two cards). */
   onCastCommander?: (id: number) => void;
   onFocus?: () => void;
@@ -122,6 +125,19 @@ export function SeatBoard(props: {
             {PLAYER_COUNTER_ICON[kind.toLowerCase()] ?? "●"} {n} <small>{kind}</small>
           </span>
         ))}
+        {Object.entries(p.mana ?? {}).filter(([, n]) => n > 0).length > 0 && (
+          <span className="sb-pool" title="Mana pool: floating mana, gone at the end of the step">
+            {Object.entries(p.mana ?? {}).filter(([, n]) => n > 0).map(([x, n]) => (
+              props.onPayPool ? (
+                <button key={x} className="sb-mana" onClick={() => props.onPayPool!(x)} title={`Pay with one {${x}} from your pool`}>
+                  <ManaCost cost={`{${x}}`} />{n}
+                </button>
+              ) : (
+                <span key={x} className="sb-mana"><ManaCost cost={`{${x}}`} />{n}</span>
+              )
+            ))}
+          </span>
+        )}
         {cmdDmg.map(([from, n]) => (
           <span key={from} className="sb-cmd" style={{ "--from": colorOf(from) } as React.CSSProperties} title={`${n} commander damage from ${nameOf(from)}'s commander (21 loses)`}>
             ♛ {n}

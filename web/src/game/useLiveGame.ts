@@ -79,6 +79,23 @@ export interface CardAction {
   label: string;
   enabled: boolean;
 }
+/** One way to tap a card for mana (ManaTaps.java): its own ability, or another card's "tap an untapped …" one (`via`). */
+export interface ManaPick {
+  source: number;
+  ability: number;
+  /** Forge's color choice ("U", "G G"), empty when there's none. */
+  choice: string;
+  /** What it adds, as symbols: "W", "CC". */
+  mana: string;
+  /** The other card whose ability this is. */
+  via?: string;
+}
+export interface ManaOptions {
+  /** Cards that can be tapped for mana, with their ways; cards left out can't. */
+  options: { id: number; picks: ManaPick[] }[];
+  reason?: string;
+}
+
 export interface CardActions {
   actions: CardAction[];
   /** Why nothing can be done with it right now, when that's the case. */
@@ -154,6 +171,7 @@ export function useLiveGame() {
   const [notice, setNotice] = useState<{ message: string; n: number } | null>(null);
   const actionWaiters = useRef(new Map<number, ((a: CardActions) => void)[]>());
   const detailWaiters = useRef(new Map<number, ((d: CardDetails) => void)[]>());
+  const manaWaiters = useRef<((o: ManaOptions) => void)[]>([]);
   const [autoPass, setAutoPassState] = useState<AutoPassMode | null>(null);
   // The server says when an auto-pass has ended (reached its step, or something needed you):
   // light its button only while it's going.
@@ -288,6 +306,9 @@ export function useLiveGame() {
             for (const w of waiters) w({ actions: m.actions ?? [], reason: m.reason });
             break;
           }
+          case "manaOptions":
+            manaWaiters.current.shift()?.({ options: m.options ?? [], reason: m.reason });
+            break;
           case "details": {
             const waiters = detailWaiters.current.get(m.id) ?? [];
             detailWaiters.current.delete(m.id);
@@ -388,6 +409,24 @@ export function useLiveGame() {
     },
     /** Free play: pay the mana cost you're paying now with nothing. */
     payFree: () => send({ t: "payFree" }),
+    /** The ways these cards can be tapped for mana now. */
+    manaOptions(ids: number[]): Promise<ManaOptions> {
+      return new Promise((resolve) => {
+        manaWaiters.current.push(resolve);
+        send({ t: "manaOptions", ids });
+        window.setTimeout(() => {
+          const i = manaWaiters.current.indexOf(resolve);
+          if (i >= 0) {
+            manaWaiters.current.splice(i, 1);
+            resolve({ options: [], reason: "The game server didn't answer." });
+          }
+        }, 5000);
+      });
+    },
+    /** Tap cards for mana, each as picked (its mana goes to your pool). */
+    tapForMana: (picks: { card: number; source: number; ability: number; choice: string }[]) => send({ t: "tapForMana", picks }),
+    /** While paying: use floating mana of one color ("W"…"C"), or "all" it can. */
+    payPool: (color: string) => send({ t: "payPool", color }),
     clickCard: (id: number) => send({ t: "card", id }),
     /** What this card can do right now (for its right-click menu). */
     actions(id: number): Promise<CardActions> {

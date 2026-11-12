@@ -9,7 +9,9 @@ import { useCardData } from "../game/cards";
 import { LiveRail } from "../game/LiveRail";
 import { LAYOUTS, LayoutPicker, TableBoard, useStored, useTableStops, type LayoutId, type MenuPart, type MenuTarget } from "../game/TableBoard";
 import { useHotkeys } from "../game/useHotkeys";
-import { useLiveGame, type DeckPayload } from "../game/useLiveGame";
+import { useLiveGame, type DeckPayload, type ManaOptions } from "../game/useLiveGame";
+import { ManaDialog, type ManaDialogCard } from "../game/ManaDialog";
+import { symbols } from "../game/manaPlan";
 import { tokenArtMap } from "../tokens";
 import { useDeckTokens } from "../useDeckTokens";
 import { isPermanentCard, type CardView, type GameView } from "../game/view";
@@ -542,8 +544,12 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
    * The menu for several selected cards: what you'd do to each of them, done to all at once
    * (each card is still its own action on the server, logged by hand like the rest).
    */
-  const multiSection = (cards: CardView[]): MenuPart => {
-    if (view.freePlay === false) return { sections: [], note: "Free play is off in this game, so cards can't be changed by hand." };
+  const [manaFor, setManaFor] = useState<{ cards: ManaDialogCard[]; via?: string } | null>(null);
+  const multiSection = (cards: CardView[], mana?: ManaOptions): MenuPart => {
+    if (view.freePlay === false) {
+      const tapping = manaItems(cards, mana);
+      return tapping.length ? { sections: [{ title: `${cards.length} cards`, items: tapping }] } : { sections: [], note: mana?.reason ?? "Free play is off in this game, so cards can't be changed by hand." };
+    }
     const each = (f: (c: CardView) => void) => () => cards.forEach(f);
     const act = (action: Parameters<typeof game.manual>[1], who: CardView[] = cards, to?: string[]) => () => who.forEach((c) => game.manual(c.id, action, to));
     const owned = (c: CardView) => (c.zone === "battlefield" ? c.controller : c.owner) === me;
@@ -553,9 +559,10 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
     if (zones.size === 1 && zones.has("battlefield")) {
       if (allMine) {
         const untapped = cards.filter((c) => !c.tapped), tapped = cards.filter((c) => c.tapped);
-        if (untapped.length) items.push({ label: `Tap ${untapped.length === cards.length ? "them all" : `the ${untapped.length} untapped`}`, onSelect: act("tap", untapped) });
+        if (untapped.length) items.push({ label: `Tap ${untapped.length === cards.length ? "them all" : `the ${untapped.length} untapped`} (by hand, no mana)`, onSelect: act("tap", untapped) });
         if (tapped.length) items.push({ label: `Untap ${tapped.length === cards.length ? "them all" : `the ${tapped.length} tapped`}`, onSelect: act("untap", tapped) });
       }
+      items.push(...manaItems(cards, mana));
       // Counters work on any permanent: a row with + and − for each, then any other kind.
       const kinds = ["+1/+1"];
       for (const c of cards) for (const k of Object.keys(c.counters ?? {})) if (!kinds.includes(k)) kinds.push(k);
@@ -627,8 +634,39 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
     };
   };
 
+  /**
+   * 💧 Tap for mana… (pick each card's color, with arrows to shift between colors), and for another
+   * card's "Tap an untapped artifact you control: Add {U}" (Urza), tapping them all for it at once.
+   */
+  const manaItems = (cards: CardView[], mana?: ManaOptions): MenuSection["items"] => {
+    if (!mana?.options.length) return [];
+    const nameOf = (id: number) => cards.find((c) => c.id === id)?.name ?? "A card";
+    const rows: ManaDialogCard[] = mana.options.map((o) => ({ id: o.id, name: nameOf(o.id), picks: o.picks }));
+    const items: MenuSection["items"] = [{
+      label: `💧 Tap for mana… (${rows.length === cards.length ? "all" : `${rows.length} of them`})`,
+      onSelect: () => setManaFor({ cards: rows }),
+    }];
+    for (const via of [...new Set(rows.flatMap((r) => r.picks.flatMap((p) => (p.via ? [p.via] : []))))]) {
+      const usable = rows.filter((r) => r.picks.some((p) => p.via === via));
+      const picks = usable.map((r) => r.picks.filter((p) => p.via === via));
+      const who = usable.length === cards.length ? "each" : `${usable.length} of them`;
+      // One color each: tap them right away. A choice of colors: the window, set to this ability.
+      items.push(picks.every((ps) => ps.length === 1)
+        ? {
+            label: `💧 Tap ${who} for ${via}: ${symbols(picks[0][0].mana)} each`,
+            onSelect: () => game.tapForMana(usable.map((r, i) => ({ card: r.id, source: picks[i][0].source, ability: picks[i][0].ability, choice: picks[i][0].choice }))),
+          }
+        : { label: `💧 Tap ${who} for ${via}…`, onSelect: () => setManaFor({ cards: usable, via }) });
+    }
+    return items;
+  };
+
   const menuFor = (t: MenuTarget): MenuPart | Promise<MenuPart> => {
-    if (t.kind === "cards") return multiSection(t.cards);
+    if (t.kind === "cards") {
+      // Your untapped permanents: ask the server how each can be tapped for mana.
+      const untapped = t.cards.filter((c) => c.zone === "battlefield" && c.controller === me && !c.tapped);
+      return untapped.length ? game.manaOptions(untapped.map((c) => c.id)).then((m) => multiSection(t.cards, m)) : multiSection(t.cards);
+    }
     const passing: MenuPart["sections"] = [
       {
         title: "Priority",
@@ -714,7 +752,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
 
   return (
     <>
-    {game.prompt?.pay && !game.ask && <PayPrompt prompt={game.prompt} game={{ ok, cancel, payFree: game.payFree }} />}
+    {game.prompt?.pay && !game.ask && <PayPrompt prompt={game.prompt} pool={view.players[0].mana} game={{ ok, cancel, payFree: game.payFree, payPool: game.payPool }} />}
     {libDialog && (
       <LibraryDialog
         size={myLibrary}
@@ -738,6 +776,14 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
         onApply={(cost) => game.manual(costFor.id, `cast:cost:${cost}`)}
       />
     )}
+    {manaFor && (
+      <ManaDialog
+        cards={manaFor.cards}
+        via={manaFor.via}
+        onClose={() => setManaFor(null)}
+        onApply={game.tapForMana}
+      />
+    )}
     {counterFor && (
       <CounterDialog
         name={counterFor.length === 1 ? counterFor[0].name ?? "it" : `${counterFor.length} cards`}
@@ -757,6 +803,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
         onPut: view.freePlay === false ? undefined : (id) => game.manual(id, "toBattlefield"),
       }}
       onCardClick={click}
+      onPayPool={game.prompt?.pay && !game.ask ? game.payPool : undefined}
       onPlayerClick={game.clickPlayer}
       onCastCommander={click}
       playable={playable}

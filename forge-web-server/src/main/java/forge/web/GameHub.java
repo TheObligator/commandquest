@@ -25,6 +25,7 @@ import forge.web.engine.Decks;
 import forge.web.engine.Explain;
 import forge.web.engine.ManualActions;
 import forge.web.engine.AutoPay;
+import forge.web.engine.ManaTaps;
 import forge.web.engine.Payment;
 import forge.web.engine.ForgeEngine;
 import forge.web.engine.GameSession;
@@ -216,6 +217,9 @@ public final class GameHub {
             case "yield" -> yieldTo(c, m.path("key").asText(""), m.path("autoYield"), m.path("decision").asText(null));
             case "manual" -> manual(c, m);
             case "payFree" -> payFree(c);
+            case "manaOptions" -> manaOptions(c, m.path("ids"));
+            case "tapForMana" -> tapForMana(c, m.path("picks"));
+            case "payPool" -> payPool(c, m.path("color").asText(""));
             case "library" -> library(c, m);
             case "libraryCards" -> libraryCards(c, m.path("top").asInt(0), m.path("log").asBoolean(false), m.path("owner").asInt(-1));
             case "letSearch" -> letSearch(c, m.path("to").asInt(-1), true);
@@ -713,6 +717,130 @@ public final class GameHub {
                 }
             }
             send(c, o);
+        });
+    }
+
+    /**
+     * May you tap your permanents for mana now: whenever you have priority or are paying a cost (as
+     * the rules allow mana abilities), or any time in a free-play game.
+     */
+    private boolean mayTapForMana(Conn c, IGameController ctl, Game g, Player me) {
+        return freePlay(c) || Payment.input(ctl) != null || (priorityInput(ctl) && g.getPhaseHandler().getPriorityPlayer() == me);
+    }
+
+    /** The ways each of these cards can be tapped for mana (docs/game-protocol.md, {@code manaOptions}). */
+    private void manaOptions(Conn c, JsonNode ids) {
+        act(c, ctl -> {
+            Game g = game(c);
+            BrowserSeat seat = seat(c);
+            Player me = g == null || seat == null || seat.player() == null ? null : g.getPlayer(seat.player().getId());
+            if (me == null) {
+                return;
+            }
+            List<Card> cards = new ArrayList<>();
+            for (JsonNode id : ids) {
+                Card card = g.findById(id.asInt(-1));
+                if (card != null && cards.size() < 100) {
+                    cards.add(card);
+                }
+            }
+            boolean allowed = mayTapForMana(c, ctl, g, me);
+            g.getAction().invoke(() -> {
+                ObjectNode o = msg("manaOptions");
+                ArrayNode list = o.putArray("options");
+                if (allowed) {
+                    ManaTaps.options(g, me, cards).forEach((id, picks) -> {
+                        ObjectNode row = list.addObject();
+                        row.put("id", id);
+                        ArrayNode ps = row.putArray("picks");
+                        for (ManaTaps.Pick p : picks) {
+                            ObjectNode po = ps.addObject();
+                            po.put("source", p.source());
+                            po.put("ability", p.ability());
+                            po.put("choice", p.choice());
+                            po.put("mana", p.mana());
+                            if (p.via() != null) {
+                                po.put("via", p.via());
+                            }
+                        }
+                    });
+                } else {
+                    o.put("reason", "You can tap for mana when you have priority or are paying a cost.");
+                }
+                send(c, o);
+            });
+        });
+    }
+
+    /** Taps cards for mana as picked in the browser (docs/game-protocol.md, {@code tapForMana}). */
+    private void tapForMana(Conn c, JsonNode picksJson) {
+        act(c, ctl -> {
+            Game g = game(c);
+            BrowserSeat seat = seat(c);
+            Player me = g == null || seat == null || seat.player() == null ? null : g.getPlayer(seat.player().getId());
+            if (me == null) {
+                return;
+            }
+            if (!mayTapForMana(c, ctl, g, me)) {
+                notice(c, "You can tap for mana when you have priority or are paying a cost.");
+                return;
+            }
+            List<ManaTaps.Pick> picks = new ArrayList<>();
+            for (JsonNode p : picksJson) {
+                if (picks.size() < 100) {
+                    picks.add(new ManaTaps.Pick(p.path("card").asInt(-1), p.path("source").asInt(-1), p.path("ability").asInt(-1),
+                            p.path("choice").asText(""), "", null));
+                }
+            }
+            g.getAction().invoke(() -> {
+                try {
+                    if (ManaTaps.tap(g, me, picks) < picks.size()) {
+                        notice(c, "Some of those cards couldn't be tapped for mana that way any more.");
+                    }
+                } finally {
+                    seat.refresh();
+                }
+            });
+        });
+    }
+
+    /**
+     * While paying a cost, use mana from your pool: one of a color ({@code W U B R G C}), or
+     * {@code all} for as much as it can pay.
+     */
+    private void payPool(Conn c, String color) {
+        act(c, ctl -> {
+            forge.gamemodes.match.input.InputPayMana pay = Payment.input(ctl);
+            BrowserSeat seat = seat(c);
+            Game g = game(c);
+            Player me = g == null || seat == null || seat.player() == null ? null : g.getPlayer(seat.player().getId());
+            if (pay == null || me == null) {
+                return;
+            }
+            List<Byte> colors = new ArrayList<>();
+            for (byte b : forge.card.mana.ManaAtom.MANATYPES) {
+                if (color.equals("all") || forge.card.MagicColor.toShortString(b).equals(color)) {
+                    colors.add(b);
+                }
+            }
+            // Colored mana first, so colorless pays generic only once the colors are covered.
+            for (int guard = 0; guard < 50 && Payment.input(ctl) == pay; guard++) {
+                boolean used = false;
+                for (byte b : colors) {
+                    if (me.getManaPool().getAmountOfColor(b) > 0 && Payment.input(ctl) == pay) {
+                        int before = me.getManaPool().totalMana();
+                        pay.useManaFromPool(b);
+                        used |= me.getManaPool().totalMana() < before;
+                        if (!color.equals("all")) {
+                            break;
+                        }
+                    }
+                }
+                if (!used || !color.equals("all")) {
+                    break;
+                }
+            }
+            seat.refresh();
         });
     }
 
