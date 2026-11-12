@@ -61,6 +61,8 @@ The game screen. The board itself is `web/src/game/TableBoard.tsx`, shared by tw
   card swaps them, and a card dragged from your hand lands in that cell once it's in play. Cards
   shrink to fit the seat. Arranging is only your view and never goes to the server; right-click
   the board to put everything back.
+- **Double-click a board** (anywhere but a card or button) to enlarge it over the table; double-click
+  it again, press Esc or click ✕ to go back. Same as ⤢ or "Enlarge … board" in its right-click menu.
 - Your hand: upright cards from the left. Click it (live games) or drag it onto your board to play
   it. A double-click counts once.
 - **Playable cards** glow green (live games, while you have priority): your cards you can cast,

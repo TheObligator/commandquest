@@ -95,6 +95,12 @@ export function SeatBoard(props: {
       className={`seat-board${props.active ? " active" : ""}${isMe ? " mine" : ""}${props.focused ? " focused" : ""}`}
       style={{ "--seat": p.color } as React.CSSProperties}
       aria-label={isMe ? "Your board" : `${p.name}'s board`}
+      onDoubleClick={(e) => {
+        // Double-click empty board space to enlarge it (or go back); cards and controls keep their own clicks.
+        if (!props.onFocus || (e.target as Element).closest("[data-card-ids], button, a, input, select, textarea")) return;
+        window.getSelection()?.removeAllRanges();
+        props.onFocus();
+      }}
     >
       <header className="sb-head">
         {props.onPlayerClick ? (
@@ -118,7 +124,7 @@ export function SeatBoard(props: {
         ))}
         <span className="sb-spacer" />
         {props.onFocus && (
-          <button className="sb-focus" onClick={props.onFocus} title={props.focused ? "Back to the table (Esc)" : "Enlarge this board"} aria-pressed={props.focused}>
+          <button className="sb-focus" onClick={props.onFocus} title={props.focused ? "Back to the table (Esc, or double-click the board)" : "Enlarge this board (or double-click it)"} aria-pressed={props.focused}>
             {props.focused ? "✕" : "⤢"}
           </button>
         )}
