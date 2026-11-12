@@ -8,7 +8,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { CardBack, CardBadges, CardFace, CostOverlay, previewFor, usePreview } from "./cards";
 import type { OpenMenu } from "./TableBoard";
-import { arrange, moveCards, ROW_LABELS, usedCols, type Arrangement, type CardView, type Pile, type PlayerView, type Row } from "./view";
+import { arrange, isPermanentCard, moveCards, ROW_LABELS, usedCols, type Arrangement, type CardView, type Pile, type PlayerView, type Row } from "./view";
 
 export type ZoneName = "graveyard" | "exile" | "command" | "library";
 
@@ -17,6 +17,8 @@ export interface DragData {
   from: "hand" | "battlefield";
   seat: string;
   ids: number[];
+  /** A hand card's types, so a drop can tell whether it may go in without being cast. */
+  types?: string[];
 }
 export const DRAG_TYPE = "application/x-commandquest-card";
 let currentDrag: DragData | null = null; // dragover can't read dataTransfer contents
@@ -58,6 +60,8 @@ export function SeatBoard(props: {
   colorOf: (id: string) => string;
   onOpenZone: (owner: string, zone: ZoneName) => void;
   onPlayFromHand?: (cardId: number) => void;
+  /** Shift+drag from hand: put it onto the battlefield without casting it. */
+  onPutFromHand?: (cardId: number) => void;
   onTap?: (cardId: number) => void;
   /** Cast one of your commanders (partners are two cards). */
   onCastCommander?: (id: number) => void;
@@ -278,7 +282,10 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
     e.preventDefault();
     // A card from hand lands in the cell you dropped it on once it's in play.
     props.onArrange(moveCards(p.battlefield, arrangement, d.ids, row, col, width));
-    if (d.from === "hand") props.onPlayFromHand?.(d.ids[0]);
+    if (d.from !== "hand") return;
+    // Shift held when you drop: put a permanent card in without casting it.
+    if (e.shiftKey && props.onPutFromHand && isPermanentCard(d)) props.onPutFromHand(d.ids[0]);
+    else props.onPlayFromHand?.(d.ids[0]);
   };
 
   return (

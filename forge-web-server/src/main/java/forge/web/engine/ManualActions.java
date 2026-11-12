@@ -81,7 +81,7 @@ public final class ManualActions {
                 AbilityUtils.resolve(sa);
                 log(g, me, "created a token copy of " + card.getName());
             } : null;
-            case "toBattlefield" -> zone != ZoneType.Battlefield ? () -> move(g, me, card, ZoneType.Battlefield, 0, "put %s onto the battlefield") : null;
+            case "toBattlefield" -> zone != ZoneType.Battlefield && card.isPermanent() ? () -> move(g, me, card, ZoneType.Battlefield, 0, "put %s onto the battlefield") : null;
             case "toHand" -> zone != ZoneType.Hand ? () -> move(g, me, card, ZoneType.Hand, 0,
                     zone == ZoneType.Battlefield ? "returned %s to hand" : "put %s into their hand") : null;
             case "toGraveyard" -> zone != ZoneType.Graveyard ? () -> move(g, me, card, ZoneType.Graveyard, 0, "put %s into the graveyard") : null;

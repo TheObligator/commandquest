@@ -3,6 +3,7 @@ package forge.web.engine;
 import forge.deck.Deck;
 import forge.deck.DeckSection;
 import forge.game.Game;
+import forge.game.card.Card;
 import forge.game.player.Player;
 import forge.game.player.PlayerView;
 import forge.game.zone.ZoneType;
@@ -69,6 +70,35 @@ public class LibraryActionsTest {
             for (String s : List.of("drew 2 cards (by hand)", "milled 3 cards: ", "exiled the top card of their library: ", "revealed the top card", "shuffled their library (by hand)")) {
                 Assert.assertTrue(log.contains(s), "log has '" + s + "':\n" + log);
             }
+        } finally {
+            session.abort();
+        }
+    }
+
+    /** "Put onto the battlefield" without casting: permanent cards only. */
+    @Test(timeOut = 240_000)
+    public void putOntoBattlefieldOnlyPermanents() throws Exception {
+        MyRandom.setRandom(new Random(5));
+        Deck mine = deck("Ezuri, Renegade Leader", "Forest");
+        mine.getMain().add("Giant Growth", 1);
+        mine.getMain().add("Llanowar Elves", 1);
+        GameSessionTest.ScriptedBrowser browser = new GameSessionTest.ScriptedBrowser();
+        GameSession session = GameSession.startCommander(List.of(
+                new GameSession.Seat("You", mine, browser),
+                new GameSession.Seat("AI 1", deck("Talrand, Sky Summoner", "Island"), null)));
+        try {
+            PlayerView meView = PaymentTest.untilMyMain(session, browser);
+            Game g = session.game();
+            Player me = g.getPlayer(meView.getId());
+            ManualActions manual = new ManualActions();
+            Card growth = me.getAllCards().stream().filter(c -> c.getName().equals("Giant Growth")).findFirst().orElseThrow();
+            Card elves = me.getAllCards().stream().filter(c -> c.getName().equals("Llanowar Elves")).findFirst().orElseThrow();
+            Assert.assertFalse(manual.run(g, me, growth, "toBattlefield", null, () -> { }), "an instant can't be put onto the battlefield");
+            CountDownLatch done = new CountDownLatch(1);
+            Assert.assertTrue(manual.run(g, me, elves, "toBattlefield", null, done::countDown), "a creature can");
+            Assert.assertTrue(done.await(10, TimeUnit.SECONDS), "it ran");
+            Assert.assertTrue(me.getCardsIn(ZoneType.Battlefield).stream().anyMatch(c -> c.getName().equals("Llanowar Elves")), "elves on the battlefield");
+            Assert.assertTrue(g.getStack().isEmpty(), "nothing was cast");
         } finally {
             session.abort();
         }

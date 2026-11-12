@@ -252,6 +252,13 @@ export function viewFor(state: GameState, viewer: string): GameView {
 export type Row = 0 | 1 | 2;
 export const ROW_LABELS = ["Creatures", "Artifacts · enchantments · planeswalkers", "Lands"] as const;
 
+const PERMANENT_TYPES = ["Creature", "Artifact", "Enchantment", "Land", "Planeswalker", "Battle"];
+
+/** Is this a permanent card (one that can be on the battlefield)? */
+export function isPermanentCard(c: { types?: string[] }): boolean {
+  return (c.types ?? []).some((t) => PERMANENT_TYPES.includes(t));
+}
+
 export function defaultRow(c: CardView): Row {
   const t = c.types ?? [];
   if (t.includes("Creature")) return 0;

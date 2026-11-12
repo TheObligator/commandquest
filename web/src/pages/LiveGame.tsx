@@ -12,7 +12,7 @@ import { useHotkeys } from "../game/useHotkeys";
 import { useLiveGame, type DeckPayload } from "../game/useLiveGame";
 import { tokenArtMap } from "../tokens";
 import { useDeckTokens } from "../useDeckTokens";
-import type { CardView, GameView } from "../game/view";
+import { isPermanentCard, type CardView, type GameView } from "../game/view";
 import type { MenuSection } from "../components/CardMenu";
 import { CounterDialog } from "../game/CounterDialog";
 import { PayPrompt } from "../game/PayPrompt";
@@ -269,7 +269,8 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
   const moves = (card: CardView): MenuSection["items"] => {
     const go = (action: Parameters<typeof game.manual>[1]) => () => game.manual(card.id, action);
     const items: MenuSection["items"] = [];
-    if (card.zone !== "battlefield") items.push({ label: "Put onto the battlefield", onSelect: go("toBattlefield") });
+    // Hand cards get it at the top of the section (putFromHand); elsewhere it goes with the other moves.
+    if (card.zone !== "battlefield" && card.zone !== "hand" && isPermanentCard(card)) items.push({ label: "Put onto the battlefield", onSelect: go("toBattlefield") });
     if (card.zone !== "hand") items.push({ label: card.zone === "battlefield" ? "Return to hand" : "Put into hand", onSelect: go("toHand") });
     if (card.zone !== "graveyard") items.push({ label: "Put into graveyard", onSelect: go("toGraveyard") });
     if (card.zone !== "exile") items.push({ label: "Exile", onSelect: go("toExile") });
@@ -369,6 +370,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
       if (mine) items.push({ label: "Create a token copy", onSelect: () => game.manual(card.id, "tokenCopy") });
       if (mine) items.push(...moves(card));
     } else if (mine) {
+      if (card.zone === "hand" && isPermanentCard(card)) items.push({ label: "⤵ Put onto the battlefield (don't cast)", onSelect: () => game.manual(card.id, "toBattlefield") });
       if (card.zone === "hand") items.push(revealItem(card));
       items.push(...moves(card));
     }
@@ -482,7 +484,11 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
       stops={st}
       priority={!!game.prompt?.ok.enabled || !!game.ask}
       rail={(preview) => <LiveRail game={{ ...game, ok, cancel, clickCard: click }} nameOf={nameOf} colorOf={colorOf} preview={preview} />}
-      hand={{ onPlay: click, onClick: click }}
+      hand={{
+        onPlay: click,
+        onClick: click,
+        onPut: view.freePlay === false ? undefined : (id) => game.manual(id, "toBattlefield"),
+      }}
       onCardClick={click}
       onPlayerClick={game.clickPlayer}
       onCastCommander={click}

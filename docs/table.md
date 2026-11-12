@@ -64,7 +64,8 @@ The game screen. The board itself is `web/src/game/TableBoard.tsx`, shared by tw
 - **Double-click a board** (anywhere but a card or button) to enlarge it over the table; double-click
   it again, press Esc or click ✕ to go back. Same as ⤢ or "Enlarge … board" in its right-click menu.
 - Your hand: upright cards from the left. Click it (live games) or drag it onto your board to play
-  it. A double-click counts once.
+  it. A double-click counts once. Hold **Shift** as you drop a permanent card to put it onto the
+  battlefield without casting it (free play; same as the menu item below).
 - **Playable cards** glow green (live games, while you have priority): your cards you can cast,
   play or activate now, in hand, on the battlefield, in the command zone, graveyard or exile.
 - If a click does nothing, a message says why (not your turn, not a main phase, the stack isn't
@@ -87,8 +88,10 @@ The game screen. The board itself is `web/src/game/TableBoard.tsx`, shared by tw
     face down/up, counter rows with + and − (+1/+1, loyalty on planeswalkers, and any already on
     it), 🔒 Doesn't untap next turn, 🔒 Never untaps by itself, Counter… (any kind and number),
     Create a token copy, and moving it: to hand, graveyard, exile, command zone, top or bottom of
-    the library. In hand: 👁 Reveal to ▸ Everyone (or one opponent, with more than one), Put onto
-    the battlefield, and the same moves.
+    the library. In hand: ⤵ Put onto the battlefield (don't cast) first, for permanent cards only
+    (for effects like "put a creature card from your hand onto the battlefield"), then 👁 Reveal to ▸
+    Everyone (or one opponent, with more than one) and the same moves. Put onto the battlefield is
+    offered from other zones too, also for permanent cards only.
 - **Right-click a zone tile or a board** to view the zone, enlarge the board,
   reset its layout, or pass priority.
 - **The stack** is a floating window over the table (`game/StackWindow.tsx`), shown while

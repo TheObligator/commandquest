@@ -137,6 +137,8 @@ export function TableBoard(props: {
     selected?: number[];
     onToggleSelect?: (id: number) => void;
     onPlay: (id: number) => void;
+    /** Put a card from hand onto the battlefield without casting it (Shift+drag; free play). */
+    onPut?: (id: number) => void;
     /** Single click on a hand card (live games: Forge decides what that does). */
     onClick?: (id: number) => void;
   };
@@ -266,6 +268,7 @@ export function TableBoard(props: {
           colorOf={colorOf}
           onOpenZone={(owner, z) => setZone({ owner, zone: z })}
           onPlayFromHand={isMe ? props.hand.onPlay : undefined}
+          onPutFromHand={isMe ? props.hand.onPut : undefined}
           onTap={isMe ? props.onTap : undefined}
           onCardClick={props.onCardClick}
           onPlayerClick={props.onPlayerClick}
