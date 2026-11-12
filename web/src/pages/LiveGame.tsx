@@ -343,7 +343,8 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
         items: [
           { label: game.prompt?.ok.label && game.prompt.ok.label !== "OK" ? game.prompt.ok.label : "Pass priority (OK)", disabled: !game.prompt?.ok.enabled, onSelect: ok },
           { label: "Pass until end of turn", onSelect: () => game.setAutoPass("END_OF_TURN") },
-          { label: "Pass until my turn", onSelect: () => game.setAutoPass("BEFORE_MY_TURN") },
+          { label: "Pass until before my turn", onSelect: () => game.setAutoPass("BEFORE_MY_TURN") },
+          { label: "Pass until my turn", onSelect: () => game.setAutoPass("UNTIL_MY_TURN") },
         ],
       },
     ];
@@ -408,6 +409,7 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
   useHotkeys({
     autoEndOfTurn: () => game.setAutoPass("END_OF_TURN"),
     autoBeforeMyTurn: () => game.setAutoPass("BEFORE_MY_TURN"),
+    autoUntilMyTurn: () => game.setAutoPass("UNTIL_MY_TURN"),
     autoActionOrEnd: () => game.setAutoPass("ACTION_OR_END_STEP"),
     holdPriority: () => st.setHoldPriority(!st.holdPriority),
     castCommander: () => (commander ? click(commander.id) : false),

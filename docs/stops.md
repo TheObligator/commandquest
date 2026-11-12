@@ -27,6 +27,8 @@ The game screen has a vertical phase strip on the right. Every step is a tile sp
   on the stack (`autoPassStatus` in `phases.ts`):
   - **End of turn (E):** skip the rest of this turn; your stops apply again from the next turn.
   - **Before my turn (B):** skip until the end step of the player right before you.
+  - **Until my turn (M):** skip everything, that end step included, until your next turn starts;
+    your own stops apply from there. Chosen on your own turn, it skips the rest of that turn too.
   - **Action / end step (R):** skip until someone casts something, or this turn's end step.
 - **Hold priority (Shift, under the phase strip):** off, casting a spell or activating an ability
   passes priority once it's on the stack, as on MTGO. On, you keep priority, so you can cast more

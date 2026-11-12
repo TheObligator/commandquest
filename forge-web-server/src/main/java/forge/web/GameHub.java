@@ -19,6 +19,7 @@ import forge.player.PlayerControllerHuman;
 import forge.gamemodes.match.YieldUpdate;
 import forge.gui.FThreads;
 import forge.interfaces.IGameController;
+import forge.web.engine.AutoPass;
 import forge.web.engine.BrowserSeat;
 import forge.web.engine.Decks;
 import forge.web.engine.Explain;
@@ -733,7 +734,7 @@ public final class GameHub {
         });
     }
 
-    /** Auto-pass: END_OF_TURN, BEFORE_MY_TURN, ACTION_OR_END_STEP, or null to cancel. */
+    /** Auto-pass: END_OF_TURN, BEFORE_MY_TURN, UNTIL_MY_TURN, ACTION_OR_END_STEP, or null to cancel. */
     private void autoPass(Conn c, String mode) {
         Hosted h = c.game;
         if (h != null) {
@@ -754,18 +755,9 @@ public final class GameHub {
                 }
                 return;
             }
-            Player active = g.getPhaseHandler().getPlayerTurn();
-            switch (mode) {
-                case "END_OF_TURN" -> ctl.applyYieldUpdate(new YieldUpdate.SetAutoPassUntilEndOfTurn(me, true));
-                case "ACTION_OR_END_STEP" -> ctl.applyYieldUpdate(new YieldUpdate.SetMarker(active.getView(), PhaseType.END_OF_TURN, false));
-                case "BEFORE_MY_TURN" -> {
-                    List<Player> order = g.getPlayers();
-                    Player mine = g.getPlayer(me.getId());
-                    int i = order.indexOf(mine);
-                    Player before = order.get((i - 1 + order.size()) % order.size());
-                    ctl.applyYieldUpdate(new YieldUpdate.SetMarker(before.getView(), PhaseType.END_OF_TURN, false));
-                }
-                default -> { }
+            YieldUpdate update = AutoPass.update(g, me, mode);
+            if (update != null) {
+                ctl.applyYieldUpdate(update);
             }
             if (seat != null) {
                 seat.refresh(); // the view's autoPassing

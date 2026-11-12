@@ -27,7 +27,7 @@ The game screen. The board itself is `web/src/game/TableBoard.tsx`, shared by tw
 - **Hotkeys** are the player's own (Settings, `#/settings`; `web/src/game/hotkeys.ts`), and every
   button shows the key it's bound to. Defaults: Space pass priority / OK, X the second button
   (Cancel, Mulligan, End Turn), Shift hold priority (tapped on its own), C cast your commander, and
-  E / B / R the auto-pass skips. Esc closes an enlarged board. They're saved to the account (Convex
+  E / B / M / R the auto-pass skips. Esc closes an enlarged board. They're saved to the account (Convex
   `settings`) and in the browser, so they also work signed out.
 - **Seats** are always in turn order, starting from the player after you. Four layouts, chosen in
   the toolbar and remembered per browser:

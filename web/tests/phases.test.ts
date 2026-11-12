@@ -89,6 +89,10 @@ test("auto-pass: end of turn expires next turn, R stops at this turn's end step,
   assert.equal(autoPassStatus({ mode: "ACTION_OR_END_STEP", turn: 5 }, at("o1", "END_OF_TURN", 5)), "stop");
   assert.equal(autoPassStatus({ mode: "BEFORE_MY_TURN", turn: 5 }, at("o2", "END_OF_TURN", 6)), "running");
   assert.equal(autoPassStatus({ mode: "BEFORE_MY_TURN", turn: 5 }, at("o3", "END_OF_TURN", 7)), "stop");
+  // Until my turn: no stop in the end step before it; chosen on your own turn, it skips the rest of it too.
+  assert.equal(autoPassStatus({ mode: "UNTIL_MY_TURN", turn: 5 }, at("o3", "END_OF_TURN", 7)), "running");
+  assert.equal(autoPassStatus({ mode: "UNTIL_MY_TURN", turn: 5 }, at("me", "UPKEEP", 8)), "expired");
+  assert.equal(autoPassStatus({ mode: "UNTIL_MY_TURN", turn: 4 }, at("me", "MAIN2", 4)), "running");
 
   // Through shouldStop: the auto-pass overrides stops, but a non-empty stack still stops.
   const s = stopsFromPreset(DEFAULT_PRESET, "me", ["o1", "o2", "o3"]);

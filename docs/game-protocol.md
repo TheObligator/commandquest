@@ -88,7 +88,7 @@ server, counting games waiting for their player.
 | `player` `{id}` | Click a player (targets, attacking a player). |
 | `answer` `{id, choice, text?}` | Answer `ask` `id`: `choice` is a list of option indexes (empty for none/cancel), `text` for a `text` question. |
 | `stops` `{stops: {"<player id>": ["UPKEEP", …]}}` | The steps on each player's turn where you want priority (Forge `PhaseType` names). Every other step is skipped. Sent at the start and on every change. |
-| `autopass` `{mode}` | `END_OF_TURN`, `BEFORE_MY_TURN` (until the end step of the player before you), `ACTION_OR_END_STEP` (until this turn's end step), or `null` to cancel. Forge still stops when something needs you. |
+| `autopass` `{mode}` | `END_OF_TURN`, `BEFORE_MY_TURN` (until the end step of the player before you), `UNTIL_MY_TURN` (until your next turn starts), `ACTION_OR_END_STEP` (until this turn's end step), or `null` to cancel. Forge still stops when something needs you. |
 | `concede` | Concede. |
 
 ## Hidden information
