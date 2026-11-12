@@ -96,7 +96,11 @@ export interface CardDetails {
 /** Manual overrides from a card's menu (the server checks they're your cards). */
 export type ManualAction =
   | "tap" | "untap" | "faceDown" | "faceUp" | "skipUntap" | "neverUntap" | "untapNormally" | "tokenCopy"
-  | "toBattlefield" | "toHand" | "toGraveyard" | "toExile" | "toCommand" | "toLibraryTop" | "toLibraryBottom" | "reveal";
+  | "toBattlefield" | "toHand" | "toGraveyard" | "toExile" | "toCommand" | "toLibraryTop" | "toLibraryBottom" | "reveal"
+  /** Combat by hand: put your creature into combat attacking (`to`: the player), or take any creature out. */
+  | "attack" | "removeFromCombat"
+  /** Until end of turn, on any permanent: `eot:<key>` (see EOT_GROUPS in pages/LiveGame.tsx) or `eot:pt:+2:+2`. */
+  | `eot:${string}`;
 
 /** Manual actions on your own library (free play): the top `n` cards, or reveal the top card. */
 export type LibraryAction = "draw" | "mill" | "exile" | "revealTop" | "shuffle";

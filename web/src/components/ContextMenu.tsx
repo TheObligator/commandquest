@@ -83,11 +83,19 @@ export function ContextMenu({ menu, onClose }: { menu: ContextMenuState; onClose
 function Row({ item, onClose }: { item: MenuItem; onClose: () => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
   const [left, setLeft] = useState(false);
+  const [lift, setLift] = useState(0);
   useLayoutEffect(() => {
-    if (!open || !ref.current) return;
+    if (!open || !ref.current) {
+      setLift(0);
+      return;
+    }
     const r = ref.current.getBoundingClientRect();
     setLeft(r.right + 220 > innerWidth); // no room on the right: open to the left
+    // A long submenu near the bottom of the window: move it up so it all shows.
+    const p = panel.current?.getBoundingClientRect();
+    setLift(p ? Math.max(0, Math.min(p.bottom - innerHeight + 8, p.top - 8)) : 0);
   }, [open]);
   if (item.submenu) {
     return (
@@ -96,7 +104,7 @@ function Row({ item, onClose }: { item: MenuItem; onClose: () => void }) {
           {item.label} <span className="cm-arrow" aria-hidden>▸</span>
         </button>
         {open && (
-          <div className={`card-menu cm-subpanel${left ? " to-left" : ""}`} role="menu" aria-label={item.label}>
+          <div ref={panel} className={`card-menu cm-subpanel${left ? " to-left" : ""}`} style={lift ? { top: -5 - lift } : undefined} role="menu" aria-label={item.label}>
             {item.submenu.map((sub, k) => (
               <Row key={`${k}-${sub.label}`} item={sub} onClose={onClose} />
             ))}

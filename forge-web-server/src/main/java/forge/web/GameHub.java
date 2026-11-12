@@ -496,7 +496,7 @@ public final class GameHub {
                 return;
             }
             Player me = g.getPlayer(seat.player().getId());
-            if (!ManualActions.allowed(card, me)) {
+            if (!ManualActions.allowed(card, me, action)) {
                 notice(c, "You can only do that to your own cards.");
                 return;
             }

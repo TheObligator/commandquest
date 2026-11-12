@@ -18,6 +18,37 @@ import { CounterDialog } from "../game/CounterDialog";
 import { PayPrompt } from "../game/PayPrompt";
 import { LibraryDialog, type LibraryCountAction } from "../game/LibraryDialog";
 
+/** Combat steps once attackers are declared: when a creature can be put into combat attacking. */
+const AFTER_ATTACKERS = new Set<string>(["COMBAT_DECLARE_ATTACKERS", "COMBAT_DECLARE_BLOCKERS", "COMBAT_FIRST_STRIKE_DAMAGE", "COMBAT_DAMAGE"]);
+
+/** Counters people put on by hand most, for "Add a counter ▸" (Forge's names). Any other: "Counter…". */
+const QUICK_COUNTERS = ["+1/+1", "-1/-1", "Loyalty", "Shield", "Stun", "Charge", "Lore", "Time", "Oil", "Finality",
+  "Flying", "First Strike", "Deathtouch", "Lifelink", "Trample", "Menace", "Reach", "Vigilance", "Hexproof", "Indestructible"];
+
+/** "Until end of turn ▸" groups: [server key (ManualActions.EOT), label]. `creature`: only on creatures. */
+const EOT_GROUPS: { label: string; creature?: boolean; items: [string, string][] }[] = [
+  { label: "Power / toughness", creature: true, items: [
+    ["pt:+1:+1", "+1/+1"], ["pt:+2:+2", "+2/+2"], ["pt:+3:+3", "+3/+3"], ["pt:+1:+0", "+1/+0"], ["pt:+2:+0", "+2/+0"],
+    ["pt:-1:-1", "−1/−1"], ["pt:-2:-2", "−2/−2"], ["pt:-3:-3", "−3/−3"], ["pt:-1:+0", "−1/−0"], ["pt:-2:+0", "−2/−0"],
+    ["switchPT", "Switch power and toughness"],
+  ] },
+  { label: "Evasion and combat", creature: true, items: [
+    ["unblockable", "Can't be blocked"], ["flying", "Flying"], ["menace", "Menace"], ["trample", "Trample"],
+    ["firstStrike", "First strike"], ["doubleStrike", "Double strike"], ["vigilance", "Vigilance"], ["haste", "Haste"],
+    ["lifelink", "Lifelink"], ["deathtouch", "Deathtouch"], ["reach", "Reach"],
+  ] },
+  { label: "Restrictions", creature: true, items: [
+    ["cantBlock", "Can't block"], ["cantAttack", "Can't attack"], ["cantAttackOrBlock", "Can't attack or block"],
+    ["mustBeBlocked", "Must be blocked if able"], ["lure", "All creatures able to block it do so"],
+    ["preventDealtBy", "Prevent the combat damage it would deal"], ["preventDealtTo", "Prevent all damage dealt to it"],
+  ] },
+  { label: "Protection", items: [
+    ["indestructible", "Indestructible"], ["hexproof", "Hexproof"], ["shroud", "Shroud"],
+    ["protWhite", "Protection from white"], ["protBlue", "Protection from blue"], ["protBlack", "Protection from black"],
+    ["protRed", "Protection from red"], ["protGreen", "Protection from green"], ["protEverything", "Protection from everything"],
+  ] },
+];
+
 export function LiveGame() {
   const { query } = useRoute();
   const deckId = query.get("deck") ?? "";
@@ -347,6 +378,32 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
     };
   };
 
+  /** Until end of turn ▸ for a permanent: groups of effects, creature ones only on creatures. */
+  const eotItem = (card: CardView): MenuSection["items"][number] => {
+    const go = (key: string) => () => game.manual(card.id, `eot:${key}`);
+    const creature = card.types?.includes("Creature");
+    const groups = EOT_GROUPS.filter((gr) => creature || !gr.creature).map((gr) => ({
+      label: gr.label,
+      onSelect: () => {},
+      submenu: gr.items.map(([key, label]) => ({ label, onSelect: go(key) })),
+    }));
+    const steal = card.controller !== me ? [{ label: "Gain control (untap it, haste)", onSelect: go("control") }] : [];
+    return { label: "⏳ Until end of turn", onSelect: () => {}, submenu: [...groups, ...steal] };
+  };
+
+  /** Combat by hand: put your creature in attacking once attackers are declared, or take any creature out. */
+  const combatItems = (card: CardView, mine: boolean): MenuSection["items"] => {
+    const items: MenuSection["items"] = [];
+    if (card.attacking || card.blocking) items.push({ label: "Remove from combat", onSelect: () => game.manual(card.id, "removeFromCombat") });
+    else if (mine && card.types?.includes("Creature") && view.active === me && AFTER_ATTACKERS.has(view.step)) {
+      const attack = (p: { id: string; name: string }) => () => game.manual(card.id, "attack", [p.id]);
+      items.push(opponents.length === 1
+        ? { label: `⚔ Put into combat attacking ${opponents[0].name}`, onSelect: attack(opponents[0]) }
+        : { label: "⚔ Put into combat attacking", onSelect: () => {}, submenu: opponents.map((p) => ({ label: p.name, onSelect: attack(p) })) });
+    }
+    return items;
+  };
+
   const manualSection = (card: CardView): MenuSection => {
     if (view.freePlay === false) return { items: [] };
     const mine = (card.zone === "battlefield" ? card.controller : card.owner) === me;
@@ -359,6 +416,13 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
       const kinds = ["+1/+1", ...(card.counters?.["-1/-1"] ? ["-1/-1"] : []), ...(card.types?.includes("Planeswalker") ? ["Loyalty"] : [])];
       for (const k of Object.keys(card.counters ?? {})) if (!kinds.includes(k)) kinds.push(k);
       for (const k of kinds) items.push(counterRow(card, k));
+      items.push({
+        label: "Add a counter",
+        onSelect: () => {},
+        submenu: QUICK_COUNTERS.filter((k) => !kinds.includes(k)).map((k) => ({ label: k, onSelect: () => game.counter(card.id, k, 1) })),
+      });
+      items.push(eotItem(card));
+      items.push(...combatItems(card, mine));
       if (mine) {
         if (card.untapLock) {
           items.push({ label: "🔓 Untaps normally", onSelect: () => game.manual(card.id, "untapNormally") });

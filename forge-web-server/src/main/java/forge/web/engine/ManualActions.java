@@ -9,7 +9,14 @@ import forge.game.card.Card;
 import forge.game.card.CardCollection;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
+import forge.game.combat.Combat;
+import forge.game.event.GameEventCombatChanged;
+import forge.game.phase.PhaseType;
 import forge.game.zone.ZoneType;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -29,9 +36,77 @@ public final class ManualActions {
     /** Cards that never untap by themselves: {@link #keepLocked} puts {@link #NO_UNTAP} back after each untap step. */
     private final Set<Integer> neverUntap = ConcurrentHashMap.newKeySet();
 
-    /** Does {@code me} get to do {@code action} to this card by hand? Your own cards only. */
-    public static boolean allowed(Card card, Player me) {
+    /**
+     * Until-end-of-turn effects by hand, {@code eot:<key>}: what the log says it gave the card,
+     * and the Forge ability that does it (Pump lasts until end of turn by default). Plus
+     * {@code eot:pt:<±a>:<±d>} for +a/+d.
+     */
+    static final Map<String, String[]> EOT = new LinkedHashMap<>();
+    private static final String UNBLOCKABLE_SVAR = "WebUnblockable";
+    private static final Pattern EOT_PT = Pattern.compile("^pt:([+-]\\d{1,2}):([+-]\\d{1,2})$");
+
+    static {
+        String[][] keywords = {
+            {"flying", "Flying"}, {"firstStrike", "First Strike"}, {"doubleStrike", "Double Strike"},
+            {"trample", "Trample"}, {"haste", "Haste"}, {"vigilance", "Vigilance"}, {"lifelink", "Lifelink"},
+            {"deathtouch", "Deathtouch"}, {"menace", "Menace"}, {"reach", "Reach"},
+            {"indestructible", "Indestructible"}, {"hexproof", "Hexproof"}, {"shroud", "Shroud"},
+            {"protWhite", "Protection from white"}, {"protBlue", "Protection from blue"},
+            {"protBlack", "Protection from black"}, {"protRed", "Protection from red"},
+            {"protGreen", "Protection from green"}, {"protEverything", "Protection from everything"},
+        };
+        for (String[] k : keywords) {
+            EOT.put(k[0], new String[] {k[1].toLowerCase(java.util.Locale.ROOT), "DB$ Pump | Defined$ Self | KW$ " + k[1]});
+        }
+        String[][] hidden = {
+            {"cantBlock", "can't block", "HIDDEN CARDNAME can't block."},
+            {"cantAttack", "can't attack", "HIDDEN CARDNAME can't attack."},
+            {"cantAttackOrBlock", "can't attack or block", "HIDDEN CARDNAME can't attack or block."},
+            {"mustBeBlocked", "must be blocked if able", "HIDDEN CARDNAME must be blocked if able."},
+            {"lure", "all creatures able to block it do so", "HIDDEN All creatures able to block CARDNAME do so."},
+            {"switchPT", "power and toughness switched", "HIDDEN CARDNAME's power and toughness are switched"},
+            {"preventDealtBy", "prevent all combat damage it would deal", "Prevent all combat damage that would be dealt by CARDNAME."},
+            {"preventDealtTo", "prevent all damage that would be dealt to it", "Prevent all damage that would be dealt to CARDNAME."},
+        };
+        for (String[] h : hidden) {
+            EOT.put(h[0], new String[] {h[1], "DB$ Pump | Defined$ Self | KW$ " + h[2]});
+        }
+        EOT.put("unblockable", new String[] {"can't be blocked",
+                "DB$ Effect | RememberObjects$ Self | ExileOnMoved$ Battlefield | StaticAbilities$ " + UNBLOCKABLE_SVAR});
+        EOT.put("control", new String[] {"control of it (untapped, with haste)",
+                "DB$ GainControl | Defined$ Self | LoseControl$ EOT | Untap$ True | AddKWs$ Haste"});
+    }
+
+    /** Does {@code me} get to do {@code action} to this card by hand? */
+    public static boolean allowed(Card card, Player me, String action) {
+        // Effects on a permanent, like counters, may go on anyone's (an opponent's creature can't block,
+        // gets -2/-2, comes over to you for the turn...). Everything else: your own cards only.
+        if (card.isInPlay() && (action.startsWith("eot:") || action.equals("removeFromCombat"))) {
+            return !action.equals("eot:control") || card.getController() != me;
+        }
         return card.isInPlay() ? card.getController() == me : card.getOwner() == me;
+    }
+
+    /** The log text and Forge script for an {@code eot:} action, or null if it's not one we know. */
+    static String[] eot(String action) {
+        if (!action.startsWith("eot:")) {
+            return null;
+        }
+        String key = action.substring(4);
+        Matcher m = EOT_PT.matcher(key);
+        if (m.matches()) {
+            int a = Integer.parseInt(m.group(1));
+            int d = Integer.parseInt(m.group(2));
+            return a == 0 && d == 0 ? null : new String[] {String.format("%+d/%+d", a, d),
+                    "DB$ Pump | Defined$ Self | NumAtt$ " + String.format("%+d", a) + " | NumDef$ " + String.format("%+d", d)};
+        }
+        return EOT.get(key);
+    }
+
+    /** The combat steps after attackers are declared, when a creature can be put into combat attacking. */
+    static boolean afterAttackersDeclared(Game g) {
+        PhaseType ph = g.getPhaseHandler().getPhase();
+        return g.getCombat() != null && ph != null && ph.isAfter(PhaseType.COMBAT_BEGIN) && ph.isBefore(PhaseType.COMBAT_END);
     }
 
     /**
@@ -41,7 +116,40 @@ public final class ManualActions {
     public boolean run(Game g, Player me, Card card, String action, List<Player> to, Runnable after) {
         boolean inPlay = card.isInPlay();
         ZoneType zone = g.getZoneOf(card) == null ? null : g.getZoneOf(card).getZoneType();
-        Runnable change = switch (action) {
+        String[] effect = eot(action);
+        Combat combat = g.getCombat();
+        Player defender = to == null || to.isEmpty() ? null : to.get(0);
+        Runnable change = effect != null ? (inPlay ? () -> {
+            SpellAbility sa = AbilityFactory.getAbility(effect[1], card);
+            sa.setActivatingPlayer(me);
+            sa.setSVar(UNBLOCKABLE_SVAR, "Mode$ CantBlockBy | ValidAttacker$ Card.IsRemembered | Description$ This creature can't be blocked this turn.");
+            AbilityUtils.resolve(sa);
+            g.getAction().checkStaticAbilities(); // so "can't be blocked" and the like apply right away
+            String name = card.isFaceDown() ? "a face-down card" : card.getName();
+            log(g, me, action.equals("eot:control") ? "gained control of " + name + " until end of turn (untapped, with haste)"
+                    : "gave " + name + " " + effect[0] + " until end of turn");
+        } : null) : switch (action) {
+            case "attack" -> inPlay && card.isCreature() && card.getController() == me && afterAttackersDeclared(g)
+                    && combat.getAttackingPlayer() == me && !combat.isAttacking(card) && defender != null
+                    && combat.getDefenders().contains(defender) ? () -> {
+                combat.removeFromCombat(card);
+                if (!card.isTapped()) {
+                    card.tap(null, me);
+                }
+                combat.addAttacker(card, defender);
+                if (g.getPhaseHandler().getPhase().isAfter(PhaseType.COMBAT_DECLARE_ATTACKERS)) {
+                    combat.getBandOfAttacker(card).setBlocked(false); // blockers are already declared: it's unblocked
+                }
+                g.updateCombatForView();
+                g.fireEvent(new GameEventCombatChanged());
+                log(g, me, "put " + card.getName() + " into combat tapped and attacking " + defender.getName());
+            } : null;
+            case "removeFromCombat" -> inPlay && combat != null && (combat.isAttacking(card) || combat.isBlocking(card)) ? () -> {
+                combat.removeFromCombat(card);
+                g.updateCombatForView();
+                g.fireEvent(new GameEventCombatChanged());
+                log(g, me, "removed " + card.getName() + " from combat");
+            } : null;
             case "tap" -> inPlay && !card.isTapped() ? () -> {
                 card.tap(null, me);
                 log(g, me, "tapped " + card.getName());

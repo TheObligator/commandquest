@@ -86,8 +86,17 @@ The game screen. The board itself is `web/src/game/TableBoard.tsx`, shared by tw
   - **By hand** (manual overrides, like a paper table; outside the rules, logged "(by hand)", your
     own cards only, except counters which go on any permanent): on the battlefield Tap/Untap, Turn
     face down/up, counter rows with + and − (+1/+1, loyalty on planeswalkers, and any already on
-    it), 🔒 Doesn't untap next turn, 🔒 Never untaps by itself, Counter… (any kind and number),
-    Create a token copy, and moving it: to hand, graveyard, exile, command zone, top or bottom of
+    it), Add a counter ▸ (common kinds: shield, stun, charge, lore, time, oil, finality, keyword
+    counters…), ⏳ Until end of turn ▸ (on any permanent, like counters: Power / toughness ±N and
+    switch; Evasion and combat: can't be blocked, flying, menace, trample, first/double strike,
+    vigilance, haste, lifelink, deathtouch, reach; Restrictions: can't block, can't attack, must be
+    blocked, lure, prevent damage; Protection: indestructible, hexproof, shroud, protection from a
+    color or everything; on someone else's permanent, Gain control (untapped, with haste); creature
+    groups only on creatures), ⚔ Put into combat attacking (your creature, on your turn once
+    attackers are declared: tapped and attacking the opponent you pick, unblocked if blockers are
+    already declared, for "put onto the battlefield attacking" and the like), Remove from combat
+    (any attacking or blocking creature), 🔒 Doesn't untap next turn, 🔒 Never untaps by itself,
+    Counter… (any kind and number), Create a token copy, and moving it: to hand, graveyard, exile, command zone, top or bottom of
     the library. In hand: ⤵ Put onto the battlefield (don't cast) first, for permanent cards only
     (for effects like "put a creature card from your hand onto the battlefield"), then 👁 Reveal to ▸
     Everyone (or one opponent, with more than one) and the same moves. Put onto the battlefield is
