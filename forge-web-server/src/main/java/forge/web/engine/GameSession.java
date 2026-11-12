@@ -70,7 +70,7 @@ public final class GameSession {
         for (Seat seat : seats) {
             RegisteredPlayer rp = RegisteredPlayer.forCommander(seat.deck());
             if (seat.human()) {
-                rp.setPlayer(new WebLobbyPlayer(seat.name()));
+                rp.setPlayer(new WebLobbyPlayer(seat.name(), seat.remote() instanceof BrowserSeat b ? b::notice : null));
                 ProtocolGuiGame gui = new ProtocolGuiGame(seat.remote());
                 gui.setNetGame();
                 if (seat.remote() instanceof BrowserSeat browser) {

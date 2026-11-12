@@ -850,6 +850,13 @@ public final class BrowserSeat implements IRemote {
 
     // ---- plumbing ----
 
+    /** A short message the browser shows as a toast (e.g. why the game stopped). */
+    public void notice(String message) {
+        ObjectNode o = msg("notice");
+        o.put("message", message);
+        emit(o);
+    }
+
     private ObjectNode msg(String type) {
         ObjectNode o = json.createObjectNode();
         o.put("t", type);

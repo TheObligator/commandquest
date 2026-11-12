@@ -17,6 +17,11 @@ The game screen has a vertical phase strip on the right. Every step is a tile sp
 - **Stops only affect an empty stack.** As on MTGO, you always get priority when something is on the
   stack or the game needs a decision from you (attackers, blockers, targets…). Untap and cleanup
   have no priority (CR 502.4, 514.3), so they can't hold stops.
+- **Automatic upkeep stop.** If you can use an ability that only works during upkeep ("Activate
+  only during your upkeep": Rock Hydra, Undead Gladiator from your graveyard, Tolaria…) and can pay
+  for it, the game stops in that upkeep even without a stop there, and a toast says which card it
+  stopped for (once per turn). Auto-pass still skips it. Server side: `UpkeepStop` and
+  `WebPlayerController.isUiSetToSkipPhase`.
 - **Pass (Space)** passes priority once. Keys are the player's own (Settings); the defaults are given here.
 - **Auto-pass** (left rail) skips ahead, ignoring your stops but still stopping when something goes
   on the stack (`autoPassStatus` in `phases.ts`):
