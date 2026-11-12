@@ -7,6 +7,7 @@
 // get unreadably small. You can drag cards to any cell on any board; that only changes your view.
 import { useLayoutEffect, useRef, useState } from "react";
 import { CardBack, CardBadges, CardFace, CostOverlay, previewFor, usePreview } from "./cards";
+import { isMarkClick, useMarks, useMarquee } from "./marks";
 import type { OpenMenu } from "./TableBoard";
 import { arrange, isPermanentCard, moveCards, ROW_LABELS, usedCols, type Arrangement, type CardView, type Pile, type PlayerView, type Row } from "./view";
 
@@ -252,6 +253,8 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
   const ref = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 600, h: 300 });
   const [dropAt, setDropAt] = useState<{ row: Row; col: number } | null>(null);
+  const marks = useMarks();
+  const { onMouseDown, marquee } = useMarquee();
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -294,7 +297,9 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
       className={`battlefield${props.line ? " line" : ""}${cw <= MIN_CW ? " cramped" : ""}`}
       style={{ "--cw": `${cw}px` } as React.CSSProperties}
       onContextMenu={props.onMenu && ((e) => props.onMenu!(e, { kind: "board", owner: p.id }))}
+      onMouseDown={onMouseDown}
     >
+      {marquee}
       {rows.map((piles, r) => {
         const cols = Math.max(width, usedCols(piles) + SPARE);
         return (
@@ -327,10 +332,12 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
                 const next = pile.cards.find((x) => props.selectable?.has(x.id) && !props.chosen?.has(x.id));
                 return next?.id ?? [...pile.cards].reverse().find((x) => props.chosen?.has(x.id))?.id ?? c.id;
               })();
+              const ids = pile.cards.map((x) => x.id);
+              const marked = ids.some((id) => marks.marked.has(id));
               return (
                 <div
                   key={pile.key}
-                  className={["slot", c.tapped && "tapped", anySelectable && "selectable", anyChosen && "chosen", props.playable?.has(c.id) && "playable"].filter(Boolean).join(" ")}
+                  className={["slot", c.tapped && "tapped", anySelectable && "selectable", anyChosen && "chosen", props.playable?.has(c.id) && "playable", marked && "marked"].filter(Boolean).join(" ")}
                   style={{ gridColumn: pile.col + 1 }}
                   data-card-ids={pile.cards.map((x) => x.id).join(" ")}
                   draggable
@@ -342,7 +349,12 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
                   }}
                   onDragEnd={() => (setDrag(null), setDropAt(null))}
                   aria-label={props.onCardClick ? `${c.name ?? "Face-down card"}: click to use or choose it, right-click for more, drag to move` : isMe && props.onTap ? `${c.name ?? "Face-down card"}: click to ${c.tapped ? "untap" : "tap"}, drag to move` : undefined}
-                  onClick={() => (props.onCardClick ? props.onCardClick(clickId) : isMe && props.onTap?.(c.id))}
+                  onClick={(e) => {
+                    // Shift/Ctrl/⌘-click selects it (with others) for one right-click menu.
+                    if (isMarkClick(e)) return marks.toggle(ids);
+                    if (props.onCardClick) props.onCardClick(clickId);
+                    else if (isMe) props.onTap?.(c.id);
+                  }}
                   onContextMenu={props.onMenu && ((e) => props.onMenu!(e, { kind: "card", card: c, where: "battlefield" }))}
                   {...props.hover(c)}
                 >

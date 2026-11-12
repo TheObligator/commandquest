@@ -1,9 +1,12 @@
 // Shows every card in a public zone (graveyard, exile, command zone). Anyone can look at these.
 // Face-down cards still appear, so everyone knows they're there, but only players allowed to
 // look at one see its face.
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { closeOnBackdrop } from "../carddetails";
-import { CardBadges, CardFace, faceDownNote, usePreview } from "./cards";
+import { cached } from "../scryfall";
+import { CardBadges, CardFace, faceDownNote, useCardData, usePreview } from "./cards";
+import { isMarkClick, useMarks, useMarquee } from "./marks";
+import { compileQuery } from "./scryquery";
 import type { OpenMenu } from "./TableBoard";
 import type { CardView } from "./view";
 
@@ -25,7 +28,24 @@ export function ZoneViewer(props: {
   useEffect(() => {
     ref.current?.showModal();
   }, []);
-  const cards = props.topFirst ? props.cards : [...props.cards].reverse(); // top first
+  const all = props.topFirst ? props.cards : [...props.cards].reverse(); // top first
+  const marks = useMarks();
+  const { onMouseDown, marquee } = useMarquee();
+  // Filter by name, or with Scryfall's syntax (t:creature o:"draw a card" mv<=3), on the cards' Scryfall data.
+  const [query, setQuery] = useState("");
+  const names = useMemo(() => [...new Set(props.cards.flatMap((c) => (c.name ? [c.name] : [])))].sort(), [props.cards]);
+  useCardData(names);
+  const filter = useMemo(() => compileQuery(query.trim()), [query]);
+  const cards = typeof filter !== "function" || !query.trim()
+    ? all
+    : all.filter((c) => {
+        if (!c.name) return false;
+        try {
+          return filter(cached({ name: c.name, quantity: 1, board: "main" }) ?? { name: c.name });
+        } catch {
+          return false;
+        }
+      });
   return (
     <dialog
       ref={ref}
@@ -37,18 +57,38 @@ export function ZoneViewer(props: {
       <div className="dialog-head">
         <h3>{props.title} <span className="muted small">{props.cards.length} card{props.cards.length === 1 ? "" : "s"} · top first</span></h3>
       </div>
+      {props.cards.length > 1 && (
+        <div className="zv-filter">
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder='Find a card: a name, or Scryfall search like t:creature mv<=3 o:"draw a card"'
+            aria-label="Filter these cards by name or Scryfall search"
+            autoFocus={props.cards.length > 12}
+          />
+          <span className={`muted small${typeof filter === "function" ? "" : " zv-error"}`}>
+            {typeof filter !== "function" ? filter.error : query.trim() ? `${cards.length} match${cards.length === 1 ? "" : "es"}` : "Shift-click or drag a box to select several"}
+          </span>
+        </div>
+      )}
       {cards.length ? (
-        <div className="zv-grid">
+        <div className="zv-grid" onMouseDown={onMouseDown}>
+          {marquee}
           {cards.map((c) => {
             const note = faceDownNote(c, props.viewer, props.nameOf);
             return (
               <figure
                 key={c.id}
-                className={props.playable?.has(c.id) ? "playable" : undefined}
+                data-card-ids={c.id}
+                className={[props.playable?.has(c.id) && "playable", marks.marked.has(c.id) && "marked"].filter(Boolean).join(" ") || undefined}
                 onMouseEnter={() => setPreview({ card: c, note })}
                 onMouseLeave={() => setPreview(null)}
                 onContextMenu={props.onMenu ? (e) => props.onMenu!(e, { kind: "card", card: c, where: "zone" }) : undefined}
-                onClick={props.onCardClick && props.playable?.has(c.id) ? () => props.onCardClick!(c.id) : undefined}
+                onClick={(e) => {
+                  if (isMarkClick(e)) return marks.toggle([c.id]);
+                  if (props.onCardClick && props.playable?.has(c.id)) props.onCardClick(c.id);
+                }}
               >
                 <div className="zv-card">
                   <CardFace card={c} knownFaceDown={c.faceDown && !c.hidden} />
@@ -60,7 +100,7 @@ export function ZoneViewer(props: {
           })}
         </div>
       ) : (
-        <p className="muted">Empty.</p>
+        <p className="muted">{query.trim() && props.cards.length ? "No cards match." : "Empty."}</p>
       )}
     </dialog>
   );

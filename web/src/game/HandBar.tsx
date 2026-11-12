@@ -1,6 +1,7 @@
 // Your hand: upright cards in a row from the left. Drag one onto your board or double-click it to
 // play it. While choosing cards to put on the bottom after a mulligan, clicking selects instead.
 import { CardFace, CostOverlay, PTOverlay, previewFor, usePreview } from "./cards";
+import { isMarkClick, useMarks, useMarquee } from "./marks";
 import { DRAG_TYPE, setDrag, type DragData } from "./SeatBoard";
 import type { OpenMenu } from "./TableBoard";
 import type { CardView } from "./view";
@@ -24,8 +25,11 @@ export function HandBar(props: {
   onMenu?: OpenMenu;
 }) {
   const setPreview = usePreview();
+  const marks = useMarks();
+  const { onMouseDown, marquee } = useMarquee();
   return (
-    <div className="hand-bar" aria-label={`Your hand, ${props.cards.length} cards`}>
+    <div className="hand-bar" aria-label={`Your hand, ${props.cards.length} cards`} onMouseDown={onMouseDown}>
+      {marquee}
       <span className="hand-label">Hand · {props.cards.length}</span>
       <div className="hand-cards">
         {props.cards.map((c) => {
@@ -33,7 +37,7 @@ export function HandBar(props: {
           return (
             <button
               key={c.id}
-              className={`hand-card${selected ? " selected" : ""}${props.selectable?.has(c.id) ? " selectable" : ""}${props.chosen?.has(c.id) ? " chosen" : ""}${!props.selecting && props.playable?.has(c.id) ? " playable" : ""}`}
+              className={`hand-card${selected ? " selected" : ""}${props.selectable?.has(c.id) ? " selectable" : ""}${props.chosen?.has(c.id) ? " chosen" : ""}${!props.selecting && props.playable?.has(c.id) ? " playable" : ""}${marks.marked.has(c.id) ? " marked" : ""}`}
               data-card-ids={c.id}
               draggable={!props.selecting}
               aria-pressed={props.selecting ? selected : undefined}
@@ -46,7 +50,11 @@ export function HandBar(props: {
                 setPreview(null);
               }}
               onDragEnd={() => setDrag(null)}
-              onClick={() => (props.selecting ? props.onToggleSelect(c.id) : props.onClick?.(c.id))}
+              onClick={(e) => {
+                if (props.selecting) return props.onToggleSelect(c.id);
+                if (isMarkClick(e)) return marks.toggle([c.id]); // select several for one right-click menu
+                props.onClick?.(c.id);
+              }}
               onDoubleClick={() => !props.selecting && !props.onClick && props.onPlay(c.id)}
               onContextMenu={props.onMenu && !props.selecting ? (e) => props.onMenu!(e, { kind: "card", card: c, where: "hand" }) : undefined}
               onMouseEnter={() => setPreview(previewFor(c, props.viewer, props.nameOf))}

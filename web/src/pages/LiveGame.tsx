@@ -281,7 +281,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
 
   // Right-click menus. Forge's abilities for the card (enabled when you can use them now), then
   // the things players do by hand at a paper table: tap, counters, move it to another zone…
-  const [counterFor, setCounterFor] = useState<CardView | null>(null);
+  const [counterFor, setCounterFor] = useState<CardView[] | null>(null);
   const me = view.viewer;
   const opponents = view.players.slice(1);
 
@@ -497,7 +497,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
       for (const k of kinds) items.push(counterRow(card, k));
       items.push(sub("Add a counter", [
         ...QUICK_COUNTERS.filter((k) => !kinds.includes(k)).map((k) => ({ label: k, onSelect: () => game.counter(card.id, k, 1) })),
-        { label: "Other / several…", onSelect: () => setCounterFor(card) },
+        { label: "Other / several…", onSelect: () => setCounterFor([card]) },
       ]));
       items.push(eotItem(card));
       items.push(...combatItems(card, mine));
@@ -538,7 +538,97 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
   };
 
 
+  /**
+   * The menu for several selected cards: what you'd do to each of them, done to all at once
+   * (each card is still its own action on the server, logged by hand like the rest).
+   */
+  const multiSection = (cards: CardView[]): MenuPart => {
+    if (view.freePlay === false) return { sections: [], note: "Free play is off in this game, so cards can't be changed by hand." };
+    const each = (f: (c: CardView) => void) => () => cards.forEach(f);
+    const act = (action: Parameters<typeof game.manual>[1], who: CardView[] = cards, to?: string[]) => () => who.forEach((c) => game.manual(c.id, action, to));
+    const owned = (c: CardView) => (c.zone === "battlefield" ? c.controller : c.owner) === me;
+    const allMine = cards.every(owned);
+    const zones = new Set(cards.map((c) => c.zone));
+    const items: MenuSection["items"] = [];
+    if (zones.size === 1 && zones.has("battlefield")) {
+      if (allMine) {
+        const untapped = cards.filter((c) => !c.tapped), tapped = cards.filter((c) => c.tapped);
+        if (untapped.length) items.push({ label: `Tap ${untapped.length === cards.length ? "them all" : `the ${untapped.length} untapped`}`, onSelect: act("tap", untapped) });
+        if (tapped.length) items.push({ label: `Untap ${tapped.length === cards.length ? "them all" : `the ${tapped.length} tapped`}`, onSelect: act("untap", tapped) });
+      }
+      // Counters work on any permanent: a row with + and − for each, then any other kind.
+      const kinds = ["+1/+1"];
+      for (const c of cards) for (const k of Object.keys(c.counters ?? {})) if (!kinds.includes(k)) kinds.push(k);
+      for (const k of kinds) {
+        items.push({
+          label: `${k} counter on each`,
+          keepOpen: true,
+          onSelect: each((c) => game.counter(c.id, k, 1)),
+          steppers: [
+            { label: "+", title: `Add a ${k} counter to each`, onSelect: each((c) => game.counter(c.id, k, 1)) },
+            { label: "−", title: `Remove a ${k} counter from each that has one`, onSelect: each((c) => (c.counters?.[k] ?? 0) > 0 && game.counter(c.id, k, -1)) },
+          ],
+        });
+      }
+      items.push(sub("Add a counter to each", [
+        ...QUICK_COUNTERS.filter((k) => !kinds.includes(k)).map((k) => ({ label: k, onSelect: each((c) => game.counter(c.id, k, 1)) })),
+        { label: "Other / several…", onSelect: () => setCounterFor(cards) },
+      ]));
+      const creatures = cards.every((c) => c.types?.includes("Creature"));
+      items.push(sub("⏳ Until end of turn, each", [
+        ...EOT_GROUPS.filter((gr) => creatures || !gr.creature).map((gr) => sub(gr.label, gr.items.map(([key, label]) => ({ label, onSelect: act(`eot:${key}`) })))),
+        ...(cards.every((c) => c.controller !== me) ? [{ label: "Gain control (untap them, haste)", onSelect: act("eot:control") }] : []),
+      ]));
+      const fighting = cards.filter((c) => c.attacking || c.blocking);
+      if (fighting.length) items.push({ label: `Remove ${fighting.length === cards.length ? "them" : `the ${fighting.length}`} from combat`, onSelect: act("removeFromCombat", fighting) });
+      else if (allMine && creatures && view.active === me && AFTER_ATTACKERS.has(view.step)) {
+        const attack = (p: { id: string }) => act("attack", cards, [p.id]);
+        items.push(opponents.length === 1
+          ? { label: `⚔ Put them into combat attacking ${opponents[0].name}`, onSelect: attack(opponents[0]) }
+          : sub("⚔ Put them into combat attacking", opponents.map((p) => ({ label: p.name, onSelect: attack(p) }))));
+      }
+      const more: MenuSection["items"] = [];
+      if (creatures && cards.every((c) => c.controller !== me)) more.push({ label: "Goad them", onSelect: act("goad") });
+      if (allMine) {
+        more.push({ label: "Phase them out", onSelect: act("phaseOut") });
+        more.push({ label: "Create a token copy of each", onSelect: act("tokenCopy") });
+      }
+      if (more.length) items.push(sub("More", more));
+    } else if (allMine && zones.size === 1 && zones.has("hand")) {
+      if (cards.every(isPermanentCard)) items.push({ label: "⤵ Put them onto the battlefield (don't cast)", onSelect: act("toBattlefield") });
+      items.push({ label: "Discard them", onSelect: act("discard") });
+    } else if (cards.every((c) => c.zone === "library" && view.searching?.includes(c.owner))) {
+      items.push({ label: "Exile them face down (only you may look at them)", onSelect: act("exileFaceDown", cards, [me]) });
+      items.push({ label: "Exile them face up", onSelect: act("toExile") });
+    }
+    if (allMine) {
+      // Move to ▸ for all of them: each moves unless it's already there.
+      const not = (z: string) => cards.filter((c) => c.zone !== z);
+      const move: MenuSection["items"] = [];
+      if (cards.every((c) => c.zone !== "battlefield" && c.zone !== "hand" && isPermanentCard(c))) move.push({ label: "Put onto the battlefield", onSelect: act("toBattlefield") });
+      if (not("hand").length) move.push({ label: "Put into hand", onSelect: act("toHand", not("hand")) });
+      if (not("graveyard").length) move.push({ label: "Put into graveyard", onSelect: act("toGraveyard", not("graveyard")) });
+      if (not("exile").length) {
+        const faceDown = (to: string[]) => act("exileFaceDown", not("exile"), to);
+        move.push({ label: "Exile", onSelect: act("toExile", not("exile")) });
+        move.push(sub("Exile face down", [
+          { label: "Only you may look at them", onSelect: faceDown([me]) },
+          ...opponents.map((p) => ({ label: `Only ${p.name} may look at them`, onSelect: faceDown([p.id]) })),
+          { label: "Nobody may look at them", onSelect: faceDown([]) },
+        ]));
+      }
+      move.push({ label: "On top of library", onSelect: act("toLibraryTop") });
+      move.push({ label: "On the bottom of library", onSelect: act("toLibraryBottom") });
+      items.push(sub("Move them to", move));
+    }
+    return {
+      sections: [{ title: `${cards.length} cards`, items }],
+      note: items.length ? undefined : "There's nothing to do to all of these at once. Select cards that are all yours, or all on the battlefield.",
+    };
+  };
+
   const menuFor = (t: MenuTarget): MenuPart | Promise<MenuPart> => {
+    if (t.kind === "cards") return multiSection(t.cards);
     const passing: MenuPart["sections"] = [
       {
         title: "Priority",
@@ -650,9 +740,9 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
     )}
     {counterFor && (
       <CounterDialog
-        card={counterFor}
+        name={counterFor.length === 1 ? counterFor[0].name ?? "it" : `${counterFor.length} cards`}
         onClose={() => setCounterFor(null)}
-        onApply={(type, delta) => game.counter(counterFor.id, type, delta)}
+        onApply={(type, delta) => counterFor.forEach((c) => game.counter(c.id, type, delta))}
       />
     )}
     <TableBoard

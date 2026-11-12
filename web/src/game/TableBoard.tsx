@@ -12,6 +12,7 @@ import { ContextMenu, type ContextMenuState } from "../components/ContextMenu";
 import type { MenuSection } from "../components/CardMenu";
 import { PreviewContext, type Preview } from "./cards";
 import { HandBar } from "./HandBar";
+import { MarkContext, type Marks } from "./marks";
 import { StackArrows, StackWindow } from "./StackWindow";
 import type { CardDetails } from "./useLiveGame";
 import { CardInspect, HoverZoom } from "./CardZoom";
@@ -114,7 +115,9 @@ export type TableStopsState = ReturnType<typeof useTableStops>;
 export type MenuTarget =
   | { kind: "card"; card: CardView; where: "hand" | "battlefield" | "command" | "zone" }
   | { kind: "zone"; owner: string; zone: ZoneName | "hand" }
-  | { kind: "board"; owner: string };
+  | { kind: "board"; owner: string }
+  /** Several selected cards (drag a box, or Shift/Ctrl/⌘-click), right-clicked together. */
+  | { kind: "cards"; cards: CardView[] };
 
 /** The page's part of a right-click menu (the board adds its own items, like viewing a zone). */
 export interface MenuPart {
@@ -177,6 +180,29 @@ export function TableBoard(props: {
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
   const [inspect, setInspect] = useState<CardView | null>(null);
   const menuSeq = useRef(0);
+  // Cards selected together (marks.tsx). Ids of cards that left the table drop out on their own.
+  const [markedRaw, setMarked] = useState<ReadonlySet<number>>(new Set());
+  const peekCards = props.peek?.cards;
+  const cardOf = (id: number) => findCard(v, id) ?? peekCards?.find((c) => c.id === id);
+  const marked = useMemo(() => new Set([...markedRaw].filter((id) => cardOf(id))), [markedRaw, v, peekCards]); // eslint-disable-line react-hooks/exhaustive-deps
+  const marks = useMemo<Marks>(() => ({
+    marked,
+    set: (ids) => setMarked(new Set(ids)),
+    toggle: (ids) => setMarked((cur) => {
+      const next = new Set(cur);
+      const all = ids.every((id) => next.has(id));
+      for (const id of ids) all ? next.delete(id) : next.add(id);
+      return next;
+    }),
+  }), [marked]);
+  useEffect(() => {
+    if (!marked.size) return;
+    const on = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !document.querySelector("dialog[open]")) setMarked(new Set());
+    };
+    window.addEventListener("keydown", on);
+    return () => window.removeEventListener("keydown", on);
+  }, [marked.size]);
 
   const seatOf = (id: string) => v.players.find((p) => p.id === id);
   const nameOf = (id: string) => (id === me ? "you" : seatOf(id)?.name ?? id);
@@ -197,6 +223,7 @@ export function TableBoard(props: {
 
   /** The board's own items for a target: look at a zone, enlarge a board, reset its layout. */
   const boardItems = (t: MenuTarget): MenuSection[] => {
+    if (t.kind === "cards") return [{ items: [{ label: "Clear the selection (Esc)", onSelect: () => setMarked(new Set()) }] }];
     const owner = t.kind === "card" ? t.card.controller : t.owner;
     const who = owner === me ? "your" : `${seatOf(owner)?.name ?? "their"}'s`;
     const items: MenuSection["items"] = [];
@@ -215,13 +242,19 @@ export function TableBoard(props: {
     return [{ items }];
   };
 
-  const openMenu: OpenMenu = (e, t) => {
+  const openMenu: OpenMenu = (e, target) => {
     e.preventDefault();
     e.stopPropagation();
     setPreview(null);
+    // Right-click one of several selected cards: the menu is for all of them.
+    const t: MenuTarget = target.kind === "card" && marked.has(target.card.id) && marked.size > 1
+      ? { kind: "cards", cards: [...marked].map(cardOf).filter((c): c is CardView => !!c) }
+      : target;
     const seq = ++menuSeq.current;
     const title =
-      t.kind === "card"
+      t.kind === "cards"
+        ? `${t.cards.length} selected cards`
+        : t.kind === "card"
         ? t.card.hidden ? "Face-down card" : t.card.name
         : t.kind === "zone"
           ? `${t.owner === me ? "Your" : (seatOf(t.owner)?.name ?? "") + "'s"} ${ZONE_LABEL[t.zone]}`
@@ -306,6 +339,7 @@ export function TableBoard(props: {
   const ZONE_TITLES: Record<ZoneName, string> = { graveyard: "graveyard", exile: "exile", command: "command zone", library: "library" };
 
   return (
+    <MarkContext.Provider value={marks}>
     <PreviewContext.Provider value={setPreview}>
       {/* The table has its own right-click menus, so the browser's is off here. */}
       <div
@@ -415,6 +449,7 @@ export function TableBoard(props: {
       {/* Inside an open dialog (the zone viewer) so it shows above it: dialogs sit on the top layer. */}
       {menu && createPortal(<ContextMenu menu={menu} onClose={() => setMenu(null)} />, document.querySelector("dialog[open]") ?? document.body)}
     </PreviewContext.Provider>
+    </MarkContext.Provider>
   );
 }
 

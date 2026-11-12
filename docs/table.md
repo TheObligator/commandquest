@@ -127,6 +127,25 @@ The game screen. The board itself is `web/src/game/TableBoard.tsx`, shared by tw
   (only you see them): keep each on top, in the order shown (left is the top card), or send it to
   the bottom (scry) or graveyard (surveil). The server does it as Forge's own scry or surveil, so
   "whenever you scry / surveil" triggers happen.
+- **Select several cards** and right-click one of them for a menu that does the same thing to all
+  of them (`game/marks.tsx`): drag a box over empty space on a board, in your hand or in a card
+  viewer, or Shift/Ctrl/⌘-click cards to add or take them out (Shift/⌘ while dragging the box adds
+  to the selection). Selected cards have a purple outline; Esc or a click on empty space clears it.
+  On the battlefield: tap or untap them all (yours), counter rows with + and − for each, Add a
+  counter to each ▸ (Other / several… opens the counter window for all of them), ⏳ Until end of
+  turn, each ▸, put them into combat attacking or remove them from combat, More ▸ (goad, phase
+  out, token copies). In hand: put them onto the battlefield (all permanents), discard them. While
+  searching an opponent's library they let you search: exile them face down or face up. For cards
+  that are all yours, wherever they are: Move them to ▸. Each card is still its own action on the
+  server, logged by hand.
+- **Find a card in a card viewer** (your library while you search it, a graveyard, exile…): type in
+  the box at the top. Words match the name; Scryfall's search syntax works too, run on the cards'
+  Scryfall data (`game/scryquery.ts`): `t:` type, `o:` rules text (`~` is the card's name), `c:`
+  colors (at least these), `id:` color identity (within these), `m:` mana cost, `mv`/`cmc`, `pow`,
+  `tou`, `loy` with `: = != < > <= >=` (`pow>tou` works), `r:` rarity, `kw:` keyword, `is:`
+  (permanent, spell, creature, legendary, multicolored, colorless, commander, historic…),
+  `-` to negate, `or`, parentheses, quotes and `!"exact name"`. Color words and guild/shard names
+  work (`c:izzet`, `id:esper`). A query it can't read says why.
 - **Menus and the hover card stay on screen:** a menu near an edge opens the other way, a submenu
   opens on whichever side has room and moves up to fit, and a menu taller than the window scrolls.
   The large hover card fits the window's height and moves as its image loads.
