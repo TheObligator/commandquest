@@ -4,6 +4,7 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { navigate, useRoute } from "../app/router";
+import { useCardSupport } from "../cardsupport";
 import { toast } from "../dom";
 import { useCardData } from "../game/cards";
 import { LiveRail } from "../game/LiveRail";
@@ -64,6 +65,15 @@ export function LiveGame() {
   const [freePlay, setFreePlay] = useStored<boolean>("cq.game.freePlay", true);
   const game = useLiveGame();
   const { tokens } = useDeckTokens(deck?.cards, deck?.tokenArt);
+  const support = useCardSupport();
+  /** Cards Forge doesn't have: the server refuses to start a game with them. */
+  const unplayable = useMemo(
+    () =>
+      support && deck
+        ? deck.cards.filter((c) => (c.board === "main" || c.board === "commander") && support.notInForge(c.name)).map((c) => c.name)
+        : [],
+    [support, deck],
+  );
 
   useEffect(() => {
     if (game.error) {
@@ -79,7 +89,7 @@ export function LiveGame() {
 
   const start = () => {
     if (!deck) return;
-    const payload: DeckPayload = { name: deck.name, cards: deck.cards.map((c) => ({ name: c.name, quantity: c.quantity, board: c.board, set: c.set, collectorNumber: c.collectorNumber })), tokens: tokenArtMap(tokens) };
+    const payload: DeckPayload = { name: deck.name, cards: deck.cards.map((c) => ({ name: support?.forgeName(c.name) ?? c.name, quantity: c.quantity, board: c.board, set: c.set, collectorNumber: c.collectorNumber })), tokens: tokenArtMap(tokens) };
     game.start(payload, me?.name ?? "You", opponents, freePlay);
   };
 
@@ -201,7 +211,13 @@ export function LiveGame() {
                   </span>
                 </span>
               </label>
-              <button className="btn" onClick={start} disabled={!deck || game.status !== "ready"}>
+              {unplayable.length > 0 && (
+                <p className="form-error">
+                  Forge's rules engine doesn't have {unplayable.length === 1 ? "this card" : "these cards"} yet, so this deck can't start a game:{" "}
+                  {unplayable.join(", ")}. <a className="link" href={`#/decks/${deckId}`}>Edit the deck</a>
+                </p>
+              )}
+              <button className="btn" onClick={start} disabled={!deck || game.status !== "ready" || unplayable.length > 0}>
                 {game.status === "starting" ? "Starting…" : game.status === "ready" ? "Start game" : STATUS[game.status]}
               </button>
             </>

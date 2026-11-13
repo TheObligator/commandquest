@@ -1,0 +1,4 @@
+{
+  "_comment": "Cards Forge has a script for that we know don't work right. The deck editor marks them with the reason. Remove an entry once Forge or an override in overrides/cards fixes the card, then run `npm run cardsupport` in web/.",
+  "cards": {}
+}

@@ -65,6 +65,25 @@ The precon decks players can copy into their account (`#/decks/precons`) come fr
 committed because CI checks out only `web/`. After merging upstream Forge, run it and commit the
 result; `npm test` fails locally while the file is out of date.
 
+### Cards that don't work in games
+
+The deck editor, its search results and the game start screen mark cards that won't work in a game
+(`web/src/cardsupport.ts`), from `web/public/card-support.json`:
+
+- **Not playable**: Forge has no script for the card. Anything Scryfall lists that isn't in
+  `forge-gui/res/cardsfolder/` gets this, so a new card is marked from the day Scryfall adds it
+  until a Forge merge brings its script in. Reprints match by name, so they're never marked. The
+  game server refuses to start a game with one of these, so the start screen says so up front.
+- **Known issue**: Forge has the card but it misbehaves. List it in `overrides/broken.json` with
+  the reason, shown on hover. Remove the entry once Forge or an override fixes the card.
+
+`npm run cardsupport` builds the JSON from both. Like `precons.json`, it's committed, and
+`npm test` fails locally while it's stale: after merging upstream Forge, or editing
+`overrides/broken.json`, run it and commit the result.
+
+A few names are spelled differently by Forge and Scryfall ("All Good Things . . ." and "All Good
+Things..."). Matching ignores those differences, and the game start sends Forge's spelling.
+
 ## Opening the dev client from another machine (Tailscale)
 
 Both servers listen on loopback only. To reach the client from another device on your tailnet,

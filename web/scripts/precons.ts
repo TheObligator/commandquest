@@ -6,7 +6,7 @@
 //   forge-gui/res/editions/*.txt                 Release dates, and Forge → Scryfall set codes
 //
 // The JSON is committed, because CI checks out only web/. After merging upstream Forge, run
-// `npm run precons` and commit the result; tests/precons.test.ts fails while it's out of date.
+// `npm run precons` and `npm run cardsupport`, and commit the results; tests/precons.test.ts fails while it's out of date.
 //
 // Pure functions are exported for the tests; running the file writes the JSON.
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";

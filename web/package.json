@@ -8,6 +8,7 @@
     "dev": "vite",
     "dev:all": "node scripts/dev-all.mjs",
     "precons": "node scripts/precons.ts",
+    "cardsupport": "node scripts/cardsupport.ts",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
