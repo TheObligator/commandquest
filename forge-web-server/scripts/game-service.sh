@@ -14,7 +14,8 @@
 # service (web/scripts/dev-service.sh), which uses port 8080; this one uses 8090.
 set -eu
 
-REF=${REF:-web}
+# The pushed web branch by default: a local `web` can lag behind when another worktree has it checked out.
+REF=${REF:-origin/web}
 PORT=${PORT:-8090}
 ORIGINS=${ALLOWED_ORIGINS:-https://commandquest.app,https://staging.commandquest.app}
 HOME_DIR="$HOME/.commandquest/game"
@@ -87,12 +88,15 @@ set-token)
   ;;
 deploy)
   mkdir -p "$HOME_DIR"
+  [ "$REF" = origin/web ] && git -C "$REPO" fetch -q origin web
   sha=$(git -C "$REPO" rev-parse --verify "$REF^{commit}")
   if [ -d "$SRC" ]; then
     git -C "$SRC" checkout -q --detach "$sha"
   else
     git -C "$REPO" worktree add -q --detach "$SRC" "$sha"
   fi
+  # A Forge merge can bump the version, which would leave the old version's jars beside the new ones.
+  rm -f "$SRC"/forge-web-server/target/forge-web-server-*.jar
   echo "Building $REF ($(git -C "$SRC" log -1 --format='%h %s'))…"
   (cd "$SRC" && JAVA_HOME="$JAVA_HOME" mvn -q -f forge-web-server/reactor.xml package > "$HOME_DIR/build.log" 2>&1) \
     || { echo "Build or tests failed; the running server is unchanged. See $HOME_DIR/build.log" >&2; exit 1; }

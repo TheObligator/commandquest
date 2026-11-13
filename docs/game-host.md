@@ -22,7 +22,7 @@ Splitting it into a staging and a production server comes later.
 
 | Command | What it does |
 |---|---|
-| `deploy` | Checks out `web` (or `REF=<branch or sha>`) in its own worktree (`~/.commandquest/game/src`), builds it with tests, installs the jar and (re)starts the services. A failed build leaves the running server alone. |
+| `deploy` | Fetches and checks out `origin/web` (or `REF=<branch or sha>`) in its own worktree (`~/.commandquest/game/src`), builds it with tests, installs the jar and (re)starts the services. A failed build leaves the running server alone. |
 | `status` | Both services, the commit running, and `/health` on localhost and through the tunnel |
 | `logs` | Follows `~/Library/Logs/commandquest-game.log` and `commandquest-tunnel.log` |
 | `restart` | Restarts the server and tunnel |
