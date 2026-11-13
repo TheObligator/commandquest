@@ -178,6 +178,8 @@ export interface RewindPoint {
   player: string;
   /** The first moment of its step. */
   stepStart: boolean;
+  /** `timeline`: a moment of the game. `attackers` / `blockers`: declare them again (until combat damage). */
+  kind: "timeline" | "attackers" | "blockers";
 }
 
 export interface RewindView {

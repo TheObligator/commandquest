@@ -17,7 +17,9 @@ export const REWIND_LEVELS: { level: RewindLevel; label: string; hint: string }[
 export function RewindPanel({ game, rewind }: { game: LiveGame; rewind: RewindView }) {
   const [open, setOpen] = useState(false);
   const p = rewind.pending;
-  const options = rewind.options ?? [];
+  const all = rewind.options ?? [];
+  const options = all.filter((o) => o.kind === "timeline");
+  const combat = all.filter((o) => o.kind !== "timeline");
 
   if (p) {
     return (
@@ -45,7 +47,7 @@ export function RewindPanel({ game, rewind }: { game: LiveGame; rewind: RewindVi
 
   const ask = (o: RewindPoint) => {
     setOpen(false);
-    game.rewindTo(o.point);
+    game.rewindTo(o.point, o.kind);
   };
   const undo = options[0];
   return (
@@ -57,6 +59,16 @@ export function RewindPanel({ game, rewind }: { game: LiveGame; rewind: RewindVi
       <button className="ar-skip" disabled={!undo} title={undo?.label} onClick={() => undo && ask(undo)}>
         Undo last action
       </button>
+      {combat.map((o) => (
+        <button
+          key={o.kind}
+          className="ar-skip"
+          title={o.kind === "attackers" ? "Back to just before attackers were declared, to declare them again" : "Back to just before blockers were declared, to declare them again (add or change blockers)"}
+          onClick={() => ask(o)}
+        >
+          {o.label}
+        </button>
+      ))}
       {rewind.level >= 2 && (
         <button className="ar-skip" disabled={options.length < 2} aria-expanded={open} onClick={() => setOpen(!open)}>
           Timeline {open ? "▴" : "▾"}
@@ -86,7 +98,7 @@ function Timeline({ options, onPick }: { options: RewindPoint[]; onPick: (o: Rew
           <div className="rewind-step">{g.title}</div>
           <ul>
             {g.items.map((o) => (
-              <li key={o.point}>
+              <li key={`${o.kind}-${o.point}`}>
                 <button title="Rewind to here" onClick={() => onPick(o)}>
                   {o.label}
                 </button>

@@ -3,10 +3,12 @@ package forge.web.engine;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.common.eventbus.AllowConcurrentEvents;
 import com.google.common.eventbus.Subscribe;
 import forge.game.Game;
 import forge.game.GameLogEntry;
 import forge.game.GameLogEntryType;
+import forge.game.card.Card;
 import forge.game.event.GameEvent;
 import forge.game.event.GameEventCardStatsChanged;
 import forge.game.event.GameEventPlayerPriority;
@@ -51,27 +53,42 @@ public final class Rewind {
 
     /** A saved moment: a player was about to get priority. */
     private record Point(int id, GameMemento memento, int logSize, int turn, PhaseType phase, String turnPlayer,
-            String priorityPlayer) {
+            String priorityPlayer, CombatState combat) {
         boolean sameStep(int t, PhaseType p) {
             return turn == t && phase == p;
         }
     }
 
     /** Somewhere a player may rewind to now: the point, the level that allows it, and what to show. */
-    public record Option(int point, int level, String label, int turn, String phase, String player, boolean stepStart) {
+    public record Option(int point, int level, String label, int turn, String phase, String player, boolean stepStart,
+            String kind) {
     }
 
     private final class Request {
         final Player by;
         final Option target;
+        /** For attackers / blockers: the declaration to click back in once it's asked again (null: none). */
+        final Plan plan;
         final Set<Player> waiting = new LinkedHashSet<>();
         boolean approved;
 
-        Request(Player by, Option target) {
+        Request(Player by, Option target, Plan plan) {
             this.by = by;
             this.target = target;
+            this.plan = plan;
         }
     }
+
+    /**
+     * A combat declaration to put back: {@code attackers} pairs are (attacker id, defender id, 1 if the defender is a
+     * player), blockers pairs (blocker id, attacker id). {@code declarer} makes it.
+     */
+    record Plan(Player declarer, boolean attackers, List<int[]> pairs) {
+    }
+
+    /** After a combat rewind: the declaration waiting to be clicked back in. */
+    private volatile Plan replan;
+    private boolean watching;
 
     private final Game game;
     private final int level;
@@ -79,9 +96,9 @@ public final class Rewind {
     private final List<Point> points = new ArrayList<>();   // oldest first
     private int nextId = 1;
     /** Something happened since the newest point. */
-    private boolean dirty = true;
+    private volatile boolean dirty = true;
     /** Between the start and end events of a restore: its own events aren't changes. */
-    private boolean restoring;
+    private volatile boolean restoring;
     private int lostPlayers;
     private Request pending;
     /** The last thing that happened to a request, for everyone to see once (e.g. "Bob declined"). */
@@ -105,7 +122,11 @@ public final class Rewind {
 
     // ---- the game thread ----
 
+    // AllowConcurrentEvents: Guava would otherwise lock this object for every event, and a game ending on another
+    // thread (Game.setGameOver holds the game's lock while it fires events) would deadlock with the game thread
+    // here (which calls the synchronized Game.isGameOver). This class does its own locking.
     @Subscribe
+    @AllowConcurrentEvents
     public void onEvent(GameEvent ev) {
         if (level == 0) {
             return;
@@ -129,6 +150,15 @@ public final class Rewind {
 
     /** A player is about to get priority: rewind now if that was agreed, else save this moment if it's new. */
     private void onPriority() {
+        watchInputs();
+        Plan stale = replan;
+        if (stale != null) {
+            PhaseType now = game.getPhaseHandler().getPhase();
+            PhaseType declared = stale.attackers() ? PhaseType.COMBAT_DECLARE_ATTACKERS : PhaseType.COMBAT_DECLARE_BLOCKERS;
+            if (now != null && !now.isBefore(declared)) {
+                replan = null;   // the declaration came and went (or never came): forget it
+            }
+        }
         Request go;
         synchronized (this) {
             go = pending != null && pending.approved ? pending : null;
@@ -160,7 +190,7 @@ public final class Rewind {
             try {
                 GameMemento m = recorder.capture(game);
                 points.add(new Point(nextId++, m, game.getGameLog().size(), ph.getTurn(), ph.getPhase(),
-                        name(ph.getPlayerTurn()), name(ph.getPriorityPlayer())));
+                        name(ph.getPlayerTurn()), name(ph.getPriorityPlayer()), CombatState.of(ph.getCombat())));
                 dirty = false;
             } catch (RuntimeException | OutOfMemoryError e) {
                 Logger.warn(e, "Couldn't save the game for rewinding");
@@ -239,9 +269,13 @@ public final class Rewind {
                     Logger.warn("Rewind problems: {}", target.memento().problems);
                 }
                 points.subList(indexOf(target.id()) + 1, points.size()).clear();
+                if (target.combat() != null) {
+                    target.combat().restore(game);
+                }
+                replan = req.plan;
                 game.getGameLog().truncateTo(target.logSize());
                 game.getGameLog().add(GameLogEntryType.INFORMATION,
-                        REWOUND + logLabel(req.target.label()) + " (asked by " + name(req.by) + ").");
+                        REWOUND + logLabel(req.target) + " (asked by " + name(req.by) + ").");
                 say("Rewound: " + req.target.label());
             }
         }
@@ -264,6 +298,179 @@ public final class Rewind {
         changed.run();
     }
 
+    /**
+     * Who attacks whom and who blocks what. Forge keeps these in lazily built maps that {@link GameMemento} can't
+     * look inside, so a rewind would leave the later attacks and blocks in place; each point keeps its own copy.
+     * {@code attacks}: (attacker id, defender id, 1 if a player). {@code blocks}: (attacker id, blocker id).
+     * {@code blocked}: (attacker id, 1 if its band is blocked, 0 if not), for bands where that was decided.
+     */
+    record CombatState(List<int[]> attacks, List<int[]> blocks, List<int[]> blocked) {
+        static CombatState of(forge.game.combat.Combat c) {
+            if (c == null) {
+                return null;
+            }
+            List<int[]> attacks = new ArrayList<>();
+            List<int[]> blocks = new ArrayList<>();
+            List<int[]> blocked = new ArrayList<>();
+            for (Card a : c.getAttackers()) {
+                forge.game.GameEntity d = c.getDefenderByAttacker(a);
+                if (d != null) {
+                    attacks.add(new int[] {a.getId(), d.getId(), d instanceof Player ? 1 : 0});
+                }
+                for (Card b : c.getBlockers(a)) {
+                    blocks.add(new int[] {a.getId(), b.getId()});
+                }
+                var band = c.getBandOfAttacker(a);
+                if (band != null && band.isBlocked() != null) {
+                    blocked.add(new int[] {a.getId(), band.isBlocked() ? 1 : 0});
+                }
+            }
+            return new CombatState(attacks, blocks, blocked);
+        }
+
+        /**
+         * Combat's lists of who attacks and blocks, its damage orders and its "last known" copies of combatants. Forge's
+         * own way out of combat (removeFromCombat) leaves empty bands and those copies behind, which would make a
+         * creature look like it's still attacking; so they're emptied outright and the saved state is added back.
+         */
+        private static final String[] COMBAT_LISTS = {"attackedByBands", "blockedBands", "attackersOrderedForDamageAssignment",
+                "blockersOrderedForDamageAssignment", "lkiCache"};
+
+        /** Makes the game's current combat say this again. */
+        void restore(Game game) {
+            forge.game.combat.Combat c = game.getPhaseHandler().getCombat();
+            if (c == null) {
+                return;
+            }
+            List<Card> touched = new ArrayList<>(c.getAttackers());
+            touched.addAll(c.getAllBlockers());
+            for (String name : COMBAT_LISTS) {
+                try {
+                    java.lang.reflect.Field f = forge.game.combat.Combat.class.getDeclaredField(name);
+                    f.setAccessible(true);
+                    Object list = ((com.google.common.base.Supplier<?>) f.get(c)).get();
+                    if (list instanceof com.google.common.collect.Multimap<?, ?> m) {
+                        m.clear();
+                    } else if (list instanceof java.util.Map<?, ?> m) {
+                        m.clear();
+                    } else if (list instanceof java.util.Collection<?> col) {
+                        col.clear();
+                    }
+                } catch (ReflectiveOperationException | RuntimeException e) {
+                    Logger.warn(e, "Couldn't reset combat's {}", name);
+                }
+            }
+            for (int[] x : attacks) {
+                Card a = game.findById(x[0]);
+                forge.game.GameEntity d = x[2] == 1 ? game.getPlayer(x[1]) : game.findById(x[1]);
+                if (a != null && d != null) {
+                    c.addAttacker(a, d);
+                }
+            }
+            for (int[] x : blocks) {
+                Card a = game.findById(x[0]);
+                Card b = game.findById(x[1]);
+                if (a != null && b != null && c.isAttacking(a)) {
+                    c.addBlocker(a, b);
+                }
+            }
+            for (int[] x : blocked) {
+                Card a = game.findById(x[0]);
+                var band = a == null ? null : c.getBandOfAttacker(a);
+                if (band != null) {
+                    band.setBlocked(x[1] == 1);
+                }
+            }
+            touched.addAll(c.getAttackers());
+            touched.addAll(c.getAllBlockers());
+            for (Card t : touched) {
+                t.updateAttackingForView();
+                t.updateBlockingForView();
+            }
+        }
+    }
+
+    /** Watches each person's prompts, to click a declaration back in after a combat rewind. */
+    private void watchInputs() {
+        if (watching) {
+            return;
+        }
+        watching = true;
+        for (Player p : game.getPlayers()) {
+            if (p.getController() instanceof PlayerControllerHuman h) {
+                h.getInputQueue().addObserver((o, arg) -> onInput(p, h));
+            }
+        }
+    }
+
+    /** A prompt changed for {@code p}: if it's the declaration we're waiting for, click it back in. */
+    private void onInput(Player p, PlayerControllerHuman h) {
+        Plan plan = replan;
+        if (plan == null || plan.declarer() != p) {
+            return;
+        }
+        forge.gamemodes.match.input.Input in = h.getInputQueue().getInput();
+        boolean match = plan.attackers() ? in instanceof forge.gamemodes.match.input.InputAttack
+                : in instanceof forge.gamemodes.match.input.InputBlock;
+        if (!match) {
+            return;
+        }
+        replan = null;
+        // Click once the game thread is waiting for the answer, as a person's clicks would: until then it's still
+        // setting up the prompt (and syncing views) and the clicks would race it.
+        Thread gameThread = Thread.currentThread();
+        Thread waiter = new Thread(() -> {
+            long until = System.currentTimeMillis() + 3000;
+            while (gameThread.getState() != Thread.State.WAITING && gameThread.getState() != Thread.State.TIMED_WAITING
+                    && System.currentTimeMillis() < until) {
+                Thread.onSpinWait();
+                try {
+                    Thread.sleep(5);
+                } catch (InterruptedException e) {
+                    return;
+                }
+            }
+            FThreads.invokeInEdtLater(() -> replay(plan, in));
+        }, "rewind-replan");
+        waiter.setDaemon(true);
+        waiter.start();
+    }
+
+    /** Clicks a declaration back into its prompt (on Forge's UI thread). */
+    private void replay(Plan plan, forge.gamemodes.match.input.Input in) {
+        {   // (Forge ignores clicks on a prompt that's already over)
+            for (int[] pair : plan.pairs()) {
+                Card first = game.findById(pair[0]);
+                if (plan.attackers()) {
+                    if (pair[2] == 1) {
+                        Player d = game.getPlayer(pair[1]);
+                        if (d != null) {
+                            in.selectPlayer(d, null);
+                        }
+                    } else {
+                        Card d = game.findById(pair[1]);
+                        if (d != null) {
+                            in.selectCard(d, null, null);
+                        }
+                    }
+                    if (first != null) {
+                        var c = game.getPhaseHandler().getCombat();
+                        if (c == null || !c.isAttacking(first)) {   // a click on an attacker takes it back
+                            in.selectCard(first, null, null);
+                        }
+                    }
+                } else {
+                    Card attacker = game.findById(pair[1]);
+                    var c = game.getPhaseHandler().getCombat();
+                    if (attacker != null && first != null && (c == null || !c.isBlocking(first, attacker))) {
+                        in.selectCard(attacker, null, null);   // which attacker the next click blocks
+                        in.selectCard(first, null, null);      // (a click on a blocker of it takes the block back)
+                    }
+                }
+            }
+        }
+    }
+
     private void refreshViews() {
         game.getTriggerHandler().resetActiveTriggers();
         for (Player p : game.getPlayers()) {
@@ -283,22 +490,143 @@ public final class Rewind {
 
     /** {@code by} asks to rewind to {@code point}. Returns why not, or null when asked (or done, alone). */
     public String request(Player by, int point) {
-        boolean kick;
+        return request(by, point, TIMELINE);
+    }
+
+    /** {@code kind}: {@link #TIMELINE}, {@link #ATTACKERS} or {@link #BLOCKERS}. */
+    public String request(Player by, int point, String kind) {
         synchronized (this) {
-            if (level == 0) {
-                return "Rewinding is off in this game.";
+            String why = cantAsk(by);
+            if (why != null) {
+                return why;
             }
-            if (by == null || by.hasLost() || game.isGameOver()) {
-                return "You can't rewind now.";
-            }
-            if (pending != null) {
-                return name(pending.by) + " already asked to rewind.";
-            }
-            Option target = options().stream().filter(o -> o.point() == point).findFirst().orElse(null);
+            Option target = options().stream().filter(o -> o.point() == point && o.kind().equals(kind)).findFirst().orElse(null);
             if (target == null) {
                 return "You can't rewind to there.";
             }
-            Request r = new Request(by, target);
+            // Declaring again starts from what was declared: only the changes need making.
+            Plan plan = kind.equals(ATTACKERS) ? attackPlan(null, false) : kind.equals(BLOCKERS) ? blockPlan(by, null, false) : null;
+            return ask(by, target, plan);
+        }
+    }
+
+    /**
+     * {@code by} wants this creature of theirs in or out of the attack (or the blocks) declared this combat: a rewind
+     * to just before they were declared, with the same declaration clicked back in, plus or minus this creature. Until
+     * combat damage.
+     */
+    public String requestChange(Player by, int cardId) {
+        synchronized (this) {
+            String why = cantAsk(by);
+            if (why != null) {
+                return why;
+            }
+            Card card = game.findById(cardId);
+            var combat = game.getPhaseHandler().getCombat();
+            if (card == null || combat == null || card.getController() != by || !card.isCreature()
+                    || !card.isInZone(forge.game.zone.ZoneType.Battlefield)) {
+                return "That can't be changed now.";
+            }
+            boolean attacking = combat.getAttackingPlayer() == by;
+            String kind = attacking ? ATTACKERS : BLOCKERS;
+            Option target = options().stream().filter(o -> o.kind().equals(kind)).findFirst().orElse(null);
+            if (target == null) {
+                return attacking ? "Attackers can only be changed until combat damage." : "Blockers can only be changed in the declare blockers step.";
+            }
+            Plan plan = attacking ? attackPlan(card, true) : blockPlan(by, card, true);
+            if (plan == null) {
+                return "There's nothing for it to block.";
+            }
+            boolean in = attacking ? combat.isAttacking(card) : combat.isBlocking(card);
+            String label = (attacking ? in ? "Stop attacking with " : "Attack with " : in ? "Stop blocking with " : "Block with ")
+                    + card.getName() + (in ? "" : " too");
+            return ask(by, new Option(target.point(), target.level(), label, target.turn(), target.phase(), target.player(),
+                    false, kind), plan);
+        }
+    }
+
+    private String cantAsk(Player by) {
+        if (level == 0) {
+            return "Rewinding is off in this game.";
+        }
+        if (by == null || by.hasLost() || game.isGameOver()) {
+            return "You can't rewind now.";
+        }
+        if (pending != null) {
+            return name(pending.by) + " already asked to rewind.";
+        }
+        return null;
+    }
+
+    /** This combat's attacks, with {@code toggle} added or taken out. */
+    private Plan attackPlan(Card toggle, boolean change) {
+        var combat = game.getPhaseHandler().getCombat();
+        if (combat == null) {
+            return null;
+        }
+        List<int[]> pairs = new ArrayList<>();
+        java.util.Map<forge.game.GameEntity, Integer> often = new java.util.HashMap<>();
+        boolean removed = false;
+        for (Card a : combat.getAttackers()) {
+            forge.game.GameEntity d = combat.getDefenderByAttacker(a);
+            if (d == null) {
+                continue;
+            }
+            if (change && a == toggle) {
+                removed = true;
+                continue;
+            }
+            often.merge(d, 1, Integer::sum);
+            pairs.add(new int[] {a.getId(), d.getId(), d instanceof Player ? 1 : 0});
+        }
+        if (change && !removed) {
+            // the defender most of the others attack, else the first one there is
+            forge.game.GameEntity d = often.entrySet().stream().max(java.util.Map.Entry.comparingByValue())
+                    .map(java.util.Map.Entry::getKey).orElse(combat.getDefenders().isEmpty() ? null : combat.getDefenders().get(0));
+            if (d == null) {
+                return null;
+            }
+            pairs.add(new int[] {toggle.getId(), d.getId(), d instanceof Player ? 1 : 0});
+        }
+        return new Plan(combat.getAttackingPlayer(), true, pairs);
+    }
+
+    /** {@code by}'s blocks this combat, with {@code toggle} added (to an attacker coming at them) or taken out. */
+    private Plan blockPlan(Player by, Card toggle, boolean change) {
+        var combat = game.getPhaseHandler().getCombat();
+        if (combat == null) {
+            return null;
+        }
+        List<int[]> pairs = new ArrayList<>();
+        boolean removed = false;
+        for (Card a : combat.getAttackers()) {
+            for (Card b : combat.getBlockers(a)) {
+                if (b.getController() != by) {
+                    continue;
+                }
+                if (change && b == toggle) {
+                    removed = true;
+                    continue;
+                }
+                pairs.add(new int[] {b.getId(), a.getId()});
+            }
+        }
+        if (change && !removed) {
+            Card attacker = combat.getAttackersOf(by).stream().findFirst()
+                    .orElse(combat.getAttackers().isEmpty() ? null : combat.getAttackers().get(0));
+            if (attacker == null) {
+                return null;
+            }
+            pairs.add(new int[] {toggle.getId(), attacker.getId()});
+        }
+        return new Plan(by, false, pairs);
+    }
+
+    /** Opens a request (or does it at once, alone at the table). Holding this object's lock. */
+    private String ask(Player by, Option target, Plan plan) {
+        boolean kick;
+        {
+            Request r = new Request(by, target, plan);
             for (Player p : game.getPlayers()) {
                 if (p != by && !p.hasLost() && p.getController() instanceof PlayerControllerHuman) {
                     r.waiting.add(p);
@@ -314,7 +642,7 @@ public final class Rewind {
         if (kick) {
             kick();
         }
-        changed.run();
+        FThreads.invokeInEdtLater(changed);   // not under this lock: refreshing reads the view
         return null;
     }
 
@@ -443,9 +771,47 @@ public final class Rewind {
             String label = did != null ? "Before: " + did
                     : start ? "Start of " + where(p, turn)
                     : p.priorityPlayer() + " had priority";
-            out.add(new Option(p.id(), needs, label, p.turn(), stepName(p), p.turnPlayer(), start));
+            out.add(new Option(p.id(), needs, label, p.turn(), stepName(p), p.turnPlayer(), start, TIMELINE));
         }
+        combat(out, turn, phase);
         return out;
+    }
+
+    /** Option kinds: a moment on the timeline, or declaring attackers or blockers again. */
+    public static final String TIMELINE = "timeline", ATTACKERS = "attackers", BLOCKERS = "blockers";
+
+    /**
+     * Until combat damage, attackers and then blockers can be declared again, whatever the host's level (as long as
+     * rewinding is on): back to the last moment before they were declared, the end of the step before.
+     */
+    private void combat(List<Option> out, int turn, PhaseType phase) {
+        if (phase != PhaseType.COMBAT_DECLARE_ATTACKERS && phase != PhaseType.COMBAT_DECLARE_BLOCKERS) {
+            return;
+        }
+        Point beforeAttacks = lastIn(turn, PhaseType.COMBAT_BEGIN);
+        if (beforeAttacks != null) {
+            out.add(new Option(beforeAttacks.id(), 1, "Change attackers", turn, stepName(beforeAttacks),
+                    beforeAttacks.turnPlayer(), false, ATTACKERS));
+        }
+        Point beforeBlocks = phase == PhaseType.COMBAT_DECLARE_BLOCKERS ? lastIn(turn, PhaseType.COMBAT_DECLARE_ATTACKERS) : null;
+        if (beforeBlocks != null) {
+            out.add(new Option(beforeBlocks.id(), 1, "Change blockers", turn, stepName(beforeBlocks),
+                    beforeBlocks.turnPlayer(), false, BLOCKERS));
+        }
+    }
+
+    /** The newest point of that step of that turn. */
+    private Point lastIn(int turn, PhaseType phase) {
+        for (int i = points.size() - 1; i >= 0; i--) {
+            Point p = points.get(i);
+            if (p.sameStep(turn, phase)) {
+                return p;
+            }
+            if (p.turn() < turn) {
+                break;
+            }
+        }
+        return null;
     }
 
     /** Index of the first point of the step point {@code i} is in. */
@@ -479,8 +845,12 @@ public final class Rewind {
         return null;
     }
 
-    /** "Before: X" → "before X", "Start of …" → "the start of …". */
-    private static String logLabel(String label) {
+    /** "Before: X" → "before X", "Start of …" → "the start of …", combat → "declare … again". */
+    private static String logLabel(Option o) {
+        if (!o.kind().equals(TIMELINE)) {
+            return "declare " + o.kind() + " again";
+        }
+        String label = o.label();
         if (label.startsWith("Before: ")) {
             return "before " + label.substring(8);
         }
@@ -522,6 +892,7 @@ public final class Rewind {
             x.put("phase", opt.phase());
             x.put("player", opt.player());
             x.put("stepStart", opt.stepStart());
+            x.put("kind", opt.kind());
         }
         if (pending != null) {
             ObjectNode p = o.putObject("pending");

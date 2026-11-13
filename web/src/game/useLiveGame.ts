@@ -318,7 +318,9 @@ export function useLiveGame() {
     clickPlayer: (id: string) => send({ t: "player", id: Number(id) }),
     concede: () => send({ t: "concede" }),
     /** Ask to rewind to a point of `view.rewind.options` (everyone else in the game has to agree). */
-    rewindTo: (point: number) => send({ t: "rewind", action: "ask", point }),
+    rewindTo: (point: number, kind: "timeline" | "attackers" | "blockers" = "timeline") => send({ t: "rewind", action: "ask", point, kind }),
+    /** Put this creature of yours in or out of this combat's attack (or blocks): a rewind to redeclare, with the rest as declared. */
+    rewindChange: (card: number) => send({ t: "rewind", action: "change", card }),
     /** Answer someone else's rewind request. */
     rewindVote: (yes: boolean) => send({ t: "rewind", action: yes ? "yes" : "no" }),
     /** Take back your own rewind request. */

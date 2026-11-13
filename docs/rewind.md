@@ -16,6 +16,27 @@ The host picks a level on the setup screen (the `rewind` field of `start`):
 | 3 | Any moment of the current turn |
 | 4 | Any moment of the previous turn too: a whole turn |
 
+## Changing attackers or blockers
+
+Until combat damage, attackers can be declared again ("Change attackers", from the declare
+attackers step on) and so can blockers ("Change blockers", in the declare blockers step), e.g. to
+add a blocker you forgot. That's a rewind to the last moment before they were declared (the end of
+the step before), so every player still has to agree. It's allowed whenever rewinding is on (level
+1 or more), even when the host's level wouldn't otherwise reach that far back. After a rewind back
+before damage, the choice is there again.
+
+Declaring again starts from what was declared: once the declaration is asked again, the server
+clicks the earlier attacks (or your earlier blocks) back in, so only the changes need making. A
+creature's right-click menu offers the change directly: "Attack with X too" / "Stop attacking with
+X" for your creatures on your turn, "Block with X too" / "Stop blocking with X" when you're
+defending. That rewinds the same way, with that creature added (to the defender most of the others
+attack, or to an attacker coming at you) or taken out, and the rest as declared.
+
+Forge's snapshot can't see inside `Combat`'s lists of attackers and blockers (they're built
+lazily), so each saved moment keeps its own copy and a rewind puts it back. Forge's own way of
+taking a creature out of combat leaves stale pieces behind (empty bands, "last known" copies), so
+the rewind empties those lists directly before adding the saved attacks and blocks back.
+
 ## The timeline
 
 Every time a player is about to get priority and something changed since the last save, the

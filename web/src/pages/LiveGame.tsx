@@ -351,6 +351,24 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
     return { items };
   };
 
+  // Until combat damage, a creature of yours can be put in or taken out of the attack (or the blocks):
+  // a rewind to just before they were declared, with the rest declared as before (docs/rewind.md).
+  const combatSection = (card: CardView): MenuSection => {
+    const rw = view.rewind;
+    if (!rw?.level || card.zone !== "battlefield" || card.controller !== me || !card.types?.includes("Creature")) return { items: [] };
+    const attacking = view.active === me;
+    const kind = attacking ? "attackers" : "blockers";
+    if (!rw.options?.some((o) => o.kind === kind)) return { items: [] };
+    const inIt = attacking ? !!card.attacking : !!card.blocking;
+    const label = attacking
+      ? inIt ? `Stop attacking with ${card.name}` : `Attack with ${card.name} too`
+      : inIt ? `Stop blocking with ${card.name}` : `Block with ${card.name} too`;
+    return {
+      title: "Combat (rewind)",
+      items: [{ label: `↶ ${label}`, disabled: !!rw.pending, onSelect: () => game.rewindChange(card.id) }],
+    };
+  };
+
   const menuFor = (t: MenuTarget): MenuPart | Promise<MenuPart> => {
     const passing: MenuPart["sections"] = [
       {
@@ -369,7 +387,7 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
     }
     if (t.kind !== "card") return { sections: passing };
     const card = t.card;
-    if (card.hidden) return { sections: card.zone === "battlefield" ? [manualSection(card)] : [] };
+    if (card.hidden) return { sections: card.zone === "battlefield" ? [combatSection(card), manualSection(card)] : [] };
     return game.actions(card.id).then(({ actions, reason }) => ({
       sections: [
         {
@@ -383,6 +401,7 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
             },
           })),
         },
+        combatSection(card),
         manualSection(card),
       ],
       note: actions.length && !actions.some((a) => a.enabled) ? reason : undefined,

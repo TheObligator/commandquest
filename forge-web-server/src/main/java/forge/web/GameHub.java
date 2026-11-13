@@ -564,10 +564,11 @@ public final class GameHub {
         }
         Player me = g.getPlayer(seat.player().getId());
         String why = switch (m.path("action").asText("ask")) {
-            case "ask" -> r.request(me, m.path("point").asInt(-1));
+            case "ask" -> r.request(me, m.path("point").asInt(-1), m.path("kind").asText(Rewind.TIMELINE));
             case "yes" -> r.vote(me, true);
             case "no" -> r.vote(me, false);
             case "cancel" -> r.cancel(me);
+            case "change" -> r.requestChange(me, m.path("card").asInt(-1));
             default -> "Unknown rewind action.";
         };
         if (why != null) {

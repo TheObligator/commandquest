@@ -6,6 +6,7 @@ import forge.deck.Deck;
 import forge.deck.DeckSection;
 import forge.game.Game;
 import forge.game.GameView;
+import forge.game.card.Card;
 import forge.game.card.CardView;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
@@ -170,6 +171,192 @@ public class RewindTest {
         } finally {
             session.abort();
         }
+    }
+
+    @Test(timeOut = 240_000)
+    public void attackersCanBeDeclaredAgainUntilDamage() throws Exception {
+        MyRandom.setRandom(new Random(9));
+        GameSessionTest.ScriptedBrowser browser = new GameSessionTest.ScriptedBrowser();
+        // the AI gets a 1-mana 2/2 out at once and attacks; you have nothing to block with
+        GameSession session = GameSession.startCommander(List.of(
+                new GameSession.Seat("You", deck("Krenko, Mob Boss", "Mountain"), browser),
+                new GameSession.Seat("AI 1", deck("Isamaru, Hound of Konda", "Plains"), null)), 1);
+        try {
+            Rewind rewind = session.rewind();
+            boolean asked = false;
+            int landTurn = -1;
+            long deadline = System.currentTimeMillis() + 180_000;
+            while (System.currentTimeMillis() < deadline) {
+                Object[] prompt = browser.buttonPrompts.poll(5, TimeUnit.SECONDS);
+                GameView gv = session.view();
+                Assert.assertFalse(gv == null || gv.isGameOver(), "game still going");
+                Assert.assertTrue(gv.getTurn() < 12, "the AI never attacked");
+                if (prompt == null || browser.me == null || !browser.me.contains((PlayerView) prompt[0])) {
+                    continue;
+                }
+                PlayerView me = (PlayerView) prompt[0];
+                IGameController ctl = session.controller("You", me);
+                Player mine = session.game().getPlayer(me.getId());
+                if (!asked && gv.getPhase() == PhaseType.COMBAT_DECLARE_ATTACKERS && gv.getCombat() != null
+                        && gv.getCombat().getAttackers().iterator().hasNext()) {
+                    Rewind.Option again = rewind.options().stream().filter(o -> o.kind().equals(Rewind.ATTACKERS)).findFirst().orElse(null);
+                    Assert.assertNotNull(again, "attackers can be declared again: " + rewind.options());
+                    Assert.assertEquals(again.phase(), PhaseType.COMBAT_BEGIN.nameForUi);
+                    Assert.assertTrue(rewind.options().stream().noneMatch(o -> o.kind().equals(Rewind.BLOCKERS)), "no blocks yet");
+                    int notes = rewind.json(JSON, mine).path("noteId").asInt();
+                    Assert.assertNull(rewind.request(mine, again.point(), Rewind.ATTACKERS));
+                    asked = true;
+                    waitFor("the rewind", () -> rewind.json(JSON, mine).path("noteId").asInt() > notes);
+                    Assert.assertTrue(session.game().getGameLog().getAllEntries().stream()
+                            .anyMatch(e -> e.message().startsWith("Rewound to declare attackers again")));
+                    break;
+                }
+                CardView land = null;
+                if (me.equals(gv.getPlayerTurn()) && gv.getPhase() == PhaseType.MAIN1 && landTurn != gv.getTurn() && me.getHand() != null) {
+                    for (CardView c : me.getHand()) {
+                        if (c.getCurrentState().getType().isLand()) {
+                            land = c;
+                            break;
+                        }
+                    }
+                }
+                if (land != null) {   // a land a turn, so there's no discarding at cleanup
+                    landTurn = gv.getTurn();
+                    CardView play = land;
+                    FThreads.invokeInEdtLater(() -> ctl.selectCard(play, null, null));
+                } else {
+                    FThreads.invokeInEdtLater(ctl::selectButtonOk);
+                }
+            }
+            Assert.assertTrue(asked, "saw an attack");
+        } finally {
+            session.abort();
+        }
+    }
+
+    @Test(timeOut = 240_000)
+    public void aRedeclaredAttackStartsFromTheOldOneWithTheChange() throws Exception {
+        MyRandom.setRandom(new Random(13));
+        GameSessionTest.ScriptedBrowser browser = new GameSessionTest.ScriptedBrowser();
+        GameSession session = GameSession.startCommander(List.of(
+                new GameSession.Seat("You", deck("Isamaru, Hound of Konda", "Plains"), browser),
+                new GameSession.Seat("AI 1", deck("Krenko, Mob Boss", "Mountain"), null)), 1);
+        try {
+            Rewind rewind = session.rewind();
+            int landTurn = -1;
+            int step = 0;   // 0 cast Isamaru, 1 attack, 2 ask to redeclare, 3 check it's back, 4 ask to stop, 5 check it's gone
+            int isamaru = -1;
+            long deadline = System.currentTimeMillis() + 180_000;
+            while (System.currentTimeMillis() < deadline && step < 6) {
+                Object[] prompt = browser.buttonPrompts.poll(3, TimeUnit.SECONDS);
+                GameView gv = session.view();
+                Assert.assertFalse(gv == null || gv.isGameOver(), "game still going");
+                Assert.assertTrue(gv.getTurn() < 14, "stuck at step " + step);
+                if (prompt == null || browser.me == null || !browser.me.contains((PlayerView) prompt[0])) {
+                    continue;
+                }
+                PlayerView me = (PlayerView) prompt[0];
+                IGameController ctl = session.controller("You", me);
+                Player mine = session.game().getPlayer(me.getId());
+                var input = ((forge.player.PlayerControllerHuman) mine.getController()).getInputQueue().getInput();
+                boolean myTurn = me.equals(gv.getPlayerTurn());
+                if (input instanceof forge.gamemodes.match.input.InputPayMana) {
+                    FThreads.invokeInEdtLater(ctl::selectButtonOk);   // auto-pay
+                    continue;
+                }
+                if (myTurn && gv.getPhase() == PhaseType.MAIN1 && landTurn != gv.getTurn() && me.getHand() != null) {
+                    CardView land = null;
+                    for (CardView c : me.getHand()) {
+                        if (c.getCurrentState().getType().isLand()) {
+                            land = c;
+                            break;
+                        }
+                    }
+                    if (land != null) {
+                        landTurn = gv.getTurn();
+                        CardView play = land;
+                        FThreads.invokeInEdtLater(() -> ctl.selectCard(play, null, null));
+                        continue;
+                    }
+                }
+                if (step == 0 && myTurn && gv.getPhase() == PhaseType.MAIN1 && me.getCommanders() != null && !me.getCommanders().isEmpty()) {
+                    CardView cmd = me.getCommanders().get(0);
+                    if (me.getCommand() != null && me.getCommand().contains(cmd)) {
+                        isamaru = cmd.getId();
+                        step = 1;
+                        FThreads.invokeInEdtLater(() -> ctl.selectCard(cmd, null, null));
+                        continue;
+                    }
+                }
+                Card dog = isamaru < 0 ? null : session.game().findById(isamaru);
+                var combat = session.game().getPhaseHandler().getCombat();
+                if (input instanceof forge.gamemodes.match.input.InputAttack) {
+                    if (step == 1 && dog != null && dog.isInPlay()) {
+                        Card d = dog;
+                        FThreads.invokeInEdtLater(() -> {
+                            ((forge.gamemodes.match.input.InputAttack) input).selectCard(d, null, null);
+                            ctl.selectButtonOk();
+                        });
+                        step = 2;
+                        continue;
+                    }
+                    if (step == 3) {
+                        waitFor("the old attack clicked back in", () -> session.game().getPhaseHandler().getCombat() != null
+                                && session.game().getPhaseHandler().getCombat().isAttacking(d0(session, isamaruId(session))));
+                        step = 4;
+                        Thread.sleep(300);   // Forge's input handler catches up with the new prompt
+                        FThreads.invokeInEdtLater(ctl::selectButtonOk);
+                        continue;
+                    }
+                    if (step == 5) {
+                        Thread.sleep(500);   // give the plan time to (not) click anything
+                        Assert.assertFalse(session.game().getPhaseHandler().getCombat().isAttacking(dog),
+                                "taken out of the attack: " + session.game().getPhaseHandler().getCombat());
+                        step = 6;
+                        continue;
+                    }
+                }
+                if (gv.getPhase() == PhaseType.COMBAT_DECLARE_ATTACKERS && combat != null && dog != null && combat.isAttacking(dog)
+                        && input instanceof forge.gamemodes.match.input.InputPassPriority) {
+                    if (step == 2) {
+                        Rewind.Option again = rewind.options().stream().filter(o -> o.kind().equals(Rewind.ATTACKERS)).findFirst().orElseThrow();
+                        Assert.assertNull(rewind.request(mine, again.point(), Rewind.ATTACKERS));
+                        step = 3;
+                        continue;
+                    }
+                    if (step == 4) {
+                        String why = rewind.requestChange(mine, isamaru);
+                        Assert.assertNull(why);
+                        step = 5;
+                        continue;
+                    }
+                }
+                FThreads.invokeInEdtLater(ctl::selectButtonOk);
+            }
+            GameView end = session.view();
+            Player you = session.game().getPlayers().get(0);
+            Assert.assertEquals(step, 6, "went through redeclaring; now turn " + end.getTurn() + " " + end.getPhase()
+                    + ", input " + ((forge.player.PlayerControllerHuman) you.getController()).getInputQueue().getInput()
+                    + ", priority " + session.game().getPhaseHandler().getPriorityPlayer() + ", combat "
+                    + session.game().getPhaseHandler().getCombat());
+        } finally {
+            session.abort();
+        }
+    }
+
+    private static int isamaruId(GameSession s) {
+        for (Player p : s.game().getPlayers()) {
+            for (Card c : p.getCommanders()) {
+                if (c.getName().startsWith("Isamaru")) {
+                    return c.getId();
+                }
+            }
+        }
+        return -1;
+    }
+
+    private static Card d0(GameSession s, int id) {
+        return s.game().findById(id);
     }
 
     @Test(timeOut = 240_000)

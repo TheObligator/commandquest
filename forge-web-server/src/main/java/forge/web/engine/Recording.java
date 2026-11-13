@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.common.eventbus.AllowConcurrentEvents;
 import com.google.common.eventbus.Subscribe;
 import forge.game.Game;
 import forge.game.GameLogEntry;
@@ -71,6 +72,7 @@ public final class Recording {
     }
 
     @Subscribe
+    @AllowConcurrentEvents   // its own locking; see Rewind.onEvent
     public void onEvent(GameEvent ev) {
         Recording done = null;
         synchronized (this) {
