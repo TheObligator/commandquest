@@ -40,10 +40,25 @@ public final class ReplayUploads implements GameSession.ReplaySink {
         this.secret = secret;
     }
 
-    /** From {@code REPLAY_SECRET}, or null when it isn't set (games then aren't recorded at all). */
+    /**
+     * From {@code REPLAY_SECRET}, else the file named by {@code REPLAY_SECRET_FILE}; null when neither is set
+     * (games then aren't recorded at all).
+     */
     public static ReplayUploads fromEnv() {
         String s = System.getenv("REPLAY_SECRET");
-        return s == null || s.isBlank() ? null : new ReplayUploads(s.trim());
+        String file = System.getenv("REPLAY_SECRET_FILE");
+        if ((s == null || s.isBlank()) && file != null && !file.isBlank()) {
+            try {
+                s = java.nio.file.Files.readString(java.nio.file.Path.of(file.trim()));
+            } catch (java.io.IOException e) {
+                Logger.warn("Can't read REPLAY_SECRET_FILE {}: {}", file, e.getMessage());
+            }
+        }
+        if (s == null || s.isBlank()) {
+            Logger.info("No REPLAY_SECRET: games aren't recorded");
+            return null;
+        }
+        return new ReplayUploads(s.trim());
     }
 
     @Override

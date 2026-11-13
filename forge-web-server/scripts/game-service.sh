@@ -24,6 +24,8 @@ HOME_DIR="$HOME/.commandquest/game"
 SRC="$HOME_DIR/src"
 JAR="$HOME_DIR/forge-web-server.jar"
 TOKEN="$HOME_DIR/tunnel-token"
+# The secret Convex accepts replay uploads with (docs/replays.md); the server reads it from this file.
+REPLAY_SECRET_FILE="$HOME_DIR/replay-secret"
 LOGS="$HOME/Library/Logs"
 # The auto-deploy job runs a copy of this script from $HOME_DIR, so it passes REPO explicitly.
 REPO=${REPO:-$(cd "$(dirname "$0")/../.." && pwd)}
@@ -57,6 +59,7 @@ plist() { # label, log file, then the program and its arguments
     <key>PORT</key><string>$PORT</string>
     <key>ALLOWED_ORIGINS</key><string>$ORIGINS</string>
     <key>GIT_SHA</key><string>$(cat "$HOME_DIR/version" 2>/dev/null || echo unknown)</string>
+    <key>REPLAY_SECRET_FILE</key><string>$REPLAY_SECRET_FILE</string>
   </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>

@@ -47,10 +47,16 @@ deployment each player signed in with (staging or production, from their sign-in
 
 One shared secret, set in two places (never in the repo):
 
-1. Convex, on each deployment (staging and production): `npx convex env set REPLAY_SECRET <secret>`.
-2. The game server's environment: `REPLAY_SECRET=<secret>`.
+1. Convex, on each deployment (staging and production):
+   `npx convex env set REPLAY_SECRET "$(cat ~/.commandquest/game/replay-secret)" --deployment <name>`.
+2. The game server: `REPLAY_SECRET`, or `REPLAY_SECRET_FILE` naming a file that holds it. The hosted
+   server (`game-service.sh`) points `REPLAY_SECRET_FILE` at `~/.commandquest/game/replay-secret`
+   (mode 600), so the secret isn't in the launchd plist either.
 
-Without `REPLAY_SECRET`, the game server doesn't record games at all, and Convex refuses uploads.
+To make a new one: `openssl rand -hex 32 > ~/.commandquest/game/replay-secret`, set it in both
+Convex deployments again, and redeploy (or restart) the game server.
+
+Without the secret, the game server doesn't record games at all, and Convex refuses uploads.
 
 ## Not yet
 

@@ -29,7 +29,8 @@ import org.tinylog.Logger;
  * WebSocket and read {@code /health}; unset allows any, for local dev), {@code GIT_SHA} (reported
  * by {@code /health}), {@code CONVEX_ISSUERS} (Convex deployments whose sign-ins are accepted),
  * {@code MAX_GAMES} (simultaneous games, default 4), {@code FORGE_ASSETS} (upstream forge-gui dir),
- * {@code REPLAY_SECRET} (record games and send their replays to Convex, docs/replays.md; unset: no replays).
+ * {@code REPLAY_SECRET} or {@code REPLAY_SECRET_FILE} (record games and send their replays to Convex,
+ * docs/replays.md; unset: no replays).
  */
 public final class WebServer {
 

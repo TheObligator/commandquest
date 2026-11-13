@@ -99,4 +99,5 @@ several turns, and `GameHubTest` does the same through the WebSocket, as a brows
 The socket protocol is in docs/game-protocol.md.
 
 Server settings for games: `CONVEX_ISSUERS` (whose sign-ins are accepted; defaults to staging and
-production), `MAX_GAMES` (default 4).
+production), `MAX_GAMES` (default 4), `REPLAY_SECRET_FILE` (set by `game-service.sh` to
+`~/.commandquest/game/replay-secret`: replays are recorded and sent to Convex, docs/replays.md).
