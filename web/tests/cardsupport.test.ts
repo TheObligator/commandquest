@@ -61,3 +61,9 @@ test("public/card-support.json lists Forge's cards", () => {
   const s = new CardSupport(d);
   for (const n of ["Sol Ring", "Command Tower", "Forest", "Fire // Ice", "Delver of Secrets"]) assert.ok(s.status(n).works, n);
 });
+
+test("every known-broken card is one Forge has (a typo would mark nothing)", () => {
+  const d = JSON.parse(readFileSync(OUT_FILE, "utf8")) as CardSupportData;
+  const known = new Set(d.cards);
+  for (const name of Object.keys(d.broken)) assert.ok(known.has(name), `${name} in overrides/broken.json isn't a Forge card name`);
+});

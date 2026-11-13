@@ -37,7 +37,10 @@ export function scriptNames(text: string): string[] {
 }
 
 export interface BrokenEntry {
+  /** Shown to players on hover. */
   reason: string;
+  /** The Forge bug report: remove the entry once it's fixed and merged. */
+  issue?: string;
   date?: string;
 }
 

@@ -1,5 +1,5 @@
 {
-"broken": {},
+"broken": {"Esix, Fractal Bloom":"When an effect makes several tokens at once (Terastodon, Ezuri's Predation), only the first one can become a copy.","Garruk, Veiled Butcher":"Its -3 can discard fewer than two cards per opponent, and its exile replacement applies outside the battlefield. A fix is waiting in Forge.","Lifecraft Engine":"Vehicles stop having the chosen creature type after the first time they stop being creatures.","Out of Time":"If its controller loses the game, the phased-out creatures never phase back in.","Outpost Siege":"Khans: if you start casting the exiled card and cancel, you can't cast it again that turn.","Sin Prodder":"Its upkeep trigger can freeze multiplayer games, waiting forever for an opponent's choice."},
 "cards": [
 "\"Ach! Hans, Run!\"",
 "\"Lifetime\" Pass Holder",
