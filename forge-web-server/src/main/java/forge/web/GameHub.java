@@ -762,6 +762,12 @@ public final class GameHub {
                             if (p.via() != null) {
                                 po.put("via", p.via());
                             }
+                            if (p.damage() > 0) {
+                                po.put("damage", p.damage());
+                            }
+                            if (p.life() > 0) {
+                                po.put("life", p.life());
+                            }
                         }
                     });
                 } else {
@@ -789,7 +795,7 @@ public final class GameHub {
             for (JsonNode p : picksJson) {
                 if (picks.size() < 100) {
                     picks.add(new ManaTaps.Pick(p.path("card").asInt(-1), p.path("source").asInt(-1), p.path("ability").asInt(-1),
-                            p.path("choice").asText(""), "", null));
+                            p.path("choice").asText("")));
                 }
             }
             g.getAction().invoke(() -> {

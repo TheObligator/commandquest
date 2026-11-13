@@ -89,6 +89,10 @@ export interface ManaPick {
   mana: string;
   /** The other card whose ability this is. */
   via?: string;
+  /** Damage it deals you (pain lands, City of Brass). */
+  damage?: number;
+  /** Life you pay or lose (Mana Confluence). */
+  life?: number;
 }
 export interface ManaOptions {
   /** Cards that can be tapped for mana, with their ways; cards left out can't. */

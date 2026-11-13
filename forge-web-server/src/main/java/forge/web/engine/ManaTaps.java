@@ -3,12 +3,14 @@ package forge.web.engine;
 import forge.card.MagicColor;
 import forge.game.Game;
 import forge.game.GameLogEntryType;
+import forge.game.ability.AbilityUtils;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.card.CardCollection;
 import forge.game.card.CardLists;
 import forge.game.cost.Cost;
 import forge.game.cost.CostPart;
+import forge.game.cost.CostPayLife;
 import forge.game.cost.CostPayment;
 import forge.game.cost.CostTap;
 import forge.game.cost.CostTapType;
@@ -16,6 +18,8 @@ import forge.game.cost.PaymentDecision;
 import forge.game.player.Player;
 import forge.game.spellability.AbilityManaPart;
 import forge.game.spellability.SpellAbility;
+import forge.game.trigger.Trigger;
+import forge.game.trigger.TriggerType;
 import forge.game.zone.ZoneType;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -29,8 +33,11 @@ import java.util.Map;
  * artifact you control: Add {U}" (Urza, High Lord Artificer; Springleaf Drum's kind without the
  * {T} on itself). Each is activated as Forge's own mana ability: the cost is paid, the color
  * chosen, and it goes through the stack's mana-ability path, so triggers like "whenever you tap a
- * land for mana" happen. Mana abilities with other costs (life, mana, sacrifice) or special
- * choices are left out; tap those cards one at a time.
+ * land for mana" happen. A card's own ability may also cost life (Mana Confluence, Horizon
+ * Canopy), and what each pick costs you is reported: life paid or lost, and damage dealt to you by
+ * the ability (pain lands, Ancient Tomb) or by a "whenever this becomes tapped" trigger (City of
+ * Brass). Mana abilities with other costs (mana, sacrifice) or special choices are left out; tap
+ * those cards one at a time.
  */
 public final class ManaTaps {
 
@@ -42,8 +49,12 @@ public final class ManaTaps {
      * (in {@link Card#getManaAbilities()}), choosing {@code choice} (Forge's express choice, e.g.
      * "U" or "G G"; empty when there's nothing to choose). {@code mana}: what it adds, as symbols
      * ("WW", "C"). {@code via}: the other card whose ability this is, or null for the card's own.
+     * {@code damage}: damage it deals you; {@code life}: life you pay or lose.
      */
-    public record Pick(int card, int source, int ability, String choice, String mana, String via) {
+    public record Pick(int card, int source, int ability, String choice, String mana, String via, int damage, int life) {
+        public Pick(int card, int source, int ability, String choice) {
+            this(card, source, ability, choice, "", null, 0, 0);
+        }
     }
 
     private static final String[] WUBRG = {"W", "U", "B", "R", "G"};
@@ -61,7 +72,7 @@ public final class ManaTaps {
             List<SpellAbility> own = new ArrayList<>(card.getManaAbilities());
             for (int i = 0; i < own.size(); i++) {
                 SpellAbility sa = own.get(i);
-                if (onlyCost(sa, CostTap.class) && usable(sa, me)) {
+                if (ownCost(sa) && usable(sa, me)) {
                     addPicks(picks, card, card, i, sa, null);
                 }
             }
@@ -83,6 +94,23 @@ public final class ManaTaps {
             }
         }
         return out;
+    }
+
+    /** Is the ability's cost {T}, perhaps with life to pay ("{T}, Pay 1 life: Add …")? */
+    private static boolean ownCost(SpellAbility sa) {
+        Cost cost = sa.getPayCosts();
+        if (cost == null) {
+            return false;
+        }
+        int taps = 0;
+        for (CostPart part : cost.getCostParts()) {
+            if (part instanceof CostTap) {
+                taps++;
+            } else if (!(part instanceof CostPayLife)) {
+                return false;
+            }
+        }
+        return taps == 1;
     }
 
     /** Is the ability's whole cost a single part of this kind (and, for tapping others, one card)? */
@@ -118,6 +146,7 @@ public final class ManaTaps {
         if (amount == 0) {
             return;
         }
+        int[] harm = harm(sa, card);
         if (mp.isComboMana() || mp.isAnyMana()) {
             String[] colors = mp.isComboMana() ? mp.getComboColors(sa).split(" ") : WUBRG;
             for (String c : colors) {
@@ -127,7 +156,7 @@ public final class ManaTaps {
                 String one = MagicColor.toShortString(MagicColor.fromName(c));
                 // Combo: one choice per mana ("G G"); any: one color, Forge repeats it.
                 String choice = mp.isComboMana() ? String.join(" ", java.util.Collections.nCopies(amount, one)) : one;
-                picks.add(new Pick(card.getId(), source.getId(), index, choice, one.repeat(amount), via));
+                picks.add(new Pick(card.getId(), source.getId(), index, choice, one.repeat(amount), via, harm[0], harm[1]));
             }
             return;
         }
@@ -138,7 +167,47 @@ public final class ManaTaps {
                 mana.append(s.matches("\\d+") ? "C".repeat(Integer.parseInt(s)) : s);
             }
         }
-        picks.add(new Pick(card.getId(), source.getId(), index, "", mana.toString(), via));
+        picks.add(new Pick(card.getId(), source.getId(), index, "", mana.toString(), via, harm[0], harm[1]));
+    }
+
+    /**
+     * What tapping {@code card} with {@code sa} costs you: {damage, life}. Life paid in the cost, and
+     * damage dealt to you or life you lose in the ability itself (pain lands) or in the card's own
+     * "whenever this becomes tapped" trigger (City of Brass).
+     */
+    static int[] harm(SpellAbility sa, Card card) {
+        int[] out = new int[2];
+        for (CostPart part : sa.getPayCosts().getCostParts()) {
+            if (part instanceof CostPayLife) {
+                out[1] += part.getAbilityAmount(sa);
+            }
+        }
+        addHarm(out, sa);
+        for (Trigger t : card.getTriggers()) {
+            if ((t.getMode() == TriggerType.Taps || t.getMode() == TriggerType.TapsForMana) && "Card.Self".equals(t.getParam("ValidCard"))
+                    && !t.hasParam("Activator")) {
+                SpellAbility ex = t.ensureAbility();
+                if (ex != null) {
+                    addHarm(out, ex);
+                }
+            }
+        }
+        return out;
+    }
+
+    private static void addHarm(int[] out, SpellAbility first) {
+        for (SpellAbility s = first; s != null; s = s.getSubAbility()) {
+            String who = s.getParam("Defined");
+            if (s.hasParam("ConditionCheckSVar") || s.hasParam("Condition")) {
+                continue;
+            }
+            Card host = s.getHostCard();
+            if (s.getApi() == ApiType.DealDamage && "You".equals(who) && s.hasParam("NumDmg")) {
+                out[0] += Math.max(0, AbilityUtils.calculateAmount(host, s.getParam("NumDmg"), s));
+            } else if (s.getApi() == ApiType.LoseLife && (who == null || "You".equals(who)) && s.hasParam("LifeAmount")) {
+                out[1] += Math.max(0, AbilityUtils.calculateAmount(host, s.getParam("LifeAmount"), s));
+            }
+        }
     }
 
     /**
@@ -148,6 +217,7 @@ public final class ManaTaps {
     public static int tap(Game g, Player me, List<Pick> wanted) {
         List<String> names = new ArrayList<>();
         StringBuilder mana = new StringBuilder();
+        int[] hurt = new int[2];
         for (Pick w : wanted) {
             Card card = g.findById(w.card());
             if (card == null) {
@@ -162,18 +232,24 @@ public final class ManaTaps {
             }
             SpellAbility sa = new ArrayList<>(source.getManaAbilities()).get(pick.ability());
             sa.setActivatingPlayer(me);
-            CostPart part = sa.getPayCosts().getCostParts().get(0);
-            part.payAsDecided(me, part instanceof CostTapType ? PaymentDecision.card(card) : null, sa, false);
+            for (CostPart part : sa.getPayCosts().getCostParts()) {
+                PaymentDecision how = part instanceof CostTapType ? PaymentDecision.card(card)
+                        : part instanceof CostPayLife ? PaymentDecision.number(part.getAbilityAmount(sa)) : null;
+                part.payAsDecided(me, how, sa, false);
+            }
             if (!pick.choice().isEmpty()) {
                 sa.getManaPart().setExpressChoice(pick.choice());
             }
             g.getStack().add(sa); // a mana ability resolves right away
             names.add(pick.via() == null ? card.getName() : card.getName() + " (for " + pick.via() + ")");
             mana.append(pick.mana());
+            hurt[0] += pick.damage();
+            hurt[1] += pick.life();
         }
         if (!names.isEmpty()) {
             g.getAction().checkStaticAbilities();
-            g.getGameLog().add(GameLogEntryType.MANA, me.getName() + " tapped " + String.join(", ", names) + " for " + symbols(mana.toString()));
+            g.getGameLog().add(GameLogEntryType.MANA, me.getName() + " tapped " + String.join(", ", names) + " for " + symbols(mana.toString())
+                    + (hurt[1] > 0 ? ", paying " + hurt[1] + " life" : "") + (hurt[0] > 0 ? ", taking " + hurt[0] + " damage" : ""));
         }
         return names.size();
     }

@@ -3,7 +3,7 @@
 // each card's own choice underneath. The mana goes to your pool (shown by your name).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ManaCost } from "../components/ManaCost";
-import { colorsOf, initialPlan, shift, symbols, totals, type Plan } from "./manaPlan";
+import { colorsOf, hurt, initialPlan, pain, painText, shift, symbols, totals, type Plan } from "./manaPlan";
 import type { ManaPick } from "./useLiveGame";
 
 export interface ManaDialogCard {
@@ -38,8 +38,11 @@ export function ManaDialog({ cards, via, onClose, onApply }: {
   };
   const step = (color: string, dir: 1 | -1) => {
     const next = shift(cards, plan, color, dir);
-    return next && (() => setPlan(next));
+    return next && { go: () => setPlan(next), hurts: hurt(pain(cards, next)) > hurt(pain(cards, plan)) };
   };
+  const ow = pain(cards, plan);
+  const owText = painText(ow);
+  const label = (p: (typeof cards)[number]["picks"][number]) => `${symbols(p.mana)}${p.via ? ` (for ${p.via})` : ""}${hurt(p) ? ` ♥ ${painText(p)}` : ""}`;
   return (
     <dialog ref={ref} className="counter-dialog mana-dialog" onClose={onClose} aria-label="Tap for mana">
       <button className="dialog-close" aria-label="Close" onClick={() => ref.current?.close()}>×</button>
@@ -50,10 +53,12 @@ export function ManaDialog({ cards, via, onClose, onApply }: {
             const up = step(x, 1), down = step(x, -1);
             return (
               <div key={x} className="md-color">
-                <button type="button" className="md-arrow" disabled={!up} onClick={up ?? undefined} aria-label={`One more ${COLOR_NAME[x]}`}>▲</button>
+                <button type="button" className={`md-arrow${up?.hurts ? " hurts" : ""}`} disabled={!up} onClick={up?.go} aria-label={`One more ${COLOR_NAME[x]}`}
+                  title={up?.hurts ? `One more ${COLOR_NAME[x]}: costs you life` : undefined}>▲</button>
                 <ManaCost cost={`{${x}}`} />
                 <b>{t[x] ?? 0}</b>
-                <button type="button" className="md-arrow" disabled={!down} onClick={down ?? undefined} aria-label={`One less ${COLOR_NAME[x]}`}>▼</button>
+                <button type="button" className={`md-arrow${down?.hurts ? " hurts" : ""}`} disabled={!down} onClick={down?.go} aria-label={`One less ${COLOR_NAME[x]}`}
+                  title={down?.hurts ? `One less ${COLOR_NAME[x]}: costs you life` : undefined}>▼</button>
               </div>
             );
           })}
@@ -65,17 +70,18 @@ export function ManaDialog({ cards, via, onClose, onApply }: {
               {c.picks.length > 1 ? (
                 <select value={plan[i]} onChange={(e) => setPlan(plan.map((k, j) => (j === i ? Number(e.target.value) : k)))} aria-label={`What ${c.name} adds`}>
                   {c.picks.map((p, k) => (
-                    <option key={k} value={k}>{symbols(p.mana)}{p.via ? ` (for ${p.via})` : ""}</option>
+                    <option key={k} value={k}>{label(p)}</option>
                   ))}
                 </select>
               ) : (
-                <span className="muted small">{symbols(c.picks[0].mana)}{c.picks[0].via ? ` for ${c.picks[0].via}` : ""}</span>
+                <span className={hurt(c.picks[0]) ? "md-hurt small" : "muted small"}>{label(c.picks[0])}</span>
               )}
             </li>
           ))}
         </ul>
+        {owText && <p className="md-hurt">♥ This costs you {owText}{ow.damage && ow.life ? "" : ow.damage ? " (dealt to you)" : ""}.</p>}
         <div className="cd-btns">
-          <button type="submit" className="btn small" disabled={!all}>Add <ManaCost cost={symbols(all)} /></button>
+          <button type="submit" className="btn small" disabled={!all}>Add <ManaCost cost={symbols(all)} />{owText ? ` (♥ −${ow.damage + ow.life})` : ""}</button>
           <button type="button" className="btn small ghost" onClick={() => ref.current?.close()}>Cancel</button>
         </div>
         <p className="muted small">The mana goes to your mana pool (by your name) and empties at the end of the step. When you pay a cost, click it there to use it.</p>

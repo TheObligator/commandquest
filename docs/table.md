@@ -144,8 +144,12 @@ The game screen. The board itself is `web/src/game/TableBoard.tsx`, shared by tw
   Cards can also be tapped for another permanent's "Tap an untapped artifact you control: Add {U}"
   (Urza, Lord High Artificer): the menu offers **💧 Tap each for Urza…: {U} each** directly. It's
   each card's real mana ability (with its triggers), allowed whenever you could tap for mana: with
-  priority, while paying, or any time with free play. Abilities with other costs (life, mana,
-  sacrifice) aren't offered; tap those one at a time. "Tap them all (by hand, no mana)" is the
+  priority, while paying, or any time with free play. Cards that hurt you say so with ♥: a pain
+  land starts on its free {C}, and its colors are listed with "♥ 1 damage"; Mana Confluence shows
+  "♥ 1 life"; City of Brass's "becomes tapped" damage counts too. ▲ / ▼ prefer a switch that
+  doesn't hurt (a dual before a pain land) and turn red when the only way costs life, and the window
+  totals what it'll cost you. Abilities with other costs (mana, sacrifice) aren't offered; tap
+  those one at a time. "Tap them all (by hand, no mana)" is the
   free-play tap that makes no mana.
 - **Your mana pool** shows by your name (and everyone's by theirs) when it has mana. While you pay
   a cost, click a symbol there to pay one of that color, or **Use floating** in the pay window for

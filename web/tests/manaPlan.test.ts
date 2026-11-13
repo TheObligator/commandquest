@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { colorsOf, initialPlan, shift, totals, type PlanCard } from "../src/game/manaPlan.ts";
+import { colorsOf, initialPlan, pain, painText, shift, totals, type PlanCard } from "../src/game/manaPlan.ts";
 
 const dual: PlanCard = { id: 1, picks: [{ mana: "W" }, { mana: "U" }] };
 const plains: PlanCard = { id: 2, picks: [{ mana: "W" }] };
@@ -29,4 +29,20 @@ test("own abilities first, or the one asked for; switching keeps the same amount
   const blue = shift(cards, initialPlan(cards), "U", 1)!;
   assert.deepEqual(totals(cards, blue), { U: 2 }, "Sol Ring for Urza instead");
   assert.equal(shift(cards, blue, "U", 1), null);
+});
+
+test("pain lands start on their free {C}; more color uses a dual before a pain land", () => {
+  const wastes: PlanCard = { id: 6, picks: [{ mana: "C" }, { mana: "W", damage: 1 }, { mana: "U", damage: 1 }] };
+  const confluence: PlanCard = { id: 7, picks: ["W", "U", "B", "R", "G"].map((mana) => ({ mana, life: 1 })) };
+  const cards = [wastes, dual, confluence];
+  const plan = initialPlan(cards);
+  assert.equal(totals(cards, plan).C, 1, "the pain land makes {C}");
+  assert.deepEqual(pain(cards, plan), { damage: 0, life: 1 }, "only Confluence costs life");
+  const t = totals(cards, plan);
+  const scarce = (t.W ?? 0) > (t.U ?? 0) ? "U" : "W";
+  const more = shift(cards, plan, scarce, 1)!;
+  assert.deepEqual(pain(cards, more), { damage: 0, life: 1 }, "the dual or Confluence switches, not the pain land");
+  const blue = shift(cards, plan, "C", -1)!;
+  assert.deepEqual(pain(cards, blue), { damage: 1, life: 1 }, "no more {C} means the pain land hurts");
+  assert.equal(painText(pain(cards, blue)), "1 damage and 1 life");
 });

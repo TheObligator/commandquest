@@ -462,6 +462,9 @@ button.sb-mana:hover { background: rgb(255 210 122 / 18%); }
 .md-color b { font-size: 1.1rem; }
 .md-arrow { border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 6px; width: 32px; line-height: 1.3; cursor: pointer; }
 .md-arrow:disabled { opacity: .3; cursor: default; }
+.md-arrow.hurts { border-color: var(--danger); color: var(--danger); }
+.md-hurt { color: var(--danger); font-size: .88rem; margin: 0 0 8px; }
+.md-cards li .md-hurt { margin: 0; }
 .md-cards { list-style: none; padding: 0; margin: 0 0 12px; max-height: 40vh; overflow-y: auto; display: grid; gap: 4px; }
 .md-cards li { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: .88rem; }
 .md-cards select { font: inherit; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; }

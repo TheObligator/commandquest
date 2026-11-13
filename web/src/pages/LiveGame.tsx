@@ -11,7 +11,7 @@ import { LAYOUTS, LayoutPicker, TableBoard, useStored, useTableStops, type Layou
 import { useHotkeys } from "../game/useHotkeys";
 import { useLiveGame, type DeckPayload, type ManaOptions } from "../game/useLiveGame";
 import { ManaDialog, type ManaDialogCard } from "../game/ManaDialog";
-import { symbols } from "../game/manaPlan";
+import { painText, symbols } from "../game/manaPlan";
 import { tokenArtMap } from "../tokens";
 import { useDeckTokens } from "../useDeckTokens";
 import { isPermanentCard, type CardView, type GameView } from "../game/view";
@@ -650,10 +650,11 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
       const usable = rows.filter((r) => r.picks.some((p) => p.via === via));
       const picks = usable.map((r) => r.picks.filter((p) => p.via === via));
       const who = usable.length === cards.length ? "each" : `${usable.length} of them`;
+      const owed = painText({ damage: picks.reduce((n, ps) => n + (ps[0].damage ?? 0), 0), life: picks.reduce((n, ps) => n + (ps[0].life ?? 0), 0) });
       // One color each: tap them right away. A choice of colors: the window, set to this ability.
       items.push(picks.every((ps) => ps.length === 1)
         ? {
-            label: `💧 Tap ${who} for ${via}: ${symbols(picks[0][0].mana)} each`,
+            label: `💧 Tap ${who} for ${via}: ${symbols(picks[0][0].mana)} each${owed ? ` (♥ ${owed})` : ""}`,
             onSelect: () => game.tapForMana(usable.map((r, i) => ({ card: r.id, source: picks[i][0].source, ability: picks[i][0].ability, choice: picks[i][0].choice }))),
           }
         : { label: `💧 Tap ${who} for ${via}…`, onSelect: () => setManaFor({ cards: usable, via }) });
