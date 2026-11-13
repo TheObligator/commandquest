@@ -6,6 +6,7 @@ import type { Board, DeckCard } from "../../convex/model/deckRules";
 import { errorMessage } from "../app/errors";
 import { navigate, replaceQuietly, useLeaveGuard, useRoute } from "../app/router";
 import { closeOnBackdrop, showCardDetails } from "../carddetails";
+import { useCardSupport, type CardSupport } from "../cardsupport";
 import { mergeDuplicates, parseDecklist, writeDecklist, type ParsedToken } from "../decklist";
 import { toast } from "../dom";
 import { CardMenu } from "../components/CardMenu";
@@ -532,7 +533,14 @@ function DeckView(props: {
   const preview = usePreview();
   const [printingsFor, setPrintingsFor] = useState<DeckCard | null>(null);
   const [view, setView] = useDeckViewMode();
-  const warnings = useMemo(() => deckWarnings(deck, missing, count), [deck, missing, count]);
+  const support = useCardSupport();
+  const warnings = useMemo(() => deckWarnings(deck, missing, count, support), [deck, missing, count, support]);
+  /** "Not playable" on cards that won't work in a game (src/cardsupport.ts). */
+  const notWorking = (c: DeckCard, s: scry.ScryCard | undefined, className: string) => {
+    const st = support?.status(s ?? c.name);
+    if (!st || st.works) return null;
+    return <span className={className} title={st.reason}>{st.missing ? "Not playable" : "Known issue"}</span>;
+  };
 
   if (!deck.cards.length) {
     return (
@@ -600,6 +608,7 @@ function DeckView(props: {
       <li key={key(c, i)} className={s ? "card-row" : "card-row unresolved"} {...preview.handlers(s)}>
         {qty(c)}
         {s ? <button className="cname" title="Card details" onClick={() => openDetails(c, s)}>{c.name}</button> : <span className="cname">{c.name}</span>}
+        {notWorking(c, s, "nw-badge")}
         {s ? <ManaCost cost={s.mana_cost ?? s.card_faces?.map((f) => f.mana_cost).filter(Boolean).join(" // ")} /> : <span className="muted small">{missing.includes(c.name) ? "not found" : ""}</span>}
         {cardMenu(c, s)}
       </li>
@@ -621,6 +630,7 @@ function DeckView(props: {
         </button>
         {/* The name as invisible text over the printed one, so the browser's find (Ctrl+F) finds and highlights cards. */}
         {img && <span className="tile-name" aria-hidden="true">{c.name}</span>}
+        {notWorking(c, s, "nw-badge tile-nw")}
         {c.quantity > 1 && <span className="tile-qty" aria-label={`${c.quantity} copies`}>×{c.quantity}</span>}
         {cardMenu(c, s, "tile-menu")}
       </div>
@@ -736,10 +746,18 @@ function useDeckViewMode(): ["list" | "images", (v: "list" | "images") => void] 
   return [view, set];
 }
 
-function deckWarnings(deck: Draft, missing: string[], count: (b?: Board) => number): string[] {
+function deckWarnings(deck: Draft, missing: string[], count: (b?: Board) => number, support?: CardSupport): string[] {
   const w: string[] = [];
   const list = (names: string[]) => names.slice(0, 6).join(", ") + (names.length > 6 ? "…" : "");
   if (missing.length) w.push(`Scryfall doesn't know: ${missing.slice(0, 8).join(", ")}${missing.length > 8 ? "…" : ""}. Check the spelling.`);
+  if (support) {
+    const played = deck.cards.filter((c) => c.board === "main" || c.board === "commander");
+    const status = played.filter((c) => !missing.includes(c.name)).map((c) => [c, support.status(scry.cached(c) ?? c.name)] as const);
+    const absent = status.filter(([, st]) => !st.works && st.missing).map(([c]) => c.name);
+    const issues = status.filter(([, st]) => !st.works && !st.missing).map(([c]) => c.name);
+    if (absent.length) w.push(`Not in the rules engine yet, so this deck can't start a game: ${list(absent)}.`);
+    if (issues.length) w.push(`Known not to work right in games: ${list(issues)}.`);
+  }
   const fmt = deck.format;
   if (fmt === "conquest") return [...w, ...validateConquest(deck.cards.map((c) => ({ ...c, card: scry.cached(c) })))];
   if (fmt === "commander") {

@@ -29,7 +29,8 @@ Declaring again starts from what was declared: once the declaration is asked aga
 clicks the earlier attacks (or your earlier blocks) back in, so only the changes need making. A
 creature's right-click menu offers the change directly: "Attack with X too" / "Stop attacking with
 X" for your creatures on your turn, "Block with X too" / "Stop blocking with X" when you're
-defending. That rewinds the same way, with that creature added (to the defender most of the others
+defending. Select several creatures (all in combat, or all out of it) for the same on all of them.
+That rewinds the same way, with those creatures added (to the defender most of the others
 attack, or to an attacker coming at you) or taken out, and the rest as declared.
 
 Forge's snapshot can't see inside `Combat`'s lists of attackers and blockers (they're built

@@ -3,3 +3,6 @@ dist/
 *.local
 .convex/
 .wrangler/
+# also when it's a link to another checkout's node_modules
+/node_modules
+*.tsbuildinfo

@@ -108,9 +108,13 @@ export interface CardView {
   visibleTo?: string[];
   /** Live games: kept from untapping by hand, during its next untap step or never. */
   untapLock?: "next" | "never";
+  /** Live games: a double-faced permanent that can transform (by hand). */
+  transformable?: boolean;
 }
 
 export interface PlayerView extends PlayerState {
+  /** Live games: mana in their pool (floating), by symbol W U B R G C. */
+  mana?: Record<string, number>;
   libraryCount: number;
   handCount: number;
   /** Only the viewer's own hand has cards; everyone else's is just `handCount`. */
@@ -151,6 +155,8 @@ export interface GameView {
   freePlay?: boolean;
   /** Live games: rewinding (docs/rewind.md). Missing when the game doesn't allow it. */
   rewind?: RewindView;
+  /** Players (ids) who let you search their library right now. */
+  searching?: string[];
   /** Live games: your cards you can use right now (cast, play or activate). */
   playable?: number[];
   /** In turn order, starting with the viewer. */
@@ -285,6 +291,13 @@ export function viewFor(state: GameState, viewer: string): GameView {
 export type Row = 0 | 1 | 2;
 export const ROW_LABELS = ["Creatures", "Artifacts · enchantments · planeswalkers", "Lands"] as const;
 
+const PERMANENT_TYPES = ["Creature", "Artifact", "Enchantment", "Land", "Planeswalker", "Battle"];
+
+/** Is this a permanent card (one that can be on the battlefield)? */
+export function isPermanentCard(c: { types?: string[] }): boolean {
+  return (c.types ?? []).some((t) => PERMANENT_TYPES.includes(t));
+}
+
 export function defaultRow(c: CardView): Row {
   const t = c.types ?? [];
   if (t.includes("Creature")) return 0;
@@ -312,8 +325,13 @@ function pileKey(c: CardView): string {
   return JSON.stringify([c.name, !!c.tapped, !!c.token, !!c.sick, c.power, c.toughness, c.counters ?? null, c.attacking ?? null, c.blocking ?? null]);
 }
 
-/** Splits a battlefield into its three rows of piles, each row sorted by column. */
-export function arrange(cards: CardView[], arr: Arrangement): [Pile[], Pile[], Pile[]] {
+/**
+ * Splits a battlefield into its three rows of piles, each row sorted by column. Cards moved by hand
+ * keep their cell. `width`: the columns a row shows. Given, the other cards are centered: a row
+ * nobody arranged is laid out in the middle, and a new card joins an arranged row in the free cell
+ * nearest the middle. Without it (0), they fill the first free cells from the left.
+ */
+export function arrange(cards: CardView[], arr: Arrangement, width = 0): [Pile[], Pile[], Pile[]] {
   const cells: Map<number, Pile>[] = [new Map(), new Map(), new Map()];
   const put = (row: Row, from: number, c: CardView) => {
     const key = pileKey(c);
@@ -335,13 +353,50 @@ export function arrange(cards: CardView[], arr: Arrangement): [Pile[], Pile[], P
     if (p) put(p.row, p.col, c);
     else unplaced.push(c);
   }
+  // Cards nobody has moved: join a pile of identical cards, or start a new one.
+  const fresh: CardView[][][] = [[], [], []];
   for (const c of unplaced) {
     const row = defaultRow(c);
     const key = pileKey(c);
-    const pile = [...cells[row].values()].find((x) => pileKey(x.cards[0]) === key);
+    const pile = [...cells[row].values()].find((x) => pileKey(x.cards[0]) === key)
+      ?? fresh[row].map((cs) => ({ cards: cs })).find((x) => pileKey(x.cards[0]) === key);
     if (pile) pile.cards.push(c);
-    else put(row, 0, c);
+    else fresh[row].push([c]);
   }
+  fresh.forEach((piles, row) => {
+    const place = (col: number, cs: CardView[]) => cells[row].set(col, { key: `${pileKey(cs[0])}@${cs[0].id}`, col, cards: cs });
+    if (!width) {
+      // No width known: from the left, in the first free cells.
+      for (const cs of piles) {
+        let col = 0;
+        while (cells[row].has(col)) col++;
+        place(col, cs);
+      }
+    } else if (cells[row].size === 0) {
+      // Nothing moved by hand in this row: the row is centered.
+      const start = Math.max(0, Math.floor((width - piles.length) / 2));
+      piles.forEach((cs, i) => place(start + i, cs));
+    } else {
+      // Around cards placed by hand: the free cell nearest the middle of the cards already there,
+      // then nearest the middle of the row, then the left one, so the group grows evenly.
+      const boardMid = (width - 1) / 2;
+      for (const cs of piles) {
+        const used = [...cells[row].keys()];
+        const mid = (Math.min(...used) + Math.max(...used)) / 2;
+        const score = (col: number) => [Math.abs(col - mid), Math.abs(col - boardMid), col];
+        let best = -1;
+        for (let col = 0; col <= Math.max(width, ...used) + 1; col++) {
+          if (cells[row].has(col)) continue;
+          if (best < 0) best = col;
+          else {
+            const [a, b] = [score(col), score(best)];
+            if (a[0] < b[0] || (a[0] === b[0] && (a[1] < b[1] || (a[1] === b[1] && a[2] < b[2])))) best = col;
+          }
+        }
+        place(best, cs);
+      }
+    }
+  });
   return cells.map((m) => [...m.values()].sort((a, b) => a.col - b.col)) as [Pile[], Pile[], Pile[]];
 }
 
@@ -353,8 +408,8 @@ export const usedCols = (row: Pile[]) => (row.length ? row[row.length - 1].col +
  * this battlefield is pinned where it is now, so nothing else shifts. If the cell is taken, its
  * cards swap to where the moved cards came from (or, coming from the hand, move one cell right).
  */
-export function moveCards(cards: CardView[], arr: Arrangement, ids: number[], row: Row, col: number): Arrangement {
-  const rows = arrange(cards, arr);
+export function moveCards(cards: CardView[], arr: Arrangement, ids: number[], row: Row, col: number, width = 0): Arrangement {
+  const rows = arrange(cards, arr, width);
   const moving = new Set(ids);
   const next: Arrangement = { ...arr };
   let from: Placement | undefined;

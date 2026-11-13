@@ -12,6 +12,7 @@ import { ContextMenu, type ContextMenuState } from "../components/ContextMenu";
 import type { MenuSection } from "../components/CardMenu";
 import { PreviewContext, type Preview } from "./cards";
 import { HandBar } from "./HandBar";
+import { MarkContext, type Marks } from "./marks";
 import { StackArrows, StackWindow } from "./StackWindow";
 import type { CardDetails } from "./useLiveGame";
 import { CardInspect, HoverZoom } from "./CardZoom";
@@ -114,7 +115,9 @@ export type TableStopsState = ReturnType<typeof useTableStops>;
 export type MenuTarget =
   | { kind: "card"; card: CardView; where: "hand" | "battlefield" | "command" | "zone" }
   | { kind: "zone"; owner: string; zone: ZoneName | "hand" }
-  | { kind: "board"; owner: string };
+  | { kind: "board"; owner: string }
+  /** Several selected cards (drag a box, or Shift/Ctrl/⌘-click), right-clicked together. */
+  | { kind: "cards"; cards: CardView[] };
 
 /** The page's part of a right-click menu (the board adds its own items, like viewing a zone). */
 export interface MenuPart {
@@ -137,12 +140,16 @@ export function TableBoard(props: {
     selected?: number[];
     onToggleSelect?: (id: number) => void;
     onPlay: (id: number) => void;
+    /** Put a card from hand onto the battlefield without casting it (Shift+drag; free play). */
+    onPut?: (id: number) => void;
     /** Single click on a hand card (live games: Forge decides what that does). */
     onClick?: (id: number) => void;
   };
   /** Click on any card on any board (live games). Without it, clicking your own permanent taps it. */
   onCardClick?: (id: number) => void;
   onPlayerClick?: (id: string) => void;
+  /** While you pay a cost: use one mana of this color from your pool (click it by your name). */
+  onPayPool?: (color: string) => void;
   onTap?: (id: number) => void;
   /** Cast a commander from your command zone (by card id: partners are two). */
   onCastCommander?: (id: number) => void;
@@ -162,6 +169,9 @@ export function TableBoard(props: {
   stackItemMenu?: (s: StackItemView) => MenuSection[];
   /** Live games: cards the page shows you in a viewer (your library while you search it). */
   peek?: { title: string; cards: CardView[]; onClose: () => void } | null;
+  /** The game's own menu (layout, full screen, concede…): on the board's and the background's
+   *  right-click menus, and the ☰ button. Live games, where the page has no toolbar. */
+  gameMenu?: MenuSection[];
 }) {
   const { view: v, layout, stops: st } = props;
   const me = v.viewer;
@@ -172,6 +182,29 @@ export function TableBoard(props: {
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
   const [inspect, setInspect] = useState<CardView | null>(null);
   const menuSeq = useRef(0);
+  // Cards selected together (marks.tsx). Ids of cards that left the table drop out on their own.
+  const [markedRaw, setMarked] = useState<ReadonlySet<number>>(new Set());
+  const peekCards = props.peek?.cards;
+  const cardOf = (id: number) => findCard(v, id) ?? peekCards?.find((c) => c.id === id);
+  const marked = useMemo(() => new Set([...markedRaw].filter((id) => cardOf(id))), [markedRaw, v, peekCards]); // eslint-disable-line react-hooks/exhaustive-deps
+  const marks = useMemo<Marks>(() => ({
+    marked,
+    set: (ids) => setMarked(new Set(ids)),
+    toggle: (ids) => setMarked((cur) => {
+      const next = new Set(cur);
+      const all = ids.every((id) => next.has(id));
+      for (const id of ids) all ? next.delete(id) : next.add(id);
+      return next;
+    }),
+  }), [marked]);
+  useEffect(() => {
+    if (!marked.size) return;
+    const on = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !document.querySelector("dialog[open]")) setMarked(new Set());
+    };
+    window.addEventListener("keydown", on);
+    return () => window.removeEventListener("keydown", on);
+  }, [marked.size]);
 
   const seatOf = (id: string) => v.players.find((p) => p.id === id);
   const nameOf = (id: string) => (id === me ? "you" : seatOf(id)?.name ?? id);
@@ -192,6 +225,7 @@ export function TableBoard(props: {
 
   /** The board's own items for a target: look at a zone, enlarge a board, reset its layout. */
   const boardItems = (t: MenuTarget): MenuSection[] => {
+    if (t.kind === "cards") return [{ items: [{ label: "Clear the selection (Esc)", onSelect: () => setMarked(new Set()) }] }];
     const owner = t.kind === "card" ? t.card.controller : t.owner;
     const who = owner === me ? "your" : `${seatOf(owner)?.name ?? "their"}'s`;
     const items: MenuSection["items"] = [];
@@ -210,19 +244,26 @@ export function TableBoard(props: {
     return [{ items }];
   };
 
-  const openMenu: OpenMenu = (e, t) => {
+  const openMenu: OpenMenu = (e, target) => {
     e.preventDefault();
     e.stopPropagation();
     setPreview(null);
+    // Right-click one of several selected cards: the menu is for all of them.
+    const t: MenuTarget = target.kind === "card" && marked.has(target.card.id) && marked.size > 1
+      ? { kind: "cards", cards: [...marked].map(cardOf).filter((c): c is CardView => !!c) }
+      : target;
     const seq = ++menuSeq.current;
     const title =
-      t.kind === "card"
+      t.kind === "cards"
+        ? `${t.cards.length} selected cards`
+        : t.kind === "card"
         ? t.card.hidden ? "Face-down card" : t.card.name
         : t.kind === "zone"
           ? `${t.owner === me ? "Your" : (seatOf(t.owner)?.name ?? "") + "'s"} ${ZONE_LABEL[t.zone]}`
           : t.owner === me ? "Your board" : `${seatOf(t.owner)?.name}'s board`;
     const base = { x: e.clientX, y: e.clientY, title };
     const own = boardItems(t);
+    const game = t.kind === "board" ? (props.gameMenu ?? []) : [];
     // Card details first, like a card's own menu at a paper table: what it says and what's on it.
     const first: MenuSection[] =
       t.kind === "card" && !t.card.hidden ? [{ items: [{ label: "📖 Card details", onSelect: () => setInspect((t as { card: CardView }).card) }] }] : [];
@@ -230,11 +271,19 @@ export function TableBoard(props: {
     if (part instanceof Promise) {
       setMenu({ ...base, sections: [...first, ...own], loading: true });
       void part.then((p) => {
-        if (menuSeq.current === seq) setMenu({ ...base, sections: [...first, ...p.sections, ...own], note: p.note });
+        if (menuSeq.current === seq) setMenu({ ...base, sections: [...first, ...p.sections, ...own, ...game], note: p.note });
       });
     } else {
-      setMenu({ ...base, sections: [...first, ...(part?.sections ?? []), ...own], note: part?.note });
+      setMenu({ ...base, sections: [...first, ...(part?.sections ?? []), ...own, ...game], note: part?.note });
     }
+  };
+
+  /** Just the game's menu: right-click anywhere else on the table, or the ☰ button. */
+  const openGameMenu = (x: number, y: number) => {
+    if (!props.gameMenu) return;
+    setPreview(null);
+    ++menuSeq.current;
+    setMenu({ x, y, title: "Game", sections: props.gameMenu });
   };
 
   const seat = (id: string, opts: { area?: string; focusedView?: boolean } = {}) => {
@@ -254,9 +303,11 @@ export function TableBoard(props: {
           colorOf={colorOf}
           onOpenZone={(owner, z) => setZone({ owner, zone: z })}
           onPlayFromHand={isMe ? props.hand.onPlay : undefined}
+          onPutFromHand={isMe ? props.hand.onPut : undefined}
           onTap={isMe ? props.onTap : undefined}
           onCardClick={props.onCardClick}
           onPlayerClick={props.onPlayerClick}
+          onPayPool={isMe ? props.onPayPool : undefined}
           onCastCommander={isMe ? props.onCastCommander : undefined}
           onFocus={() => setFocused(opts.focusedView ? null : id)}
           focused={opts.focusedView}
@@ -291,10 +342,21 @@ export function TableBoard(props: {
   const ZONE_TITLES: Record<ZoneName, string> = { graveyard: "graveyard", exile: "exile", command: "command zone", library: "library" };
 
   return (
+    <MarkContext.Provider value={marks}>
     <PreviewContext.Provider value={setPreview}>
       {/* The table has its own right-click menus, so the browser's is off here. */}
-      <div className="game-main" onContextMenu={(e) => e.preventDefault()}>
-        {props.rail(preview)}
+      <div
+        className="game-main"
+        onContextMenu={(e) => {
+          e.preventDefault();
+          openGameMenu(e.clientX, e.clientY); // a card, zone or board opens its own menu and stops this
+        }}
+      >
+        {/* Left: the log, then (by your hand) the decision and the auto-pass skips. */}
+        <div className="rail-col">
+          <Log lines={v.log} />
+          {props.rail(preview)}
+        </div>
 
         <div className="game-center">
           <StackWindow view={v} nameOf={nameOf} colorOf={colorOf} itemMenu={props.stackItemMenu} />
@@ -322,6 +384,18 @@ export function TableBoard(props: {
         </div>
 
         <div className="strip-col">
+          {props.gameMenu && (
+            <button
+              className="game-menu-btn"
+              aria-haspopup="menu"
+              onClick={(e) => {
+                const r = e.currentTarget.getBoundingClientRect();
+                openGameMenu(r.left, r.bottom + 4);
+              }}
+            >
+              ☰ Menu
+            </button>
+          )}
           <PhaseStrip
             me={meSeat}
             opponents={oppSeats}
@@ -339,7 +413,6 @@ export function TableBoard(props: {
             <button className="btn small ghost" onClick={() => void st.reset()}>Reset</button>
           </div>
           <HoldPriority on={st.holdPriority} onChange={st.setHoldPriority} />
-          <Log lines={v.log} />
         </div>
       </div>
 
@@ -379,6 +452,7 @@ export function TableBoard(props: {
       {/* Inside an open dialog (the zone viewer) so it shows above it: dialogs sit on the top layer. */}
       {menu && createPortal(<ContextMenu menu={menu} onClose={() => setMenu(null)} />, document.querySelector("dialog[open]") ?? document.body)}
     </PreviewContext.Provider>
+    </MarkContext.Provider>
   );
 }
 

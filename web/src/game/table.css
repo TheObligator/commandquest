@@ -19,6 +19,15 @@
 .seat-cell { min-width: 0; min-height: 0; display: flex; }
 .seat-cell > * { flex: 1; }
 .focus-overlay { position: absolute; inset: 0; z-index: 5; display: flex; padding: 0; background: rgb(8 10 14 / 82%); backdrop-filter: blur(3px); animation: cq-fade .15s ease-out; }
+.focus-overlay > .seat-cell { flex: 1; } /* the enlarged board fills the table, not just its content's width */
+
+/* In a game the site's bars and the game toolbar are hidden: the table gets the whole window.
+   Their controls (layout, concede, full screen…) are in the Game menu. */
+body.in-game .topbar, body.in-game .footer, body.in-game .game-toolbar { display: none; }
+body.in-game #view.full { padding: 8px 10px; }
+body.in-game .game { height: calc(100dvh - 16px); }
+.game-menu-btn { flex: none; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: #12151d; color: var(--muted); font: inherit; font-size: .74rem; letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
+.game-menu-btn:hover { color: var(--text); border-color: #4a5266; }
 @keyframes cq-fade { from { opacity: 0; } }
 
 /* ---- Seat ---- */
@@ -142,9 +151,12 @@ button.zone-tile:hover .zt-card { outline: 2px solid var(--accent-2); }
 .strip-col { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
 .strip-actions { display: flex; gap: 4px; }
 .strip-actions .btn { flex: 1; padding: 4px 6px; font-size: .74rem; }
-.strip-col .ar-log { flex: 0 0 auto; border: 1px solid var(--line); border-radius: 10px; background: #12151d; padding: 8px; }
-.strip-col .ar-log h3 { font-size: .68rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin: 0 0 4px; }
-.strip-col .ar-log ol { max-height: 160px; font-size: .7rem; }
+/* Left column: the log fills the space above the decision and auto-pass panels. */
+.rail-col { display: flex; flex-direction: column; gap: 8px; min-height: 0; min-width: 0; }
+.rail-col > .ar-log { flex: 1 1 0; min-height: 90px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; background: #12151d; padding: 8px; }
+.rail-col > .ar-log h3 { font-size: .68rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin: 0 0 4px; }
+.rail-col > .ar-log ol { flex: 1; min-height: 0; max-height: none; font-size: .74rem; }
+.rail-col > .action-rail { flex: 0 1 auto; }
 .phase-strip { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: #0f1218; }
 .ps-turn { text-align: center; padding: 4px; border-radius: 6px; border: 1px solid color-mix(in srgb, var(--active) 55%, var(--line)); background: color-mix(in srgb, var(--active) 8%, #12151d); }
 .ps-turn strong { display: block; color: var(--active); letter-spacing: .14em; text-transform: uppercase; font-size: .7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -332,8 +344,8 @@ dialog.zone-viewer { width: min(980px, calc(100vw - 32px)); max-height: 86vh; ba
 .action-rail > :first-child { margin-top: auto; }
 
 /* A card shown large after resting the pointer on it */
-.hover-zoom { position: fixed; z-index: 80; width: min(320px, 40vw); pointer-events: none; filter: drop-shadow(0 14px 30px rgb(0 0 0 / 65%)); }
-.hover-zoom img, .hover-zoom .card-back { display: block; width: 100%; border-radius: 4.75% / 3.5%; }
+.hover-zoom { position: fixed; z-index: 80; width: min(320px, 40vw, calc((100dvh - 64px) * 0.7176)); pointer-events: none; filter: drop-shadow(0 14px 30px rgb(0 0 0 / 65%)); }
+.hover-zoom img, .hover-zoom .card-back { display: block; width: 100%; aspect-ratio: 488 / 680; border-radius: 4.75% / 3.5%; }
 .hover-zoom .card-back { --cw: 320px; }
 .hz-tile { aspect-ratio: 488 / 680; display: grid; place-content: center; gap: 8px; text-align: center; padding: 16px; border-radius: 4.75% / 3.5%; background: linear-gradient(160deg, #2a2f3c, #171a22); border: 1px solid var(--line); }
 .hz-tile strong { font-size: 1.2rem; }
@@ -362,6 +374,15 @@ dialog.card-inspect::backdrop, dialog.counter-dialog::backdrop { background: rgb
 .ci-sec { border-top: 1px solid #2e271b; padding-top: 10px; display: grid; gap: 6px; }
 .ci-sec h3 { margin: 0; font-size: .82rem; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; color: #8a826e; }
 .ci-kv { display: flex; justify-content: space-between; font-family: ui-monospace, Menlo, monospace; color: #ece6d8; }
+.ci-rulings summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px; }
+.ci-rulings summary::-webkit-details-marker { display: none; }
+.ci-rulings summary::after { content: "▸"; color: #8a826e; font-size: .8rem; }
+.ci-rulings[open] summary::after { content: "▾"; }
+.ci-rulings ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; max-height: 40vh; overflow: auto; }
+.ci-rulings li { display: grid; gap: 2px; font-size: .9rem; line-height: 1.5; }
+.ci-rulings li .rules p { margin: 0; }
+.ci-rulings time { font-size: .75rem; color: #8a826e; font-variant-numeric: tabular-nums; }
+.ci-rulings .muted { margin: 0; font-size: .9rem; }
 .ci-owner { margin: auto 0 0; padding-top: 10px; border-top: 1px solid #2e271b; font-size: .8rem; color: #8a826e; }
 @media (max-width: 680px) { .ci-grid { grid-template-columns: 1fr; } }
 
@@ -373,8 +394,7 @@ dialog.card-inspect::backdrop, dialog.counter-dialog::backdrop { background: rgb
 .cm-sub { position: relative; }
 .cm-sub > button { display: flex !important; justify-content: space-between; align-items: center; }
 .cm-arrow { color: var(--muted); font-size: .75rem; }
-.cm-subpanel { position: absolute; top: -5px; left: calc(100% + 4px); min-width: 170px; }
-.cm-subpanel.to-left { left: auto; right: calc(100% + 4px); }
+.cm-subpanel { min-width: 170px; }
 
 /* Counters by hand */
 dialog.counter-dialog { width: min(360px, calc(100vw - 32px)); background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 12px; padding: 18px; box-shadow: var(--shadow); }
@@ -436,3 +456,43 @@ dialog.counter-dialog { width: min(360px, calc(100vw - 32px)); background: var(-
 .replay-settings { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 4px; font-size: .8rem; }
 .replay-happened { margin: 4px 0 0; padding-left: 16px; font-size: .8rem; display: grid; gap: 3px; }
 .replay-hand { margin: 4px 0; overflow-wrap: anywhere; }
+
+/* Scry / surveil by hand */
+dialog.scry-dialog { width: min(760px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; }
+.scry-row { display: flex; flex-wrap: wrap; gap: 10px; list-style: none; margin: 0 0 10px; padding: 0; min-height: 24px; }
+.scry-card { width: 120px; display: flex; flex-direction: column; gap: 4px; }
+.scry-img { --cw: 120px; width: 120px; }
+.scry-img img { display: block; width: 100%; border-radius: 4.75% / 3.5%; }
+.scry-name { font-size: .75rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scry-btns { display: flex; gap: 3px; flex-wrap: wrap; }
+.scry-btns .btn { padding: 2px 6px; }
+
+/* Several cards selected together (drag a box, or Shift/Ctrl/⌘-click): one right-click menu for all. */
+.slot.marked .bf-card, .hand-card.marked, .zone-viewer figure.marked .zv-card { outline: 3px solid #c79bff; outline-offset: 2px; border-radius: 6px; }
+.marquee { position: fixed; z-index: 60; pointer-events: none; border: 1px solid #c79bff; background: rgb(199 155 255 / 14%); border-radius: 3px; }
+.zv-filter { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: -4px 0 12px; }
+.zv-filter input { flex: 1 1 280px; min-width: 0; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg, transparent); color: var(--text); font: inherit; }
+.zv-filter .zv-error { color: #ff8a8a; }
+
+/* Your mana pool by your name; while paying, each symbol is a button that pays one. */
+.sb-pool { display: inline-flex; gap: 4px; align-items: center; }
+.sb-mana { display: inline-flex; align-items: center; gap: 2px; font-size: .74rem; font-weight: 700; color: var(--text); padding: 1px 6px 1px 3px; border-radius: 999px; background: rgb(255 255 255 / 8%); border: 0; font-family: inherit; }
+button.sb-mana { cursor: pointer; box-shadow: 0 0 0 1px var(--accent-2, #ffd27a); }
+button.sb-mana:hover { background: rgb(255 210 122 / 18%); }
+.sb-mana .sym { width: 14px; height: 14px; }
+
+/* Tap several cards for mana: totals by color with arrows, then each card's choice. */
+.mana-dialog { width: min(440px, calc(100vw - 32px)); }
+.md-colors { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin: 4px 0 12px; }
+.md-color { display: grid; justify-items: center; gap: 2px; min-width: 44px; }
+.md-color .sym { width: 24px; height: 24px; }
+.md-color b { font-size: 1.1rem; }
+.md-arrow { border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 6px; width: 32px; line-height: 1.3; cursor: pointer; }
+.md-arrow:disabled { opacity: .3; cursor: default; }
+.md-arrow.hurts { border-color: var(--danger); color: var(--danger); }
+.md-hurt { color: var(--danger); font-size: .88rem; margin: 0 0 8px; }
+.md-cards li .md-hurt { margin: 0; }
+.md-cards { list-style: none; padding: 0; margin: 0 0 12px; max-height: 40vh; overflow-y: auto; display: grid; gap: 4px; }
+.md-cards li { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: .88rem; }
+.md-cards select { font: inherit; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; }
+.pay-btns .sym { width: 14px; height: 14px; vertical-align: -2px; }

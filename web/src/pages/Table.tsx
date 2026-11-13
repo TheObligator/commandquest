@@ -73,6 +73,7 @@ function Game({ count, start, layout, myName }: { count: number; start: "new" | 
   useHotkeys({
     autoEndOfTurn: () => (playing ? sim.setAutoPass("END_OF_TURN") : false),
     autoBeforeMyTurn: () => (playing ? sim.setAutoPass("BEFORE_MY_TURN") : false),
+    autoUntilMyTurn: () => (playing ? sim.setAutoPass("UNTIL_MY_TURN") : false),
     autoActionOrEnd: () => (playing ? sim.setAutoPass("ACTION_OR_END_STEP") : false),
     holdPriority: () => st.setHoldPriority(!st.holdPriority),
   });

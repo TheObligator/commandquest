@@ -1,11 +1,13 @@
 // "Other counters…" from a permanent's right-click menu: any kind of counter, any number, added
 // or removed by hand. The server checks the name and logs the change for everyone.
 import { useEffect, useRef, useState } from "react";
-import type { CardView } from "./view";
 
 const COMMON = ["+1/+1", "-1/-1", "Loyalty", "Charge", "Shield", "Stun", "Lore", "Oil", "Time", "Fade", "Age", "Quest", "Energy", "Experience", "Finality", "Flying", "Deathtouch", "Lifelink", "Menace", "Trample", "Vigilance", "Indestructible", "Hexproof", "First strike", "Reach"];
 
-export function CounterDialog({ card, onClose, onApply }: { card: CardView; onClose: () => void; onApply: (type: string, delta: number) => void }) {
+export function CounterDialog({ name, onClose, onApply }: {
+  /** The card's name, or "3 cards" for several selected. */
+  name: string;
+  onClose: () => void; onApply: (type: string, delta: number) => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [type, setType] = useState("+1/+1");
   const [count, setCount] = useState(1);
@@ -19,9 +21,9 @@ export function CounterDialog({ card, onClose, onApply }: { card: CardView; onCl
     ref.current?.close();
   };
   return (
-    <dialog ref={ref} className="counter-dialog" onClose={onClose} aria-label={`Counters on ${card.name}`}>
+    <dialog ref={ref} className="counter-dialog" onClose={onClose} aria-label={`Counters on ${name}`}>
       <button className="dialog-close" aria-label="Close" onClick={() => ref.current?.close()}>×</button>
-      <h3>Counters on {card.name}</h3>
+      <h3>Counters on {name}</h3>
       <form method="dialog" onSubmit={(e) => (e.preventDefault(), apply(1))}>
         <label>
           Kind

@@ -89,3 +89,17 @@ test("a new copy of a card joins its pile wherever that pile was moved", () => {
   const [row] = arrange([goblin(1), goblin(2)], arr);
   assert.deepEqual(row.map((p) => [p.col, p.cards.map((c) => c.id)]), [[3, [1, 2]]]);
 });
+
+test("with a width, cards are centered; new cards join an arranged row near the middle", () => {
+  const cards = [card(1, "A"), card(2, "B"), card(3, "Forest", { types: ["Land"] })].map((c) => redact(c, "me"));
+  const ids = (r: ReturnType<typeof arrange>[number]) => r.map((p) => [p.cards[0].id, p.col]);
+  // 9 columns: two creatures in the middle, the land under them.
+  const [creatures, , lands] = arrange(cards, {}, 9);
+  assert.deepEqual(ids(creatures), [[1, 3], [2, 4]]);
+  assert.deepEqual(ids(lands), [[3, 4]]);
+  // Dragging pins the cards where they show; new creatures go beside them, one each side.
+  const arr = moveCards(cards, {}, [3], 2, 4, 9);
+  assert.deepEqual(arr[1], { row: 0, col: 3 });
+  const more = [...cards, redact(card(4, "C"), "me"), redact(card(5, "D"), "me")];
+  assert.deepEqual(ids(arrange(more, arr, 9)[0]), [[5, 2], [1, 3], [2, 4], [4, 5]]);
+});

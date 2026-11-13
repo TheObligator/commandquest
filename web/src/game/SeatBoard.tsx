@@ -6,9 +6,11 @@
 // pile per cell, so nothing overlaps). Cards shrink to fit so a board never scrolls until they'd
 // get unreadably small. You can drag cards to any cell on any board; that only changes your view.
 import { useLayoutEffect, useRef, useState } from "react";
+import { ManaCost } from "../components/ManaCost";
 import { CardBack, CardBadges, CardFace, CostOverlay, previewFor, usePreview } from "./cards";
+import { isMarkClick, useMarks, useMarquee } from "./marks";
 import type { OpenMenu } from "./TableBoard";
-import { arrange, moveCards, ROW_LABELS, usedCols, type Arrangement, type CardView, type Pile, type PlayerView, type Row } from "./view";
+import { arrange, isPermanentCard, moveCards, ROW_LABELS, usedCols, type Arrangement, type CardView, type Pile, type PlayerView, type Row } from "./view";
 
 export type ZoneName = "graveyard" | "exile" | "command" | "library";
 
@@ -17,6 +19,8 @@ export interface DragData {
   from: "hand" | "battlefield";
   seat: string;
   ids: number[];
+  /** A hand card's types, so a drop can tell whether it may go in without being cast. */
+  types?: string[];
 }
 export const DRAG_TYPE = "application/x-commandquest-card";
 let currentDrag: DragData | null = null; // dragover can't read dataTransfer contents
@@ -58,7 +62,11 @@ export function SeatBoard(props: {
   colorOf: (id: string) => string;
   onOpenZone: (owner: string, zone: ZoneName) => void;
   onPlayFromHand?: (cardId: number) => void;
+  /** Shift+drag from hand: put it onto the battlefield without casting it. */
+  onPutFromHand?: (cardId: number) => void;
   onTap?: (cardId: number) => void;
+  /** While you pay a cost: use one mana of this color from your pool. */
+  onPayPool?: (color: string) => void;
   /** Cast one of your commanders (partners are two cards). */
   onCastCommander?: (id: number) => void;
   onFocus?: () => void;
@@ -95,6 +103,12 @@ export function SeatBoard(props: {
       className={`seat-board${props.active ? " active" : ""}${isMe ? " mine" : ""}${props.focused ? " focused" : ""}`}
       style={{ "--seat": p.color } as React.CSSProperties}
       aria-label={isMe ? "Your board" : `${p.name}'s board`}
+      onDoubleClick={(e) => {
+        // Double-click empty board space to enlarge it (or go back); cards and controls keep their own clicks.
+        if (!props.onFocus || (e.target as Element).closest("[data-card-ids], button, a, input, select, textarea")) return;
+        window.getSelection()?.removeAllRanges();
+        props.onFocus();
+      }}
     >
       <header className="sb-head">
         {props.onPlayerClick ? (
@@ -111,6 +125,19 @@ export function SeatBoard(props: {
             {PLAYER_COUNTER_ICON[kind.toLowerCase()] ?? "●"} {n} <small>{kind}</small>
           </span>
         ))}
+        {Object.entries(p.mana ?? {}).filter(([, n]) => n > 0).length > 0 && (
+          <span className="sb-pool" title="Mana pool: floating mana, gone at the end of the step">
+            {Object.entries(p.mana ?? {}).filter(([, n]) => n > 0).map(([x, n]) => (
+              props.onPayPool ? (
+                <button key={x} className="sb-mana" onClick={() => props.onPayPool!(x)} title={`Pay with one {${x}} from your pool`}>
+                  <ManaCost cost={`{${x}}`} />{n}
+                </button>
+              ) : (
+                <span key={x} className="sb-mana"><ManaCost cost={`{${x}}`} />{n}</span>
+              )
+            ))}
+          </span>
+        )}
         {cmdDmg.map(([from, n]) => (
           <span key={from} className="sb-cmd" style={{ "--from": colorOf(from) } as React.CSSProperties} title={`${n} commander damage from ${nameOf(from)}'s commander (21 loses)`}>
             ♛ {n}
@@ -118,7 +145,7 @@ export function SeatBoard(props: {
         ))}
         <span className="sb-spacer" />
         {props.onFocus && (
-          <button className="sb-focus" onClick={props.onFocus} title={props.focused ? "Back to the table (Esc)" : "Enlarge this board"} aria-pressed={props.focused}>
+          <button className="sb-focus" onClick={props.onFocus} title={props.focused ? "Back to the table (Esc, or double-click the board)" : "Enlarge this board (or double-click it)"} aria-pressed={props.focused}>
             {props.focused ? "✕" : "⤢"}
           </button>
         )}
@@ -180,10 +207,10 @@ function CommandTile(props: {
                 data-card-ids={card.id}
                 onClick={onCast ? () => onCast(card.id) : undefined}
                 onContextMenu={props.onMenu && ((e: React.MouseEvent) => props.onMenu!(e, { kind: "card", card, where: "command" }))}
-                title={onCast ? `Cast ${card.name ?? "your commander"}` : card.name}
+                aria-label={onCast ? `Cast ${card.name ?? "your commander"}` : card.name}
                 {...hover(card)}
               >
-                <CardFace card={card} size="small" knownFaceDown={card.faceDown && !card.hidden} />
+                <CardFace card={card} knownFaceDown={card.faceDown && !card.hidden} />
                 <CardBadges card={card} />
                 {card.commander && <CostOverlay card={card} />}
               </Tag>
@@ -214,7 +241,7 @@ function ZoneTile(props: {
   const { card } = props;
   const Tag = props.onClick ? "button" : "div";
   return (
-    <Tag className="zone-tile" onClick={props.onClick} onContextMenu={props.onMenu} title={props.title ?? props.hint} {...(card && props.hover ? props.hover(card) : {})}>
+    <Tag className="zone-tile" onClick={props.onClick} onContextMenu={props.onMenu} {...(card && props.hover ? { "aria-label": props.title ?? props.hint } : { title: props.title ?? props.hint })} {...(card && props.hover ? props.hover(card) : {})}>
       <span className="zt-label">
         {props.label}
         {props.count !== undefined && <b>{props.count}</b>}
@@ -224,7 +251,7 @@ function ZoneTile(props: {
       <div className="zt-card" data-card-ids={card?.id}>
         {card ? (
           <>
-            <CardFace card={card} size="small" knownFaceDown={card.faceDown && !card.hidden} />
+            <CardFace card={card} knownFaceDown={card.faceDown && !card.hidden} />
             <CardBadges card={card} />
           </>
         ) : props.back ? (
@@ -239,10 +266,11 @@ function ZoneTile(props: {
 
 function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; hover: (c: CardView) => object }) {
   const { player: p, arrangement, isMe, nameOf } = props;
-  const rows = arrange(p.battlefield, arrangement);
   const ref = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 600, h: 300 });
   const [dropAt, setDropAt] = useState<{ row: Row; col: number } | null>(null);
+  const marks = useMarks();
+  const { onMouseDown, marquee } = useMarquee();
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -252,7 +280,12 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
     return () => ro.disconnect();
   }, []);
 
-  const cw = fitWidth(rows, box.w, box.h, props.maxCard, props.line);
+  // Size the cards for what's on the board, then center it in the columns that fit across: every
+  // row has the same columns, so lands line up under creatures. (Side-by-side rows aren't centered.)
+  const packed = arrange(p.battlefield, arrangement);
+  const cw = fitWidth(packed, box.w, box.h, props.maxCard, props.line);
+  const width = props.line ? 0 : Math.max(1, Math.floor((box.w - 8 + CARD_GAP) / (cw + CARD_GAP)));
+  const rows = props.line ? packed : arrange(p.battlefield, arrangement, width);
   const accepts = (d: DragData | null) => !!d && ((d.from === "battlefield" && d.seat === p.id) || (d.from === "hand" && isMe));
   /** The cell under the pointer in a row's grid. */
   const cellAt = (e: React.DragEvent, el: HTMLElement) => {
@@ -267,8 +300,11 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
     if (!accepts(d) || !d) return;
     e.preventDefault();
     // A card from hand lands in the cell you dropped it on once it's in play.
-    props.onArrange(moveCards(p.battlefield, arrangement, d.ids, row, col));
-    if (d.from === "hand") props.onPlayFromHand?.(d.ids[0]);
+    props.onArrange(moveCards(p.battlefield, arrangement, d.ids, row, col, width));
+    if (d.from !== "hand") return;
+    // Shift held when you drop: put a permanent card in without casting it.
+    if (e.shiftKey && props.onPutFromHand && isPermanentCard(d)) props.onPutFromHand(d.ids[0]);
+    else props.onPlayFromHand?.(d.ids[0]);
   };
 
   return (
@@ -277,9 +313,11 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
       className={`battlefield${props.line ? " line" : ""}${cw <= MIN_CW ? " cramped" : ""}`}
       style={{ "--cw": `${cw}px` } as React.CSSProperties}
       onContextMenu={props.onMenu && ((e) => props.onMenu!(e, { kind: "board", owner: p.id }))}
+      onMouseDown={onMouseDown}
     >
+      {marquee}
       {rows.map((piles, r) => {
-        const cols = usedCols(piles) + SPARE;
+        const cols = Math.max(width, usedCols(piles) + SPARE);
         return (
           <div
             key={r}
@@ -310,10 +348,12 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
                 const next = pile.cards.find((x) => props.selectable?.has(x.id) && !props.chosen?.has(x.id));
                 return next?.id ?? [...pile.cards].reverse().find((x) => props.chosen?.has(x.id))?.id ?? c.id;
               })();
+              const ids = pile.cards.map((x) => x.id);
+              const marked = ids.some((id) => marks.marked.has(id));
               return (
                 <div
                   key={pile.key}
-                  className={["slot", c.tapped && "tapped", anySelectable && "selectable", anyChosen && "chosen", props.playable?.has(c.id) && "playable"].filter(Boolean).join(" ")}
+                  className={["slot", c.tapped && "tapped", anySelectable && "selectable", anyChosen && "chosen", props.playable?.has(c.id) && "playable", marked && "marked"].filter(Boolean).join(" ")}
                   style={{ gridColumn: pile.col + 1 }}
                   data-card-ids={pile.cards.map((x) => x.id).join(" ")}
                   draggable
@@ -324,8 +364,13 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
                     e.dataTransfer.effectAllowed = "move";
                   }}
                   onDragEnd={() => (setDrag(null), setDropAt(null))}
-                  title={props.onCardClick ? `${c.name ?? "Face-down card"}: click to use or choose it, right-click for more, drag to move` : isMe && props.onTap ? `${c.name ?? "Face-down card"}: click to ${c.tapped ? "untap" : "tap"}, drag to move` : undefined}
-                  onClick={() => (props.onCardClick ? props.onCardClick(clickId) : isMe && props.onTap?.(c.id))}
+                  aria-label={props.onCardClick ? `${c.name ?? "Face-down card"}: click to use or choose it, right-click for more, drag to move` : isMe && props.onTap ? `${c.name ?? "Face-down card"}: click to ${c.tapped ? "untap" : "tap"}, drag to move` : undefined}
+                  onClick={(e) => {
+                    // Shift/Ctrl/⌘-click selects it (with others) for one right-click menu.
+                    if (isMarkClick(e)) return marks.toggle(ids);
+                    if (props.onCardClick) props.onCardClick(clickId);
+                    else if (isMe) props.onTap?.(c.id);
+                  }}
                   onContextMenu={props.onMenu && ((e) => props.onMenu!(e, { kind: "card", card: c, where: "battlefield" }))}
                   {...props.hover(c)}
                 >
@@ -333,7 +378,7 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
                     className={["bf-card", n > 1 && "pile", c.sick && "sick", c.attacking && "attacking", c.blocking && "blocking"].filter(Boolean).join(" ")}
                     style={{ "--n": Math.min(n, 4) } as React.CSSProperties}
                   >
-                    <CardFace card={c} size={cw > 120 ? "normal" : "small"} knownFaceDown={c.faceDown && !c.hidden} />
+                    <CardFace card={c} knownFaceDown={c.faceDown && !c.hidden} />
                     <CardBadges card={c} />
                     {n > 1 && <span className="pile-count">×{n}</span>}
                   </div>

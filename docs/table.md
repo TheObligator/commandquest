@@ -10,27 +10,33 @@ The game screen. The board itself is `web/src/game/TableBoard.tsx`, shared by tw
   hands) or the default mid-game (turn 9, full boards).
 
 ```
- ┌ action rail ┐ ┌──────────── seats ────────────┐ ┌ phase strip ─┐
- │             │ │ Opp 1      Opp 2      Opp 3   │ │ Your turn T9 │
+ ┌ left rail ──┐ ┌──────────── seats ────────────┐ ┌ ☰ Menu ──────┐
+ │ Log         │ │ Opp 1      Opp 2      Opp 3   │ │ Your turn T9 │
  │             │ │  (stack: a floating window)   │ │ Untap …      │
  │             │ │ You                           │ │ Save stops   │
  │ Decision    │ │                               │ │ Hold priority│
- │ Auto-pass   │ └ Hand (upright, from the left) ┘ └ Log          ┘
+ │ Auto-pass   │ └ Hand (upright, from the left) ┘ └──────────────┘
 ```
 
 ## Layout
 
-- **Action rail (left):** at the bottom the decision the game wants (mulligan, bottoming cards, respond to the stack, your
-  turn) and the auto-pass skips (docs/stops.md).
-- **Right column:** the phase strip with stops per step, split you / opponents (docs/stops.md),
-  then the hold-priority toggle and the log.
+- **Left rail:** the log fills the top; at the bottom the decision the game wants (mulligan,
+  bottoming cards, respond to the stack, your turn) and the auto-pass skips (docs/stops.md).
+- **Right column:** the ☰ Menu button (live games), the phase strip with stops per step, split you /
+  opponents (docs/stops.md), then the hold-priority toggle.
+- **No toolbar in a live game:** while a game is on, the site's bars and the page's toolbar are
+  hidden (`body.in-game`) so the table gets the whole window. Their controls are in the **Game
+  menu**: the ☰ Menu button, right-clicking a board, or right-clicking anywhere on the table that
+  has no menu of its own (not on cards or zones, so Concede is never one slip away from a card
+  action). It has Layout ▸, Full screen, Hotkeys and settings (a new tab), Leave (the game is kept
+  for 5 minutes), and Concede. Banners (reconnecting, game over) still show.
 - **Hotkeys** are the player's own (Settings, `#/settings`; `web/src/game/hotkeys.ts`), and every
   button shows the key it's bound to. Defaults: Space pass priority / OK, X the second button
   (Cancel, Mulligan, End Turn), Shift hold priority (tapped on its own), C cast your commander, and
-  E / B / R the auto-pass skips. Esc closes an enlarged board. They're saved to the account (Convex
+  E / B / M / R the auto-pass skips. Esc closes an enlarged board. They're saved to the account (Convex
   `settings`) and in the browser, so they also work signed out.
 - **Seats** are always in turn order, starting from the player after you. Four layouts, chosen in
-  the toolbar and remembered per browser:
+  the Game menu (the toolbar on `#/table`) and remembered per browser:
   - **Pod:** opponents in a row across the top, you below.
   - **Focus:** pod with your board much larger.
   - **Stacked:** one row per player: you, then each opponent. Short seats put the three
@@ -47,34 +53,118 @@ The game screen. The board itself is `web/src/game/TableBoard.tsx`, shared by tw
   in hand. Click graveyard or exile to see every card in it.
 - Battlefield in three rows that share the board's height: creatures, other permanents, lands. Each
   row is a grid of cells, one card or pile per cell, so cards never overlap (a tapped card turns
-  sideways and shrinks to fit its cell). A new card takes the first free cell of its default row,
-  or joins a pile of identical cards (×N badge). Drag a card to any cell of any row: onto another
+  sideways and shrinks to fit its cell). Every row has the columns that fit across the board, so
+  lands line up under creatures. Cards nobody has moved are centered in their row; a new card joins
+  a pile of identical cards (×N badge), or, in a row you've arranged, takes the free cell nearest
+  the middle of the cards there (alternating sides, so the group stays centered). Rows side by side
+  (stacked layout, short seats) fill from the left. Drag a card to any cell of any row: onto another
   card swaps them, and a card dragged from your hand lands in that cell once it's in play. Cards
   shrink to fit the seat. Arranging is only your view and never goes to the server; right-click
   the board to put everything back.
+- **Double-click a board** (anywhere but a card or button) to enlarge it over the table; double-click
+  it again, press Esc or click ✕ to go back. Same as ⤢ or "Enlarge … board" in its right-click menu.
 - Your hand: upright cards from the left. Click it (live games) or drag it onto your board to play
-  it. A double-click counts once.
+  it. A double-click counts once. Hold **Shift** as you drop a permanent card to put it onto the
+  battlefield without casting it (free play; same as the menu item below).
 - **Playable cards** glow green (live games, while you have priority): your cards you can cast,
   play or activate now, in hand, on the battlefield, in the command zone, graveyard or exile.
 - If a click does nothing, a message says why (not your turn, not a main phase, the stack isn't
   empty, you've already played a land…).
-- **Hover a card** for a moment (`HOVER_ZOOM_MS` in `game/CardZoom.tsx`, 1.2 s) and a large image of
-  it pops up beside the pointer. It goes away when you move off the card or click.
+- **Hover a card** for a moment (`HOVER_ZOOM_MS` in `game/CardZoom.tsx`, 2 s) and a large image of
+  it pops up beside the pointer. It goes away when you move off the card or click. Cards have no
+  browser tooltip (their hints are `aria-label`s), so nothing covers the zoom. Cards on the board use
+  Scryfall's "normal" image (488 px wide) at every size, so their text stays sharp on high-DPI screens.
 - **Right-click** a card for its menu (live games; the browser's own right-click menu is off on the
   table):
   - **📖 Card details:** the card beside its text and what's different about it in this game: in
     live games Forge's text (rules text plus granted abilities and the like), current P/T (green
     when changed), counters, summoning sick, tapped, kept from untapping, owner, and for a
-    commander how many times it's been cast from the command zone.
+    commander how many times it's been cast from the command zone. Then the card's official
+    rulings from Scryfall (`rulings` in `scryfall.ts`), open when there are four or fewer.
   - **Abilities:** everything Forge lets it do, greyed out when you can't do it now, with the
     reason.
   - **By hand** (manual overrides, like a paper table; outside the rules, logged "(by hand)", your
-    own cards only, except counters which go on any permanent): on the battlefield Tap/Untap, Turn
-    face down/up, counter rows with + and − (+1/+1, loyalty on planeswalkers, and any already on
-    it), 🔒 Doesn't untap next turn, 🔒 Never untaps by itself, Counter… (any kind and number),
-    Create a token copy, and moving it: to hand, graveyard, exile, command zone, top or bottom of
-    the library. In hand: 👁 Reveal to ▸ Everyone (or one opponent, with more than one), Put onto
-    the battlefield, and the same moves.
+    own cards only, except counters, until-end-of-turn effects, goad and remove from combat, which go
+    on any permanent). Common things are up front; the rest is in submenus so the menu stays short.
+    - On the battlefield: Tap/Untap; counter rows with + and − (+1/+1, loyalty on planeswalkers,
+      any already on it); **Add a counter ▸** (shield, stun, charge, lore, time, oil, finality,
+      keyword counters…, and Other / several…); **⏳ Until end of turn ▸** (Power / toughness ±N
+      and switch; Evasion and combat: can't be blocked, flying, menace, trample, first/double
+      strike, vigilance, haste, lifelink, deathtouch, reach; Restrictions: can't block, can't
+      attack, must be blocked, lure, prevent damage; Protection: indestructible, hexproof, shroud,
+      protection from a color or everything; on someone else's permanent, Gain control, untapped
+      with haste; creature groups only on creatures); **⚔ Put into combat attacking** (your
+      creature, on your turn once attackers are declared: tapped and attacking the opponent you
+      pick, unblocked if blockers are already declared); **Remove from combat** (any attacking or
+      blocking creature); **More ▸** (turn face down/up, Transform for double-faced cards, Goad on
+      someone else's creature, Phase out, 🔒 Doesn't untap next turn, 🔒 Never untaps by itself,
+      Create a token copy); **Move to ▸** hand, graveyard, exile, **Exile face down ▸**, command zone,
+      top or bottom of the library.
+    - In hand: **⤵ Put onto the battlefield (don't cast)** (permanent cards only, for effects like
+      "put a creature card from your hand onto the battlefield"), 👁 Reveal to ▸ Everyone (or one
+      opponent), **Discard** (a real discard, so madness and "whenever you discard" work), **More ▸**
+      Plot (exiled and plotted: Forge then lets you cast it free on a later turn as a sorcery),
+      Foretell (as Forge does it: face down, foretold, only you may look; a card with foretell can
+      then be cast for its foretell cost, any other card through Let me cast it), Suspend with 1–10
+      time counters (it gains suspend if it hasn't got it, like Jhoira of the Ghitu, so the upkeep
+      countdown and free cast happen), and **Move to ▸** (including Put onto the battlefield from other zones, permanents only).
+    - **▶ Let me cast it ▸** on your card in exile or your graveyard (or a face-down exiled card
+      you may look at): Paying its mana cost, Without paying its mana cost, or For another cost…
+      (type it, e.g. {1}{U}). For cards a new effect lets you cast that Forge doesn't know about. It
+      lasts until the card leaves that zone; then click the card to cast it as usual.
+    - **Let an opponent search it** (library ▸ More): that player's table opens your library for
+      them (the log says they searched it). They can right-click a card to exile it face down so
+      only they may look at it, or face up; it goes to your exile. Closing the window ends the
+      search and shuffles your library. They can then use Let me cast it on those cards.
+    - **Exile face down ▸** (in Move to, from any zone but exile): Only you may look at it (foretell,
+      hideaway), Only <opponent> may look at it, or Nobody. Forge keeps that permission while it's
+      in exile; hovering it says who can see it. You can still right-click your own face-down
+      exiled card to move it even when you may not look at it, and moving it to your hand or
+      library doesn't name it in the log.
+- **Right-click your library** (free play): Draw a card, 🔍 Search, Look at the top cards…,
+  **Scry ▸** / **Surveil ▸** / **Mill ▸** 1 to 5 or X…, More ▸ (reveal the top card, exile the top
+  card, draw / mill / exile several), 🔀 Shuffle. Scry and surveil open a window with the top cards
+  (only you see them): keep each on top, in the order shown (left is the top card), or send it to
+  the bottom (scry) or graveyard (surveil). The server does it as Forge's own scry or surveil, so
+  "whenever you scry / surveil" triggers happen.
+- **Select several cards** and right-click one of them for a menu that does the same thing to all
+  of them (`game/marks.tsx`): drag a box over empty space on a board, in your hand or in a card
+  viewer, or Shift/Ctrl/⌘-click cards to add or take them out (Shift/⌘ while dragging the box adds
+  to the selection). Selected cards have a purple outline; Esc or a click on empty space clears it.
+  On the battlefield: tap or untap them all (yours), counter rows with + and − for each, Add a
+  counter to each ▸ (Other / several… opens the counter window for all of them), ⏳ Until end of
+  turn, each ▸, put them into combat attacking or remove them from combat, More ▸ (goad, phase
+  out, token copies). In hand: put them onto the battlefield (all permanents), discard them. While
+  searching an opponent's library they let you search: exile them face down or face up. For cards
+  that are all yours, wherever they are: Move them to ▸. Each card is still its own action on the
+  server, logged by hand.
+- **Tap several cards for mana** (select your untapped permanents, right-click one): **💧 Tap for
+  mana…** opens a window with the mana they'll add by color. ▲ / ▼ by a color moves one mana to or
+  from another color (a dual land switches), and each card's own choice is listed underneath.
+  Cards can also be tapped for another permanent's "Tap an untapped artifact you control: Add {U}"
+  (Urza, Lord High Artificer): the menu offers **💧 Tap each for Urza…: {U} each** directly. It's
+  each card's real mana ability (with its triggers), allowed whenever you could tap for mana: with
+  priority, while paying, or any time with free play. Cards that hurt you say so with ♥: a pain
+  land starts on its free {C}, and its colors are listed with "♥ 1 damage"; Mana Confluence shows
+  "♥ 1 life"; City of Brass's "becomes tapped" damage counts too. ▲ / ▼ prefer a switch that
+  doesn't hurt (a dual before a pain land) and turn red when the only way costs life, and the window
+  totals what it'll cost you. Abilities with other costs (mana, sacrifice) aren't offered; tap
+  those one at a time. "Tap them all (by hand, no mana)" is the
+  free-play tap that makes no mana.
+- **Your mana pool** shows by your name (and everyone's by theirs) when it has mana. While you pay
+  a cost, click a symbol there to pay one of that color, or **Use floating** in the pay window for
+  as much as it can pay.
+- **Find a card in a card viewer** (your library while you search it, a graveyard, exile…): type in
+  the box at the top. Words match the name; Scryfall's search syntax works too, run on the cards'
+  Scryfall data (`game/scryquery.ts`): `t:` type, `o:` rules text (`~` is the card's name), `c:`
+  colors (at least these), `id:` color identity (within these), `m:` mana cost, `mv`/`cmc`, `pow`,
+  `tou`, `loy` with `: = != < > <= >=` (`pow>tou` works), `r:` rarity, `kw:` keyword, `is:`
+  (permanent, spell, creature, legendary, multicolored, colorless, commander, historic…),
+  `-` to negate, `or`, parentheses, quotes and `!"exact name"`. Color words and guild/shard names
+  work (`c:izzet`, `id:esper`). A query it can't read says why.
+- **Menus and the hover card stay on screen:** a menu near an edge opens the other way, a submenu
+  opens on whichever side has room and moves up to fit, and a menu taller than the window scrolls.
+  The large hover card fits the window's height and moves as its image loads.
 - **Right-click a zone tile or a board** to view the zone, enlarge the board,
   reset its layout, or pass priority.
 - **The stack** is a floating window over the table (`game/StackWindow.tsx`), shown while

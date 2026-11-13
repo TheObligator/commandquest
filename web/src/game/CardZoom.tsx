@@ -5,13 +5,13 @@
 //   Scryfall oracle text next to it (every face), plus what's on it in this game.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { manaCost, rulesText } from "../dom";
-import { cached, imageUrl, type CardFace } from "../scryfall";
+import { cached, imageUrl, rulings, type CardFace, type Ruling } from "../scryfall";
 import { CardBack, tokenImage, type Preview } from "./cards";
 import type { CardDetails } from "./useLiveGame";
 import type { CardView } from "./view";
 
 /** How long the pointer rests on a card before it's shown large. */
-export const HOVER_ZOOM_MS = 1200;
+export const HOVER_ZOOM_MS = 2000;
 
 function bigImage(card: CardView): string | undefined {
   if (card.hidden) return undefined;
@@ -53,11 +53,18 @@ export function HoverZoom({ preview }: { preview: Preview | null }) {
   useLayoutEffect(() => {
     const el = ref.current;
     if (!shown || !el) return;
-    const r = el.getBoundingClientRect();
-    const { x, y } = pointer.current;
-    const left = x + 24 + r.width < innerWidth - 8 ? x + 24 : Math.max(8, x - 24 - r.width);
-    const top = Math.max(8, Math.min(y - r.height / 2, innerHeight - r.height - 8));
-    setPos({ left, top });
+    // Beside the pointer, inside the window; again whenever its size changes (a note, a late image).
+    const place = () => {
+      const r = el.getBoundingClientRect();
+      const { x, y } = pointer.current;
+      const left = x + 24 + r.width < innerWidth - 8 ? x + 24 : Math.max(8, x - 24 - r.width);
+      const top = Math.max(8, Math.min(y - r.height / 2, innerHeight - r.height - 8));
+      setPos((p) => (p && p.left === left && p.top === top ? p : { left, top }));
+    };
+    place();
+    const ro = new ResizeObserver(place);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [shown]);
 
   if (!shown) return null;
@@ -126,6 +133,20 @@ export function CardInspect({ card, loadDetails, ownerName, onClose }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [card.id, stateKey]);
 
+  // Official rulings, for real cards whose name we know (not tokens or hidden cards).
+  const [rules, setRules] = useState<Ruling[] | "error" | null>(null);
+  useEffect(() => {
+    if (!card.name || card.token || card.hidden) return;
+    let live = true;
+    rulings(card.name).then(
+      (r) => live && setRules(r),
+      () => live && setRules("error"),
+    );
+    return () => {
+      live = false;
+    };
+  }, [card.name, card.token, card.hidden]);
+
   const sc = card.name && !card.token ? cached({ name: card.name, quantity: 1, board: "main" }) : undefined;
   const faces: CardFace[] = sc ? (sc.card_faces?.length ? sc.card_faces : [sc as CardFace]) : [];
   const src = bigImage(card);
@@ -191,6 +212,29 @@ export function CardInspect({ card, loadDetails, ownerName, onClose }: {
             <section className="ci-sec">
               {facts.map((f) => <h3 key={f}>{f}</h3>)}
             </section>
+          )}
+          {card.name && !card.token && !card.hidden && (
+            <details className="ci-sec ci-rulings" open={Array.isArray(rules) && rules.length <= 4}>
+              <summary>
+                <h3>Rulings{Array.isArray(rules) && ` (${rules.length})`}</h3>
+              </summary>
+              {rules === null ? (
+                <p className="muted">Looking up rulings…</p>
+              ) : rules === "error" ? (
+                <p className="muted">Couldn't load rulings from Scryfall.</p>
+              ) : rules.length === 0 ? (
+                <p className="muted">No rulings for this card.</p>
+              ) : (
+                <ul>
+                  {rules.map((r, i) => (
+                    <li key={i}>
+                      <time dateTime={r.published_at}>{r.published_at}</time>
+                      <Rules text={r.comment} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </details>
           )}
           <p className="ci-owner">
             Owner: {ownerName}

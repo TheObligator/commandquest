@@ -160,7 +160,9 @@ public final class ComboGuard {
         }
         // an activated ability with nothing to act on (Oran-Rief with no new green creature): see ActivationGuard
         final String idle = ActivationGuard.problem(ai, sa);
-        if (idle != null) {
+        // "valuable-sacrifice" is the outlet guard's own reading of the evaluator: the combo guard has the sacrifice rules of
+        // the deck plan (sacrifice-key), and a deck without a combo plan sacrifices as the heuristics decide
+        if (idle != null && !"valuable-sacrifice".equals(idle)) {
             return idle;
         }
         // Demonic Consultation exiles the library: only to win, with the Oracle's trigger on the stack (ConsultationWin)
@@ -211,6 +213,16 @@ public final class ComboGuard {
         if (sa.isSpell() && host.isPermanent() && !host.isLand() && AiCardLists.has(AiCardLists.Role.COMBO_ENGINE, host.getName())
                 && controlsWorkingCopy(ai, host)) {
             return "duplicate-engine";
+        }
+        // Channel (and any spell that only gives life-for-mana until end of turn) with no payoff in hand to spend it on:
+        // the spell would be a wasted card, see EnablerGuard
+        final String illegal = LegalityGuard.problem(ai, sa);
+        if (illegal != null) {
+            return illegal;
+        }
+        final String enabler = EnablerGuard.problem(ai, sa);
+        if (enabler != null) {
+            return enabler;
         }
         return null;
     }
@@ -305,6 +317,7 @@ public final class ComboGuard {
                         || ma.getPayCosts().hasSpecificCostType(CostDiscard.class))) {
                     continue; // used up by making the mana
                 }
+                ManaConversion.withActivator(ma); // asking what it makes checks its conditions, which want an activator
                 try {
                     best = Math.max(best, Math.max(1, ma.amountOfManaGenerated(false)));
                     for (int i = 0; i < 5; i++) {
@@ -533,7 +546,7 @@ public final class ComboGuard {
         if (!c.isCreature()) {
             return true;
         }
-        if (c.getNetPower() <= 0) {
+        if (c.getNetCombatDamage() <= 0) {
             return false;
         }
         if (c.isTapped() && c.hasKeyword("CARDNAME doesn't untap during your untap step.")) {
@@ -752,7 +765,7 @@ public final class ComboGuard {
         int damage = 0;
         final List<Integer> blockable = new ArrayList<>();
         for (final Card a : attackers) {
-            final int power = Math.max(0, a.getNetPower());
+            final int power = Math.max(0, a.getNetCombatDamage());
             boolean stoppable = false;
             for (final Card b : blockers) {
                 if (CombatUtil.canBlock(a, b)) {

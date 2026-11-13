@@ -17,11 +17,18 @@ The game screen has a vertical phase strip on the right. Every step is a tile sp
 - **Stops only affect an empty stack.** As on MTGO, you always get priority when something is on the
   stack or the game needs a decision from you (attackers, blockers, targets…). Untap and cleanup
   have no priority (CR 502.4, 514.3), so they can't hold stops.
+- **Automatic upkeep stop.** If you can use an ability that only works during upkeep ("Activate
+  only during your upkeep": Rock Hydra, Undead Gladiator from your graveyard, Tolaria…) and can pay
+  for it, the game stops in that upkeep even without a stop there, and a toast says which card it
+  stopped for (once per turn). Auto-pass still skips it. Server side: `UpkeepStop` and
+  `WebPlayerController.isUiSetToSkipPhase`.
 - **Pass (Space)** passes priority once. Keys are the player's own (Settings); the defaults are given here.
 - **Auto-pass** (left rail) skips ahead, ignoring your stops but still stopping when something goes
   on the stack (`autoPassStatus` in `phases.ts`):
   - **End of turn (E):** skip the rest of this turn; your stops apply again from the next turn.
   - **Before my turn (B):** skip until the end step of the player right before you.
+  - **Until my turn (M):** skip everything, that end step included, until your next turn starts;
+    your own stops apply from there. Chosen on your own turn, it skips the rest of that turn too.
   - **Action / end step (R):** skip until someone casts something, or this turn's end step.
 - **Hold priority (Shift, under the phase strip):** off, casting a spell or activating an ability
   passes priority once it's on the stack, as on MTGO. On, you keep priority, so you can cast more
@@ -35,7 +42,9 @@ The game screen has a vertical phase strip on the right. Every step is a tile sp
 
 Defaults (`DEFAULT_PRESET` in `web/src/game/phases.ts`, used by the client and by Convex):
 
-- **Your turn:** upkeep, draw, main 1, beginning of combat, declare blockers, main 2
+- **Your turn:** main 1, beginning of combat, declare blockers, main 2. Upkeep and draw are off:
+  a trigger there (or anything else on the stack) still gives you priority, so they only matter
+  for instant-speed plays with an empty stack.
 - **Opponents' turns:** beginning of combat, declare attackers, declare blockers, end step. These
   are the usual windows to respond on someone else's turn.
 

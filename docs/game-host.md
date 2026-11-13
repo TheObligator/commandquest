@@ -22,12 +22,14 @@ Splitting it into a staging and a production server comes later.
 
 | Command | What it does |
 |---|---|
-| `deploy` | Checks out `web` (or `REF=<branch or sha>`) in its own worktree (`~/.commandquest/game/src`), builds it with tests, installs the jar and (re)starts the services. A failed build leaves the running server alone. |
+| `deploy` | Fetches and checks out `origin/web` (or `REF=<branch or sha>`) in its own worktree (`~/.commandquest/game/src`), builds it with tests, installs the jar and (re)starts the services. A failed build leaves the running server alone. |
 | `status` | Both services, the commit running, and `/health` on localhost and through the tunnel |
 | `logs` | Follows `~/Library/Logs/commandquest-game.log` and `commandquest-tunnel.log` |
 | `restart` | Restarts the server and tunnel |
 | `set-token` | Saves the tunnel token to `~/.commandquest/game/tunnel-token` (mode 600, never in the repo) |
-| `uninstall` | Removes both services |
+| `auto-on` | Every 15 minutes, deploys `origin/web` if it's newer than what's running and no game is in progress (see Updating) |
+| `auto-off` | Stops the auto-deploy job |
+| `uninstall` | Removes the services |
 
 Deploying builds a commit, not this working tree, so switching branches here doesn't change what
 players are on. It's separate from the dev service (`web/scripts/dev-service.sh`, port 8080).
@@ -59,8 +61,18 @@ The site finds the server through `VITE_GAME_SERVER` in `web/.env.production` an
 
 ## Updating
 
-After pushing to `web`, run `game-service.sh deploy`. Games in progress end when the server
-restarts, so deploy when nobody's playing (the lobby will show a warning once games exist).
+Games in progress end when the server restarts, so it only restarts when nobody's playing.
+
+With `game-service.sh auto-on`, a launchd job (`com.commandquest.autodeploy`, log
+`~/Library/Logs/commandquest-autodeploy.log`) checks every 15 minutes. When `origin/web` has moved
+past what's running and `/health` says `"games":0`, it deploys. It checks again after the build,
+before restarting, in case a game started meanwhile. A commit whose build or tests fail isn't
+retried (it's recorded in `~/.commandquest/game/failed`) until a newer one lands, and the running
+server stays as it was. The job runs a copy of this script, `~/.commandquest/game/game-service.sh`,
+refreshed by each deploy.
+
+This is how the nightly Forge sync (docs/deploy.md) reaches games. To deploy right away instead,
+run `game-service.sh deploy`, which doesn't wait for games to finish.
 
 ## The engine inside the server
 
@@ -75,6 +87,10 @@ restarts, so deploy when nobody's playing (the lobby will show a warning once ga
   play use, so every rules prompt (targets, modes, blockers, mulligans…) is Forge's. Its prompts reach
   a seat through an `IRemote`. In production that's the player's WebSocket, and in the tests a
   scripted stand-in. Other seats are Forge AI.
+- Human seats are created by `WebLobbyPlayer` with `WebPlayerController`, a small subclass of
+  Forge's controller that plays the mulligan as Commander does: the first mulligan is free even
+  1v1 (Forge only frees it with 3+ players or in Brawl), and cards go to the bottom once you keep,
+  not straight after each mulligan (London mulligan, CR 103.5).
 - `HeadlessGui` gives Forge the single UI thread it expects (`forge-ui`). Browser answers are applied
   on that thread.
 

@@ -50,9 +50,9 @@ export interface StopPreset {
   seats?: StepId[][];
 }
 
-/** Must match StopPreset.DEFAULT on the server. */
+/** Upkeep and draw are left out: you still get priority there when something goes on the stack. */
 export const DEFAULT_PRESET: StopPreset = {
-  self: ["UPKEEP", "DRAW", "MAIN1", "COMBAT_BEGIN", "COMBAT_DECLARE_BLOCKERS", "MAIN2"],
+  self: ["MAIN1", "COMBAT_BEGIN", "COMBAT_DECLARE_BLOCKERS", "MAIN2"],
   opponents: ["COMBAT_BEGIN", "COMBAT_DECLARE_ATTACKERS", "COMBAT_DECLARE_BLOCKERS", "END_OF_TURN"],
 };
 
@@ -132,9 +132,10 @@ export interface PriorityContext {
  * stack still gives you priority.
  *  - END_OF_TURN (E): skip the rest of this turn. Your stops apply again from the next turn.
  *  - BEFORE_MY_TURN (B): skip until the end step of the player right before you.
+ *  - UNTIL_MY_TURN (M): skip until your next turn starts; your stops apply again from there.
  *  - ACTION_OR_END_STEP (R): skip until someone does something, or this turn's end step.
  */
-export type AutoPassMode = "END_OF_TURN" | "BEFORE_MY_TURN" | "ACTION_OR_END_STEP";
+export type AutoPassMode = "END_OF_TURN" | "BEFORE_MY_TURN" | "UNTIL_MY_TURN" | "ACTION_OR_END_STEP";
 
 export interface AutoPass {
   mode: AutoPassMode;
@@ -155,6 +156,8 @@ export function autoPassStatus(ap: AutoPass, ctx: { activePlayer: string; step: 
       const before = ctx.turnOrder[(i - 1 + ctx.turnOrder.length) % ctx.turnOrder.length];
       return ctx.activePlayer === before && ctx.step === "END_OF_TURN" ? "stop" : "running";
     }
+    case "UNTIL_MY_TURN":
+      return ctx.activePlayer === ctx.me && ctx.turn > ap.turn ? "expired" : "running";
   }
 }
 

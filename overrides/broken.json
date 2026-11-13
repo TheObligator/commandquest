@@ -1,0 +1,35 @@
+{
+  "_comment": "Cards Forge has a script for that we know don't work right. The deck editor marks them with the reason. Remove an entry once Forge or an override in overrides/cards fixes the card, then run `npm run cardsupport` in web/. `issue` is the Forge bug report to watch.",
+  "cards": {
+    "Esix, Fractal Bloom": {
+      "reason": "When an effect makes several tokens at once (Terastodon, Ezuri's Predation), only the first one can become a copy.",
+      "issue": "https://github.com/Card-Forge/forge/issues/5176",
+      "date": "2026-11-12"
+    },
+    "Garruk, Veiled Butcher": {
+      "reason": "Its -3 can discard fewer than two cards per opponent, and its exile replacement applies outside the battlefield. A fix is waiting in Forge.",
+      "issue": "https://github.com/Card-Forge/forge/issues/12143",
+      "date": "2026-11-12"
+    },
+    "Lifecraft Engine": {
+      "reason": "Vehicles stop having the chosen creature type after the first time they stop being creatures.",
+      "issue": "https://github.com/Card-Forge/forge/issues/7128",
+      "date": "2026-11-12"
+    },
+    "Out of Time": {
+      "reason": "If its controller loses the game, the phased-out creatures never phase back in.",
+      "issue": "https://github.com/Card-Forge/forge/issues/12436",
+      "date": "2026-11-12"
+    },
+    "Outpost Siege": {
+      "reason": "Khans: if you start casting the exiled card and cancel, you can't cast it again that turn.",
+      "issue": "https://github.com/Card-Forge/forge/issues/4745",
+      "date": "2026-11-12"
+    },
+    "Sin Prodder": {
+      "reason": "Its upkeep trigger can freeze multiplayer games, waiting forever for an opponent's choice.",
+      "issue": "https://github.com/Card-Forge/forge/issues/6236",
+      "date": "2026-11-12"
+    }
+  }
+}

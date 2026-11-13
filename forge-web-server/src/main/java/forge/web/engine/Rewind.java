@@ -505,27 +505,41 @@ public final class Rewind {
                 return "You can't rewind to there.";
             }
             // Declaring again starts from what was declared: only the changes need making.
-            Plan plan = kind.equals(ATTACKERS) ? attackPlan(null, false) : kind.equals(BLOCKERS) ? blockPlan(by, null, false) : null;
+            Plan plan = kind.equals(ATTACKERS) ? attackPlan(List.of(), false) : kind.equals(BLOCKERS) ? blockPlan(by, List.of(), false) : null;
             return ask(by, target, plan);
         }
     }
 
-    /**
-     * {@code by} wants this creature of theirs in or out of the attack (or the blocks) declared this combat: a rewind
-     * to just before they were declared, with the same declaration clicked back in, plus or minus this creature. Until
-     * combat damage.
-     */
+    /** {@link #requestChange(Player, List)} for one creature. */
     public String requestChange(Player by, int cardId) {
+        return requestChange(by, List.of(cardId));
+    }
+
+    /**
+     * {@code by} wants these creatures of theirs in or out of the attack (or the blocks) declared this combat: a
+     * rewind to just before they were declared, with the same declaration clicked back in, plus or minus these
+     * creatures. They must all be in it, or all out of it. Until combat damage.
+     */
+    public String requestChange(Player by, List<Integer> cardIds) {
         synchronized (this) {
             String why = cantAsk(by);
             if (why != null) {
                 return why;
             }
-            Card card = game.findById(cardId);
             var combat = game.getPhaseHandler().getCombat();
-            if (card == null || combat == null || card.getController() != by || !card.isCreature()
-                    || !card.isInZone(forge.game.zone.ZoneType.Battlefield)) {
-                return "That can't be changed now.";
+            List<Card> cards = new ArrayList<>();
+            for (int id : cardIds) {
+                Card card = game.findById(id);
+                if (card == null || combat == null || card.getController() != by || !card.isCreature()
+                        || !card.isInZone(forge.game.zone.ZoneType.Battlefield)) {
+                    return "That can't be changed now.";
+                }
+                if (!cards.contains(card)) {
+                    cards.add(card);
+                }
+            }
+            if (cards.isEmpty()) {
+                return "Pick a creature of yours.";
             }
             boolean attacking = combat.getAttackingPlayer() == by;
             String kind = attacking ? ATTACKERS : BLOCKERS;
@@ -533,13 +547,18 @@ public final class Rewind {
             if (target == null) {
                 return attacking ? "Attackers can only be changed until combat damage." : "Blockers can only be changed in the declare blockers step.";
             }
-            Plan plan = attacking ? attackPlan(card, true) : blockPlan(by, card, true);
-            if (plan == null) {
-                return "There's nothing for it to block.";
+            java.util.function.Predicate<Card> inIt = attacking ? combat::isAttacking : combat::isBlocking;
+            boolean in = cards.stream().allMatch(inIt);
+            if (!in && cards.stream().anyMatch(inIt)) {
+                return attacking ? "Pick creatures that are all attacking, or none of them." : "Pick creatures that are all blocking, or none of them.";
             }
-            boolean in = attacking ? combat.isAttacking(card) : combat.isBlocking(card);
+            Plan plan = attacking ? attackPlan(cards, in) : blockPlan(by, cards, in);
+            if (plan == null) {
+                return "There's nothing for them to block.";
+            }
+            String who = cards.size() == 1 ? cards.get(0).getName() : cards.size() + " creatures";
             String label = (attacking ? in ? "Stop attacking with " : "Attack with " : in ? "Stop blocking with " : "Block with ")
-                    + card.getName() + (in ? "" : " too");
+                    + who + (in ? "" : " too");
             return ask(by, new Option(target.point(), target.level(), label, target.turn(), target.phase(), target.player(),
                     false, kind), plan);
         }
@@ -558,66 +577,59 @@ public final class Rewind {
         return null;
     }
 
-    /** This combat's attacks, with {@code toggle} added or taken out. */
-    private Plan attackPlan(Card toggle, boolean change) {
+    /** This combat's attacks, with {@code change} taken out ({@code out}) or added (to the defender most attack). */
+    private Plan attackPlan(List<Card> change, boolean out) {
         var combat = game.getPhaseHandler().getCombat();
         if (combat == null) {
             return null;
         }
         List<int[]> pairs = new ArrayList<>();
         java.util.Map<forge.game.GameEntity, Integer> often = new java.util.HashMap<>();
-        boolean removed = false;
         for (Card a : combat.getAttackers()) {
             forge.game.GameEntity d = combat.getDefenderByAttacker(a);
-            if (d == null) {
-                continue;
-            }
-            if (change && a == toggle) {
-                removed = true;
+            if (d == null || out && change.contains(a)) {
                 continue;
             }
             often.merge(d, 1, Integer::sum);
             pairs.add(new int[] {a.getId(), d.getId(), d instanceof Player ? 1 : 0});
         }
-        if (change && !removed) {
+        if (!out && !change.isEmpty()) {
             // the defender most of the others attack, else the first one there is
             forge.game.GameEntity d = often.entrySet().stream().max(java.util.Map.Entry.comparingByValue())
                     .map(java.util.Map.Entry::getKey).orElse(combat.getDefenders().isEmpty() ? null : combat.getDefenders().get(0));
             if (d == null) {
                 return null;
             }
-            pairs.add(new int[] {toggle.getId(), d.getId(), d instanceof Player ? 1 : 0});
+            for (Card c : change) {
+                pairs.add(new int[] {c.getId(), d.getId(), d instanceof Player ? 1 : 0});
+            }
         }
         return new Plan(combat.getAttackingPlayer(), true, pairs);
     }
 
-    /** {@code by}'s blocks this combat, with {@code toggle} added (to an attacker coming at them) or taken out. */
-    private Plan blockPlan(Player by, Card toggle, boolean change) {
+    /** {@code by}'s blocks this combat, with {@code change} taken out ({@code out}) or added (to an attacker coming at them). */
+    private Plan blockPlan(Player by, List<Card> change, boolean out) {
         var combat = game.getPhaseHandler().getCombat();
         if (combat == null) {
             return null;
         }
         List<int[]> pairs = new ArrayList<>();
-        boolean removed = false;
         for (Card a : combat.getAttackers()) {
             for (Card b : combat.getBlockers(a)) {
-                if (b.getController() != by) {
-                    continue;
+                if (b.getController() == by && !(out && change.contains(b))) {
+                    pairs.add(new int[] {b.getId(), a.getId()});
                 }
-                if (change && b == toggle) {
-                    removed = true;
-                    continue;
-                }
-                pairs.add(new int[] {b.getId(), a.getId()});
             }
         }
-        if (change && !removed) {
+        if (!out && !change.isEmpty()) {
             Card attacker = combat.getAttackersOf(by).stream().findFirst()
                     .orElse(combat.getAttackers().isEmpty() ? null : combat.getAttackers().get(0));
             if (attacker == null) {
                 return null;
             }
-            pairs.add(new int[] {toggle.getId(), attacker.getId()});
+            for (Card c : change) {
+                pairs.add(new int[] {c.getId(), attacker.getId()});
+            }
         }
         return new Plan(by, false, pairs);
     }

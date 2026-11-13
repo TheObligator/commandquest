@@ -18,13 +18,21 @@ export function ContextMenu({ menu, onClose }: { menu: ContextMenuState; onClose
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
+  // Keep it on screen, also as its sections arrive (it grows): flip up near the bottom, and a menu
+  // taller than the window scrolls (max-height in CSS).
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const m = el.getBoundingClientRect();
-    const left = Math.min(menu.x, innerWidth - m.width - 8);
-    const top = menu.y + m.height > innerHeight - 8 ? Math.max(8, menu.y - m.height) : menu.y;
-    setPos({ top, left: Math.max(8, left) });
+    const place = () => {
+      const m = el.getBoundingClientRect();
+      const left = clamp(menu.x, 8, innerWidth - m.width - 8);
+      const top = clamp(menu.y + m.height > innerHeight - 8 ? menu.y - m.height : menu.y, 8, innerHeight - m.height - 8);
+      setPos((p) => (p && p.top === top && p.left === left ? p : { top, left }));
+    };
+    place();
+    const ro = new ResizeObserver(place);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [menu]);
 
   useEffect(() => {
@@ -35,16 +43,20 @@ export function ContextMenu({ menu, onClose }: { menu: ContextMenuState; onClose
     const onContext = (e: MouseEvent) => {
       if (!ref.current?.contains(e.target as Node)) onClose();
     };
+    // Scrolling the menu itself (a long one) keeps it open; scrolling the page closes it.
+    const onScroll = (e: Event) => {
+      if (!ref.current?.contains(e.target as Node)) onClose();
+    };
     document.addEventListener("pointerdown", onDown, true);
     document.addEventListener("keydown", onKey);
     document.addEventListener("contextmenu", onContext, true);
-    window.addEventListener("scroll", onClose, true);
+    window.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", onClose);
     return () => {
       document.removeEventListener("pointerdown", onDown, true);
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("contextmenu", onContext, true);
-      window.removeEventListener("scroll", onClose, true);
+      window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onClose);
     };
   }, [onClose]);
@@ -80,14 +92,26 @@ export function ContextMenu({ menu, onClose }: { menu: ContextMenuState; onClose
 }
 
 /** One menu row: a button, optionally with +/− buttons at the end, or a submenu beside it. */
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(v, hi));
+
 function Row({ item, onClose }: { item: MenuItem; onClose: () => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const [left, setLeft] = useState(false);
+  const panel = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  // The submenu is position: fixed, placed beside its row (right, or left when there's no room)
+  // and kept inside the window; a long one scrolls.
   useLayoutEffect(() => {
-    if (!open || !ref.current) return;
-    const r = ref.current.getBoundingClientRect();
-    setLeft(r.right + 220 > innerWidth); // no room on the right: open to the left
+    if (!open) {
+      setPos(null);
+      return;
+    }
+    const row = ref.current?.getBoundingClientRect();
+    const p = panel.current?.getBoundingClientRect();
+    if (!row || !p) return;
+    // Touching the row (no gap), so moving the pointer across doesn't leave the row and close it.
+    const left = row.right - 2 + p.width <= innerWidth - 8 ? row.right - 2 : Math.max(8, row.left + 2 - p.width);
+    setPos({ left, top: clamp(row.top - 5, 8, innerHeight - p.height - 8) });
   }, [open]);
   if (item.submenu) {
     return (
@@ -96,7 +120,7 @@ function Row({ item, onClose }: { item: MenuItem; onClose: () => void }) {
           {item.label} <span className="cm-arrow" aria-hidden>▸</span>
         </button>
         {open && (
-          <div className={`card-menu cm-subpanel${left ? " to-left" : ""}`} role="menu" aria-label={item.label}>
+          <div ref={panel} className="card-menu cm-subpanel" style={pos ?? { top: -9999, left: -9999 }} role="menu" aria-label={item.label}>
             {item.submenu.map((sub, k) => (
               <Row key={`${k}-${sub.label}`} item={sub} onClose={onClose} />
             ))}

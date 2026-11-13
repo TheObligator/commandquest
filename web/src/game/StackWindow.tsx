@@ -212,7 +212,7 @@ function StackDetail(props: { item: StackItemView; number: number; x: number; y:
 
   const sections = menu.filter((s) => s.items.length);
   return (
-    <div ref={ref} className="stk-detail-wrap" style={pos} onContextMenu={(e) => e.preventDefault()}>
+    <div ref={ref} className="stk-detail-wrap" style={pos} onContextMenu={(e) => (e.preventDefault(), e.stopPropagation())}>
       {sections.length > 0 && (
         <div className="card-menu stk-menu" role="menu" aria-label={`${item.name} settings`}>
           {sections.map((s, i) => (

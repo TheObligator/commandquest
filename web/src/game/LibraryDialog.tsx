@@ -2,13 +2,15 @@
 // the top N cards. The server does it by hand and the game log tells the table.
 import { useEffect, useRef, useState } from "react";
 
-export type LibraryCountAction = "draw" | "mill" | "exile" | "look";
+export type LibraryCountAction = "draw" | "mill" | "exile" | "look" | "scry" | "surveil";
 
 const ACTIONS: { action: LibraryCountAction; label: string }[] = [
   { action: "draw", label: "Draw" },
   { action: "mill", label: "Mill" },
   { action: "exile", label: "Exile" },
   { action: "look", label: "Look at" },
+  { action: "scry", label: "Scry" },
+  { action: "surveil", label: "Surveil" },
 ];
 
 export function LibraryDialog({ size, initial, onClose, onApply }: {
@@ -39,7 +41,7 @@ export function LibraryDialog({ size, initial, onClose, onApply }: {
           How many ({size} in your library)
           <input type="number" min={1} max={Math.min(99, size)} value={count} onChange={(e) => setCount(Number(e.target.value))} autoFocus />
         </label>
-        <div className="cd-btns">
+        <div className="cd-btns" style={{ flexWrap: "wrap" }}>
           {ACTIONS.map((a) => (
             <button key={a.action} type={a.action === initial ? "submit" : "button"} className={`btn small${a.action === initial ? "" : " ghost"}`} disabled={!valid}
               onClick={a.action === initial ? undefined : () => apply(a.action)}>

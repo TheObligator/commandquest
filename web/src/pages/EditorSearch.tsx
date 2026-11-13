@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Board, DeckCard } from "../../convex/model/deckRules";
 import { errorMessage } from "../app/errors";
 import { showCardDetails } from "../carddetails";
+import { useCardSupport } from "../cardsupport";
 import { CardMenu } from "../components/CardMenu";
 import { cardLegality, isCommanderEligible } from "../formats/conquest";
 import * as scry from "../scryfall";
@@ -155,6 +156,7 @@ export function SearchResults(props: {
   const [error, setError] = useState("");
   const [next, setNext] = useState<string>();
   const [loadingMore, setLoadingMore] = useState(false);
+  const support = useCardSupport();
 
   useEffect(() => {
     let live = true;
@@ -220,6 +222,7 @@ export function SearchResults(props: {
           const inDeck = entries(c);
           const count = inDeck.reduce((n, e) => n + e.quantity, 0);
           const verdict = props.format === "conquest" ? cardLegality(c) : { ok: true, reason: undefined };
+          const playable = support?.status(c);
           const img = scry.imageUrl(c, "normal");
           const commander = canCommand(c, props.format);
           const details = () =>
@@ -233,6 +236,9 @@ export function SearchResults(props: {
                 {img ? <img src={img} alt={c.name} loading="lazy" /> : <span className="noimg">{c.name}</span>}
               </button>
               {!verdict.ok && <span className="legal-badge" title={`Not legal in Conquest: ${verdict.reason}`}>Not legal</span>}
+              {playable && !playable.works && (
+                <span className={`nw-badge tile-nw${verdict.ok ? "" : " below"}`} title={playable.reason}>{playable.missing ? "Not playable" : "Known issue"}</span>
+              )}
               {count > 0 && (
                 <span className="in-deck-badge" title={inDeck.map((e) => `${e.quantity} in ${boardLabel(e.board).toLowerCase()}`).join(", ")}>
                   {count} in deck

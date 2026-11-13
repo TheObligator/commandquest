@@ -137,6 +137,17 @@ public final class ViewJson {
             casts += p.getCommanderCast(c);
         }
         o.put("commanderCasts", casts);
+        // Mana in their pool (floating), by symbol: W U B R G C. Public, like at a paper table.
+        ObjectNode pool = json.createObjectNode();
+        for (byte b : forge.card.mana.ManaAtom.MANATYPES) {
+            int n = p.getMana(b);
+            if (n > 0) {
+                pool.put(forge.card.MagicColor.toShortString(b), n);
+            }
+        }
+        if (!pool.isEmpty()) {
+            o.set("mana", pool);
+        }
         o.put("libraryCount", p.getZoneSize(ZoneType.Library));
         o.put("handCount", p.getZoneSize(ZoneType.Hand));
         o.set("hand", cards(gv, p.equals(viewer) || seeAll ? p.getHand() : null, viewer));
@@ -177,6 +188,13 @@ public final class ViewJson {
         boolean onBattlefield = c.getZone() == ZoneType.Battlefield;
         if (c.isFaceDown()) {
             o.put("faceDown", true);
+            // Who may look at it (a face-down exiled card: foretell, hideaway, or exiled so by hand). Public.
+            ArrayNode lookers = null;
+            for (PlayerView p : gv.getPlayers()) {
+                if (c.mayPlayerLook(p)) {
+                    (lookers == null ? lookers = o.putArray("visibleTo") : lookers).add(id(p));
+                }
+            }
         }
         CardStateView state = c.getCurrentState();
         boolean seen = revealed || sees(c, viewer);

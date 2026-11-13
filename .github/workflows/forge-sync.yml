@@ -1,0 +1,123 @@
+# Nightly: merge upstream Forge into `web`, so staging gets Forge's card fixes and new cards.
+#
+#   fetch Card-Forge/forge master -> merge into web -> regenerate precons.json and card-support.json
+#   -> server and site tests -> push master (the mirror) and web -> start the Web workflow (deploys
+#   staging; the Mac's auto-deploy picks up the game server when no game is running)
+#
+# Nothing is pushed unless every test passes. A conflict or a failing test fails the run, and GitHub
+# emails a failed scheduled run to whoever last changed its schedule. `live` is never touched. See
+# docs/deploy.md.
+name: Forge sync
+
+on:
+  schedule:
+    - cron: "0 10 * * *" # 10:00 UTC: 2 am Pacific
+  workflow_dispatch:
+
+permissions:
+  contents: write # push master and web
+  actions: write # start the Web workflow: a push made with GITHUB_TOKEN doesn't trigger it
+
+concurrency:
+  group: forge-sync
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "24"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      # No stored credentials: Forge's build and tests run below, and only the push step gets the token.
+      - uses: actions/checkout@v5
+        with:
+          ref: web
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+
+      - name: Merge upstream Forge
+        id: merge
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/Card-Forge/forge.git
+          git fetch --no-tags upstream master
+          n=$(git rev-list --count HEAD..upstream/master)
+          echo "commits=$n" >> "$GITHUB_OUTPUT"
+          if [ "$n" = 0 ]; then
+            echo "Already up to date with Forge."
+            exit 0
+          fi
+          git merge --no-edit -m "Merge upstream Forge: $n commits" upstream/master \
+            || { git diff --name-only --diff-filter=U; echo "::error::Merging Forge conflicts with web"; exit 1; }
+
+      # Always: the broken-cards check at the end runs even on nights with nothing to merge.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Regenerate precons.json and card-support.json
+        if: steps.merge.outputs.commits != '0'
+        working-directory: web
+        run: |
+          npm ci
+          npm run precons
+          npm run cardsupport
+          if ! git diff --quiet -- public; then
+            git add public
+            git commit --amend --no-edit
+          fi
+
+      - uses: actions/setup-java@v5
+        if: steps.merge.outputs.commits != '0'
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+      - name: Build and test forge-web-server
+        if: steps.merge.outputs.commits != '0'
+        run: mvn -B -f forge-web-server/reactor.xml package
+      - name: Site tests and build
+        if: steps.merge.outputs.commits != '0'
+        working-directory: web
+        run: |
+          npm test
+          npx tsc -p convex --noEmit
+          npm run build:staging
+
+      # --atomic: master and web move together or not at all. If web moved during the run, the push
+      # is refused (never forced) and tomorrow's run merges again.
+      - name: Push master and web
+        if: steps.merge.outputs.commits != '0'
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          auth=$(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)
+          git -c core.hooksPath=/dev/null -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
+            push --atomic "https://github.com/${{ github.repository }}.git" \
+            upstream/master:refs/heads/master HEAD:refs/heads/web
+          git log -1 --format='Pushed %h: %s'
+
+      - name: Deploy staging
+        if: steps.merge.outputs.commits != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run web.yml --repo "${{ github.repository }}" --ref web
+
+      # Never fails the run: closed Forge issues show as a warning and in the run's summary.
+      - name: Check known-broken cards
+        if: success()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          if (cd web && node scripts/brokencheck.ts) > broken.txt 2>&1; then
+            cat broken.txt
+            exit 0
+          fi
+          cat broken.txt
+          echo "::warning::Some known-broken cards' Forge issues have closed: recheck them (npm run broken:check)"
+          { echo "### Known-broken cards to recheck"; echo; echo '```'; cat broken.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

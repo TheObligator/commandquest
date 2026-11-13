@@ -2,6 +2,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvexAuth, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { navigate, useRoute } from "./router";
+import { UpdateNotice } from "./UpdateNotice";
 
 /** `full`: the page uses the whole window width (the game table). */
 export function Layout({ children, full }: { children: React.ReactNode; full?: boolean }) {
@@ -33,6 +34,7 @@ export function Layout({ children, full }: { children: React.ReactNode; full?: b
         <a href="https://company.wizards.com/en/legal/fancontentpolicy" target="_blank" rel="noopener">Fan Content Policy</a>. Not
         approved/endorsed by Wizards. Portions of the materials used are property of Wizards of the Coast. ©Wizards of the Coast LLC.
       </footer>
+      <UpdateNotice />
     </>
   );
 }

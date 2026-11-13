@@ -8,7 +8,13 @@ import type { LiveGame, LivePrompt } from "./useLiveGame";
 
 const FREE_LABEL = { spell: "Cast for free", ability: "Activate for free", effect: "Pay nothing" } as const;
 
-export function PayPrompt({ prompt, game }: { prompt: LivePrompt; game: Pick<LiveGame, "ok" | "cancel" | "payFree"> }) {
+export function PayPrompt({ prompt, game, pool }: {
+  prompt: LivePrompt;
+  game: Pick<LiveGame, "ok" | "cancel" | "payFree" | "payPool">;
+  /** Your floating mana, by symbol. */
+  pool?: Record<string, number>;
+}) {
+  const floating = Object.entries(pool ?? {}).filter(([, n]) => n > 0);
   const pay = prompt.pay!;
   const what = pay.kind === "spell" ? "Cast" : pay.kind === "ability" ? "Activate" : "Pay for";
   return (
@@ -28,6 +34,11 @@ export function PayPrompt({ prompt, game }: { prompt: LivePrompt; game: Pick<Liv
           Auto-pay
           <Kbd action="ok" />
         </button>
+        {floating.length > 0 && (
+          <button className="ar-btn" title="Pay with the mana in your pool, as much as it can (click a symbol by your name to use just one)" onClick={() => game.payPool("all")}>
+            Use floating <ManaCost cost={floating.map(([x, n]) => `{${x}}`.repeat(n)).join("")} />
+          </button>
+        )}
         {pay.free && (
           <button className="ar-btn free" title="Free play: pay this mana cost with nothing. The game log shows it was done by hand." onClick={game.payFree}>
             {FREE_LABEL[pay.kind]}

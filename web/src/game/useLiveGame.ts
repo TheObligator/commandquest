@@ -1,7 +1,9 @@
 // A live game on the game server (docs/game-protocol.md): connect, sign in with the Convex token,
-// start a game, then mirror the server's view and send this player's actions.
+// start a game, then mirror the server's view and send this player's actions. The game outlives
+// the socket for a few minutes: after a reload or a dropped connection, signing in again resumes it.
 import { useAuthToken } from "@convex-dev/auth/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { setGameInProgress } from "../app/busy";
 import type { AutoPassMode, StepId } from "./phases";
 import type { CardView, GameView, RewindLevel } from "./view";
 
@@ -77,6 +79,27 @@ export interface CardAction {
   label: string;
   enabled: boolean;
 }
+/** One way to tap a card for mana (ManaTaps.java): its own ability, or another card's "tap an untapped …" one (`via`). */
+export interface ManaPick {
+  source: number;
+  ability: number;
+  /** Forge's color choice ("U", "G G"), empty when there's none. */
+  choice: string;
+  /** What it adds, as symbols: "W", "CC". */
+  mana: string;
+  /** The other card whose ability this is. */
+  via?: string;
+  /** Damage it deals you (pain lands, City of Brass). */
+  damage?: number;
+  /** Life you pay or lose (Mana Confluence). */
+  life?: number;
+}
+export interface ManaOptions {
+  /** Cards that can be tapped for mana, with their ways; cards left out can't. */
+  options: { id: number; picks: ManaPick[] }[];
+  reason?: string;
+}
+
 export interface CardActions {
   actions: CardAction[];
   /** Why nothing can be done with it right now, when that's the case. */
@@ -94,7 +117,19 @@ export interface CardDetails {
 /** Manual overrides from a card's menu (the server checks they're your cards). */
 export type ManualAction =
   | "tap" | "untap" | "faceDown" | "faceUp" | "skipUntap" | "neverUntap" | "untapNormally" | "tokenCopy"
-  | "toBattlefield" | "toHand" | "toGraveyard" | "toExile" | "toCommand" | "toLibraryTop" | "toLibraryBottom" | "reveal";
+  | "toBattlefield" | "toHand" | "toGraveyard" | "toExile" | "toCommand" | "toLibraryTop" | "toLibraryBottom" | "reveal"
+  /** Combat by hand: put your creature into combat attacking (`to`: the player), or take any creature out. */
+  | "attack" | "removeFromCombat"
+  /** More by hand: goad (someone else's creature), phase out, transform, and from hand plot or discard. */
+  | "goad" | "phaseOut" | "transform" | "plot" | "discard"
+  /** Exile face down; only the players in `to` may look at it (you, for foretell or hideaway). */
+  | "exileFaceDown"
+  /** From hand: foretell (face down, foretold), or suspend with N time counters (`suspend:3`). */
+  | "foretell" | `suspend:${number}`
+  /** Let yourself cast it from exile or your graveyard: `cast:pay`, `cast:free`, or `cast:cost:2 U`. */
+  | `cast:${string}`
+  /** Until end of turn, on any permanent: `eot:<key>` (see EOT_GROUPS in pages/LiveGame.tsx) or `eot:pt:+2:+2`. */
+  | `eot:${string}`;
 
 /** Manual actions on your own library (free play): the top `n` cards, or reveal the top card. */
 export type LibraryAction = "draw" | "mill" | "exile" | "revealTop" | "shuffle";
@@ -103,9 +138,19 @@ export type LibraryAction = "draw" | "mill" | "exile" | "revealTop" | "shuffle";
 export interface LibraryList {
   top: number;
   cards: CardView[];
+  /** Whose library (yours, or one you're searching). */
+  owner?: string;
 }
 
-export type LiveStatus = "connecting" | "signing-in" | "ready" | "starting" | "playing" | "over" | "offline";
+/**
+ * `reconnecting`: the connection dropped mid-game; the table stays up while it comes back.
+ * `moved`: the game is open in another tab now (`takeBack` brings it here).
+ */
+export type LiveStatus = "connecting" | "signing-in" | "ready" | "starting" | "playing" | "reconnecting" | "over" | "offline" | "moved";
+
+/** Heartbeat: ping this often, and treat the connection as dead after this long without a word. */
+const PING_MS = 10_000;
+const SILENT_MS = 25_000;
 
 export interface DeckPayload {
   name: string;
@@ -124,9 +169,13 @@ export function useLiveGame() {
   const [error, setError] = useState<string | null>(null);
   /** Why the last click did nothing (a `notice`), with a counter so the same text shows again. */
   const [libraryList, setLibraryList] = useState<LibraryList | null>(null);
+  /** Another player's library you're searching (they let you). */
+  const [searchList, setSearchList] = useState<LibraryList | null>(null);
+  const searchOwner = useRef<string | null>(null);
   const [notice, setNotice] = useState<{ message: string; n: number } | null>(null);
   const actionWaiters = useRef(new Map<number, ((a: CardActions) => void)[]>());
   const detailWaiters = useRef(new Map<number, ((d: CardDetails) => void)[]>());
+  const manaWaiters = useRef<((o: ManaOptions) => void)[]>([]);
   const [autoPass, setAutoPassState] = useState<AutoPassMode | null>(null);
   // The server says when an auto-pass has ended (reached its step, or something needed you):
   // light its button only while it's going.
@@ -141,6 +190,14 @@ export function useLiveGame() {
   tokenRef.current = token;
   const statusRef = useRef(status);
   statusRef.current = status;
+  /** Opens a fresh socket now (set by the connection effect). */
+  const reconnect = useRef<() => void>(() => {});
+
+  // A staging deploy doesn't reload the page under a game (src/app/UpdateNotice.tsx).
+  useEffect(() => {
+    setGameInProgress(status === "starting" || status === "playing" || status === "reconnecting" || status === "over" || status === "moved");
+  }, [status]);
+  useEffect(() => () => setGameInProgress(false), []);
 
   const send = useCallback((m: object) => {
     const s = ws.current;
@@ -149,22 +206,67 @@ export function useLiveGame() {
 
   useEffect(() => {
     let closed = false;
+    /** Another tab has the game: stay disconnected until `takeBack`. */
+    let parked = false;
     let retry: number | undefined;
     let retryMs = 1000;
+    let heard = Date.now();
+    const lost = (s: WebSocket) => {
+      s.onopen = s.onmessage = s.onclose = null;
+      s.close();
+      if (ws.current !== s) return;
+      ws.current = null;
+      if (closed) return;
+      setPrompt(null);
+      setAsk(null);
+      if (parked) {
+        setStatus("moved");
+        return;
+      }
+      // Mid-game, keep the table up: signing in again resumes the game.
+      setStatus((st) => (st === "playing" || st === "reconnecting" ? "reconnecting" : "offline"));
+      clearTimeout(retry);
+      retry = window.setTimeout(connect, retryMs);
+      retryMs = Math.min(retryMs * 2, 15_000);
+    };
     const connect = () => {
-      setStatus("connecting");
+      clearTimeout(retry);
+      const old = ws.current;
+      if (old) {
+        old.onopen = old.onmessage = old.onclose = null;
+        old.close();
+      }
+      setStatus((st) => (st === "reconnecting" ? st : "connecting"));
       const s = new WebSocket(gameSocketUrl());
       ws.current = s;
+      heard = Date.now();
       s.onopen = () => {
         retryMs = 1000;
-        setStatus("signing-in");
+        heard = Date.now();
+        setStatus((st) => (st === "reconnecting" ? st : "signing-in"));
         if (tokenRef.current) s.send(JSON.stringify({ t: "hello", token: tokenRef.current }));
       };
       s.onmessage = (e) => {
+        heard = Date.now();
         const m = JSON.parse(e.data as string);
         switch (m.t) {
           case "hello":
-            setStatus("ready");
+            // `game`: we're back in a running game; its state, prompt and questions follow.
+            setPrompt(null);
+            setAsk(null);
+            if (m.game) {
+              setStatus("playing");
+              setAutoPassState(m.autoPass ?? null);
+            } else if (statusRef.current === "reconnecting") {
+              setError("You were away too long, so the game ended.");
+              setStatus("over");
+            } else {
+              setStatus("ready");
+            }
+            break;
+          case "moved":
+            parked = true;
+            lost(s);
             break;
           case "state":
             setView(m.view as GameView);
@@ -173,6 +275,8 @@ export function useLiveGame() {
               setPrompt(null);
               setAsk(null);
             }
+            break;
+          case "pong":
             break;
           case "prompt":
             if (statusRef.current === "over") break; // the game has ended: nothing to answer
@@ -194,7 +298,8 @@ export function useLiveGame() {
             setStatus("over");
             break;
           case "libraryCards":
-            setLibraryList({ top: m.top ?? 0, cards: m.cards ?? [] });
+            if (m.owner && m.owner === searchOwner.current) setSearchList({ top: 0, cards: m.cards ?? [], owner: m.owner });
+            else setLibraryList({ top: m.top ?? 0, cards: m.cards ?? [], owner: m.owner });
             break;
           case "notice":
             setNotice((n) => ({ message: m.message, n: (n?.n ?? 0) + 1 }));
@@ -205,6 +310,9 @@ export function useLiveGame() {
             for (const w of waiters) w({ actions: m.actions ?? [], reason: m.reason });
             break;
           }
+          case "manaOptions":
+            manaWaiters.current.shift()?.({ options: m.options ?? [], reason: m.reason });
+            break;
           case "details": {
             const waiters = detailWaiters.current.get(m.id) ?? [];
             detailWaiters.current.delete(m.id);
@@ -217,27 +325,44 @@ export function useLiveGame() {
             break;
         }
       };
-      s.onclose = () => {
-        if (closed) return;
-        // A game lives on the socket: if it drops, the server ends that game.
-        setStatus((st) => (st === "playing" ? "over" : "offline"));
-        setPrompt(null);
-        setAsk(null);
-        retry = window.setTimeout(connect, retryMs);
-        retryMs = Math.min(retryMs * 2, 15_000);
-      };
+      s.onclose = () => lost(s);
+    };
+    // A connection can die without closing (sleep, Wi-Fi drop): ping, and give up on silence.
+    const heartbeat = window.setInterval(() => {
+      const s = ws.current;
+      if (!s || s.readyState !== WebSocket.OPEN) return;
+      if (Date.now() - heard > SILENT_MS) lost(s);
+      else s.send(JSON.stringify({ t: "ping" }));
+    }, PING_MS);
+    // Back online, or back to the tab: retry now rather than after the backoff.
+    const retryNow = () => {
+      if (!parked && !ws.current && document.visibilityState === "visible") {
+        retryMs = 1000;
+        connect();
+      }
+    };
+    window.addEventListener("online", retryNow);
+    document.addEventListener("visibilitychange", retryNow);
+    reconnect.current = () => {
+      parked = false;
+      retryMs = 1000;
+      setStatus("reconnecting"); // keeps the table up until the game comes back
+      connect();
     };
     connect();
     return () => {
       closed = true;
       clearTimeout(retry);
-      ws.current?.close();
+      clearInterval(heartbeat);
+      window.removeEventListener("online", retryNow);
+      document.removeEventListener("visibilitychange", retryNow);
+      if (ws.current) lost(ws.current);
     };
   }, []);
 
   // The token can arrive after the socket opens (or refresh): sign in when both are there.
   useEffect(() => {
-    if (token && status === "signing-in") send({ t: "hello", token });
+    if (token && (status === "signing-in" || status === "reconnecting")) send({ t: "hello", token });
   }, [token, status, send]);
 
   return {
@@ -249,8 +374,11 @@ export function useLiveGame() {
     notice,
     autoPass,
     libraryList,
+    searchList,
     signedIn: !!token,
     clearError: () => setError(null),
+    /** Brings the game back to this tab after it was opened in another one. */
+    takeBack: () => reconnect.current(),
     /** `freePlay`: allow manual overrides (tap, move, counters…) and paying mana costs with nothing. */
     start(deck: DeckPayload, name: string, opponents = 3, freePlay = true, rewind: RewindLevel = 0) {
       setError(null);
@@ -265,11 +393,44 @@ export function useLiveGame() {
     cancel: () => send({ t: "cancel" }),
     /** Free play: draw, mill or exile the top `n` cards of your library, reveal its top card to `to`, or shuffle it. */
     library: (action: LibraryAction, n = 1, to?: string[]) => send({ t: "library", action, n, to: to?.map(Number) }),
+    /** Scry or surveil by hand: `top` (top first) stays, `away` goes to the bottom / graveyard. */
+    arrange: (kind: "scry" | "surveil", top: number[], away: number[]) => send({ t: "library", action: kind, top, away }),
     /** Free play: list your library for you (`top` 0: search all of it). `log`: tell the table (when you open it). */
     listLibrary: (top: number, log: boolean) => send({ t: "libraryCards", top, log }),
     clearLibraryList: () => setLibraryList(null),
+    /** Let another player search your library (free play). */
+    letSearch: (to: string) => send({ t: "letSearch", to: Number(to) }),
+    /** List the library of a player who lets you search it; `log` when you open it. */
+    listSearch: (owner: string, log: boolean) => {
+      searchOwner.current = owner;
+      send({ t: "libraryCards", top: 0, log, owner: Number(owner) });
+    },
+    /** Finish searching that player's library (it's shuffled). */
+    endSearch: (owner: string) => {
+      searchOwner.current = null;
+      setSearchList(null);
+      send({ t: "endSearch", owner: Number(owner) });
+    },
     /** Free play: pay the mana cost you're paying now with nothing. */
     payFree: () => send({ t: "payFree" }),
+    /** The ways these cards can be tapped for mana now. */
+    manaOptions(ids: number[]): Promise<ManaOptions> {
+      return new Promise((resolve) => {
+        manaWaiters.current.push(resolve);
+        send({ t: "manaOptions", ids });
+        window.setTimeout(() => {
+          const i = manaWaiters.current.indexOf(resolve);
+          if (i >= 0) {
+            manaWaiters.current.splice(i, 1);
+            resolve({ options: [], reason: "The game server didn't answer." });
+          }
+        }, 5000);
+      });
+    },
+    /** Tap cards for mana, each as picked (its mana goes to your pool). */
+    tapForMana: (picks: { card: number; source: number; ability: number; choice: string }[]) => send({ t: "tapForMana", picks }),
+    /** While paying: use floating mana of one color ("W"…"C"), or "all" it can. */
+    payPool: (color: string) => send({ t: "payPool", color }),
     clickCard: (id: number) => send({ t: "card", id }),
     /** What this card can do right now (for its right-click menu). */
     actions(id: number): Promise<CardActions> {
@@ -319,8 +480,8 @@ export function useLiveGame() {
     concede: () => send({ t: "concede" }),
     /** Ask to rewind to a point of `view.rewind.options` (everyone else in the game has to agree). */
     rewindTo: (point: number, kind: "timeline" | "attackers" | "blockers" = "timeline") => send({ t: "rewind", action: "ask", point, kind }),
-    /** Put this creature of yours in or out of this combat's attack (or blocks): a rewind to redeclare, with the rest as declared. */
-    rewindChange: (card: number) => send({ t: "rewind", action: "change", card }),
+    /** Put these creatures of yours in or out of this combat's attack (or blocks): a rewind to redeclare, with the rest as declared. */
+    rewindChange: (cards: number[]) => send({ t: "rewind", action: "change", cards }),
     /** Answer someone else's rewind request. */
     rewindVote: (yes: boolean) => send({ t: "rewind", action: yes ? "yes" : "no" }),
     /** Take back your own rewind request. */

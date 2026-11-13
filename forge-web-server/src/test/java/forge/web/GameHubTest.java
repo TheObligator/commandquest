@@ -90,6 +90,10 @@ public class GameHubTest {
 
             JsonNode state = next(b, "state", 60_000).path("view");
             Assert.assertEquals(state.path("players").size(), 4, "four seats");
+            String health = HttpClient.newHttpClient().send(
+                    java.net.http.HttpRequest.newBuilder(URI.create("http://localhost:" + app.port() + "/health")).build(),
+                    java.net.http.HttpResponse.BodyHandlers.ofString()).body();
+            Assert.assertEquals(json.readTree(health).path("games").asInt(), 1, "/health counts the game (auto-deploy waits for 0): " + health);
             JsonNode me = state.path("players").get(0);
             Assert.assertEquals(me.path("id").asText(), state.path("viewer").asText(), "the viewer comes first");
             Assert.assertEquals(me.path("name").asText(), "Tester");
@@ -268,6 +272,161 @@ public class GameHubTest {
             }
         } finally {
             ws.sendClose(WebSocket.NORMAL_CLOSURE, "done");
+            Thread.sleep(500);
+            app.stop();
+        }
+    }
+
+    /**
+     * Commander mulligans, 1v1: the first mulligan is free, and cards go to the bottom only once you
+     * keep (London mulligan), not straight after each mulligan.
+     */
+    @Test(timeOut = 120_000)
+    public void commanderMulliganOneOnOne() throws Exception {
+        MyRandom.setRandom(new Random(7));
+        TestTokens tokens = new TestTokens();
+        Javalin app = WebServer.create(new WebServer.Options(null, Set.of(), null, tokens.auth(), 2)).start(0);
+        Browser b = new Browser();
+        WebSocket ws = HttpClient.newHttpClient().newWebSocketBuilder()
+                .buildAsync(URI.create("ws://localhost:" + app.port() + "/ws"), b).get(5, TimeUnit.SECONDS);
+        java.util.List<String> seen = new java.util.ArrayList<>();
+        try {
+            ws.sendText("{\"t\":\"hello\",\"token\":\"" + tokens.valid("user1") + "\"}", true);
+            next(b, "hello", 10_000);
+            ObjectNode start = json.createObjectNode();
+            start.put("t", "start");
+            start.put("name", "Tester");
+            start.put("opponents", 1);
+            start.set("deck", deck());
+            ws.sendText(json.writeValueAsString(start), true);
+
+            JsonNode state = next(b, "state", 60_000).path("view");
+            int mulligans = 0;
+            boolean kept = false;
+            boolean bottomed = false;
+            int handAfterKeep = -1;
+            long end = System.currentTimeMillis() + 90_000;
+            while (System.currentTimeMillis() < end && handAfterKeep < 0) {
+                String s = b.inbox.poll(5, TimeUnit.SECONDS);
+                if (s == null) {
+                    continue;
+                }
+                JsonNode m = json.readTree(s);
+                switch (m.path("t").asText()) {
+                    case "state" -> {
+                        state = m.path("view");
+                        seen.add("state hand=" + state.path("players").get(0).path("hand").size());
+                    }
+                    case "ask" -> {
+                        seen.add("ask " + m.path("message").asText() + " " + m.path("options"));
+                        ObjectNode a = json.createObjectNode();
+                        a.put("t", "answer");
+                        a.put("id", m.path("id").asInt());
+                        a.putArray("choice").add(m.path("selected").size() > 0 ? m.path("selected").get(0).asInt() : 0);
+                        ws.sendText(json.writeValueAsString(a), true);
+                    }
+                    case "prompt" -> {
+                        if (m.path("message").asText().isBlank()) {
+                            continue; // the buttons arrive before the text: answer the prompt once, when it's complete
+                        }
+                        JsonNode hand = state.path("players").get(0).path("hand");
+                        boolean mulliganPrompt = m.path("cancel").path("label").asText().equals("Mulligan");
+                        boolean priority = m.path("cancel").path("label").asText().equals("End Turn");
+                        seen.add((mulliganPrompt ? "keep?" : priority ? "priority" : "choose") + " hand=" + hand.size() + " " + m.path("message").asText().replace("\n", " ") + " " + m.path("ok") + m.path("cancel"));
+                        if (m.path("message").asText().contains("play or draw")) {
+                            // Won the coin toss (it depends on the shared random's state, so on test order).
+                            ws.sendText("{\"t\":\"ok\"}", true);
+                        } else if (mulliganPrompt) {
+                            Assert.assertEquals(hand.size(), 7, "every new hand is seven cards: " + seen);
+                            if (mulligans < 2) {
+                                mulligans++;
+                                ws.sendText("{\"t\":\"cancel\"}", true);
+                            } else {
+                                kept = true;
+                                ws.sendText("{\"t\":\"ok\"}", true);
+                            }
+                        } else if (!priority && !bottomed) {
+                            Assert.assertTrue(kept, "cards go to the bottom only after keeping: " + seen);
+                            bottomed = true; // (the prompt is sent again once the card is selected)
+                            ws.sendText("{\"t\":\"card\",\"id\":" + hand.get(0).path("id").asInt() + "}", true);
+                            ws.sendText("{\"t\":\"ok\"}", true);
+                        } else if (priority && kept) {
+                            handAfterKeep = hand.size();
+                        }
+                    }
+                    default -> { }
+                }
+            }
+            Assert.assertEquals(mulligans, 2, "mulliganed twice: " + seen);
+            Assert.assertTrue(bottomed, "asked to bottom a card: " + seen);
+            Assert.assertEquals(handAfterKeep, 6, "two mulligans, the first free: one card on the bottom: " + seen);
+        } finally {
+            ws.sendClose(WebSocket.NORMAL_CLOSURE, "done");
+            Thread.sleep(500);
+            app.stop();
+        }
+    }
+
+    private WebSocket connect(Javalin app, Browser b) throws Exception {
+        return HttpClient.newHttpClient().newWebSocketBuilder()
+                .buildAsync(URI.create("ws://localhost:" + app.port() + "/ws"), b).get(5, TimeUnit.SECONDS);
+    }
+
+    /**
+     * A game outlives its socket: after a reload or dropped connection the player signs in again and
+     * gets the board and the prompt they were looking at. Signing in from another tab takes it over.
+     */
+    @Test(timeOut = 120_000)
+    public void reconnectResumesTheGame() throws Exception {
+        MyRandom.setRandom(new Random(11));
+        TestTokens tokens = new TestTokens();
+        Javalin app = WebServer.create(new WebServer.Options(null, Set.of(), null, tokens.auth(), 2)).start(0);
+        String hello = "{\"t\":\"hello\",\"token\":\"" + tokens.valid("user1") + "\"}";
+        Browser first = new Browser();
+        WebSocket ws = connect(app, first);
+        WebSocket second = null;
+        WebSocket third = null;
+        try {
+            ws.sendText(hello, true);
+            Assert.assertFalse(next(first, "hello", 10_000).path("game").asBoolean(), "no game to resume yet");
+            ObjectNode start = json.createObjectNode();
+            start.put("t", "start");
+            start.put("name", "Tester");
+            start.put("opponents", 1);
+            start.set("deck", deck());
+            ws.sendText(json.writeValueAsString(start), true);
+            JsonNode prompt = next(first, "prompt", 60_000);
+            Assert.assertEquals(prompt.path("cancel").path("label").asText(), "Mulligan", "the opening hand: " + prompt);
+
+            // The tab reloads: the old socket closes, a new one signs in.
+            ws.sendClose(WebSocket.NORMAL_CLOSURE, "reload").get(5, TimeUnit.SECONDS);
+            Thread.sleep(300);
+            Browser back = new Browser();
+            second = connect(app, back);
+            second.sendText(hello, true);
+            Assert.assertTrue(next(back, "hello", 10_000).path("game").asBoolean(), "the game is still there");
+            JsonNode view = next(back, "state", 10_000).path("view");
+            Assert.assertEquals(view.path("players").get(0).path("hand").size(), 7, "the same board");
+            Assert.assertEquals(next(back, "prompt", 10_000).path("cancel").path("label").asText(), "Mulligan",
+                    "the prompt that was on screen");
+
+            // Keep the hand from the new socket: the game carries on there.
+            second.sendText("{\"t\":\"ok\"}", true);
+            next(back, "waiting", 30_000);
+
+            // Another tab signs in: it takes the game, the old one is told.
+            Browser other = new Browser();
+            third = connect(app, other);
+            third.sendText(hello, true);
+            Assert.assertTrue(next(other, "hello", 10_000).path("game").asBoolean(), "the other tab gets the game");
+            next(other, "state", 10_000);
+            next(back, "moved", 10_000);
+        } finally {
+            for (WebSocket w : new WebSocket[] {second, third}) {
+                if (w != null) {
+                    w.sendClose(WebSocket.NORMAL_CLOSURE, "done");
+                }
+            }
             Thread.sleep(500);
             app.stop();
         }

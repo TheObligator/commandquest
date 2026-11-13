@@ -12,6 +12,7 @@ import { commanderTax } from "./view";
 export const AUTO_PASS: { mode: AutoPassMode; label: string; key: HotkeyAction; title: string }[] = [
   { mode: "END_OF_TURN", label: "End of turn", key: "autoEndOfTurn", title: "Skip the rest of this turn. Your stops apply again next turn." },
   { mode: "BEFORE_MY_TURN", label: "Before my turn", key: "autoBeforeMyTurn", title: "Skip until the end step of the player right before you." },
+  { mode: "UNTIL_MY_TURN", label: "Until my turn", key: "autoUntilMyTurn", title: "Skip everything until your next turn starts, including the end step before it. Your stops apply again on your turn." },
   { mode: "ACTION_OR_END_STEP", label: "Action / end step", key: "autoActionOrEnd", title: "Skip until someone casts something, or this turn's end step." },
 ];
 
