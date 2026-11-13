@@ -27,7 +27,9 @@ Splitting it into a staging and a production server comes later.
 | `logs` | Follows `~/Library/Logs/commandquest-game.log` and `commandquest-tunnel.log` |
 | `restart` | Restarts the server and tunnel |
 | `set-token` | Saves the tunnel token to `~/.commandquest/game/tunnel-token` (mode 600, never in the repo) |
-| `uninstall` | Removes both services |
+| `auto-on` | Every 15 minutes, deploys `origin/web` if it's newer than what's running and no game is in progress (see Updating) |
+| `auto-off` | Stops the auto-deploy job |
+| `uninstall` | Removes the services |
 
 Deploying builds a commit, not this working tree, so switching branches here doesn't change what
 players are on. It's separate from the dev service (`web/scripts/dev-service.sh`, port 8080).
@@ -59,8 +61,18 @@ The site finds the server through `VITE_GAME_SERVER` in `web/.env.production` an
 
 ## Updating
 
-After pushing to `web`, run `game-service.sh deploy`. Games in progress end when the server
-restarts, so deploy when nobody's playing (the lobby will show a warning once games exist).
+Games in progress end when the server restarts, so it only restarts when nobody's playing.
+
+With `game-service.sh auto-on`, a launchd job (`com.commandquest.autodeploy`, log
+`~/Library/Logs/commandquest-autodeploy.log`) checks every 15 minutes. When `origin/web` has moved
+past what's running and `/health` says `"games":0`, it deploys. It checks again after the build,
+before restarting, in case a game started meanwhile. A commit whose build or tests fail isn't
+retried (it's recorded in `~/.commandquest/game/failed`) until a newer one lands, and the running
+server stays as it was. The job runs a copy of this script, `~/.commandquest/game/game-service.sh`,
+refreshed by each deploy.
+
+This is how the nightly Forge sync (docs/deploy.md) reaches games. To deploy right away instead,
+run `game-service.sh deploy`, which doesn't wait for games to finish.
 
 ## The engine inside the server
 

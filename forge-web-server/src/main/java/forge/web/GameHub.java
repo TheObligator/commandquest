@@ -283,6 +283,11 @@ public final class GameHub {
         FThreads.invokeInEdtLater(h.seat::replay); // reads the game view, like every other action
     }
 
+    /** Games that haven't ended, including ones waiting for their player to reconnect. */
+    public long activeGames() {
+        return games.values().stream().filter(Hosted::running).count();
+    }
+
     private void start(Conn c, JsonNode m) {
         Hosted previous = games.get(c.user); // one game per user, even across tabs
         if (previous != null) {

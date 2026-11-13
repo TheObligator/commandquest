@@ -76,11 +76,14 @@ public final class WebServer {
                     ctx.header("Access-Control-Allow-Origin", opts.allowedOrigins().isEmpty() ? "*" : origin);
                     ctx.header("Vary", "Origin");
                 }
-                Map<String, String> body = new LinkedHashMap<>();
+                Map<String, Object> body = new LinkedHashMap<>();
                 body.put("status", "ok");
                 if (opts.version() != null) {
                     body.put("version", opts.version());
                 }
+                // Games in progress, including ones waiting for a player to reconnect. The nightly
+                // auto-deploy (scripts/game-service.sh auto-deploy) only restarts at zero.
+                body.put("games", hub.activeGames());
                 ctx.json(body);
             });
             config.routes.wsBeforeUpgrade("/ws", ctx -> {

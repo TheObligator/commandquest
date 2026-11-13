@@ -42,6 +42,7 @@ public class WebServerTest {
                 HttpResponse.BodyHandlers.ofString());
         Assert.assertEquals(res.statusCode(), 200);
         Assert.assertTrue(res.body().contains("\"status\":\"ok\""), res.body());
+        Assert.assertTrue(res.body().contains("\"games\":0"), "no games running: " + res.body());
     }
 
     @Test

@@ -90,6 +90,10 @@ public class GameHubTest {
 
             JsonNode state = next(b, "state", 60_000).path("view");
             Assert.assertEquals(state.path("players").size(), 4, "four seats");
+            String health = HttpClient.newHttpClient().send(
+                    java.net.http.HttpRequest.newBuilder(URI.create("http://localhost:" + app.port() + "/health")).build(),
+                    java.net.http.HttpResponse.BodyHandlers.ofString()).body();
+            Assert.assertEquals(json.readTree(health).path("games").asInt(), 1, "/health counts the game (auto-deploy waits for 0): " + health);
             JsonNode me = state.path("players").get(0);
             Assert.assertEquals(me.path("id").asText(), state.path("viewer").asText(), "the viewer comes first");
             Assert.assertEquals(me.path("name").asText(), "Tester");
