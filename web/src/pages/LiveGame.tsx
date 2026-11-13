@@ -7,12 +7,13 @@ import { useRoute } from "../app/router";
 import { toast } from "../dom";
 import { useCardData } from "../game/cards";
 import { LiveRail } from "../game/LiveRail";
+import { REWIND_LEVELS } from "../game/RewindPanel";
 import { LayoutPicker, TableBoard, useStored, useTableStops, type LayoutId, type MenuPart, type MenuTarget } from "../game/TableBoard";
 import { useHotkeys } from "../game/useHotkeys";
 import { useLiveGame, type DeckPayload } from "../game/useLiveGame";
 import { tokenArtMap } from "../tokens";
 import { useDeckTokens } from "../useDeckTokens";
-import type { CardView, GameView } from "../game/view";
+import type { CardView, GameView, RewindLevel } from "../game/view";
 import type { MenuSection } from "../components/CardMenu";
 import { CounterDialog } from "../game/CounterDialog";
 import { PayPrompt } from "../game/PayPrompt";
@@ -27,6 +28,8 @@ export function LiveGame() {
   const [layout, setLayout] = useStored<LayoutId>("cq.table.layout", "pod");
   const [opponents, setOpponents] = useState(3);
   const [freePlay, setFreePlay] = useStored<boolean>("cq.game.freePlay", true);
+  const [rewindPref, setRewindPref] = useStored<string>("cq.game.rewind", "2");
+  const rewind = (Math.max(0, Math.min(4, Number(rewindPref) || 0)) as RewindLevel);
   const game = useLiveGame();
   const { tokens } = useDeckTokens(deck?.cards, deck?.tokenArt);
 
@@ -42,10 +45,17 @@ export function LiveGame() {
     if (game.notice) toast(game.notice.message);
   }, [game.notice]);
 
+  // What happened to a rewind request ("Bob declined to rewind.", "Rewound: …").
+  const rewindNote = game.view?.rewind?.noteId;
+  useEffect(() => {
+    const note = game.view?.rewind?.note;
+    if (note && rewindNote) toast(note);
+  }, [rewindNote]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const start = () => {
     if (!deck) return;
     const payload: DeckPayload = { name: deck.name, cards: deck.cards.map((c) => ({ name: c.name, quantity: c.quantity, board: c.board, set: c.set, collectorNumber: c.collectorNumber })), tokens: tokenArtMap(tokens) };
-    game.start(payload, me?.name ?? "You", opponents, freePlay);
+    game.start(payload, me?.name ?? "You", opponents, freePlay, rewind);
   };
 
   const playing = game.view && (game.status === "playing" || game.status === "over");
@@ -111,6 +121,27 @@ export function LiveGame() {
                     hand. Off: only the cards' own effects change the game.
                   </span>
                 </span>
+              </label>
+              <label className="live-option rewind-option">
+                <span>
+                  Rewind: <strong>{REWIND_LEVELS[rewind]?.label ?? "Off"}</strong>
+                  <span className="muted small"> {REWIND_LEVELS[rewind]?.hint} Everyone else in the game has to agree to a rewind.</span>
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={4}
+                  step={1}
+                  value={rewind}
+                  list="rewind-levels"
+                  aria-valuetext={REWIND_LEVELS[rewind]?.label}
+                  onChange={(e) => setRewindPref(e.target.value)}
+                />
+                <datalist id="rewind-levels">
+                  {REWIND_LEVELS.map((l) => (
+                    <option key={l.level} value={l.level} label={l.label} />
+                  ))}
+                </datalist>
               </label>
               <button className="btn" onClick={start} disabled={!deck || game.status !== "ready"}>
                 {game.status === "starting" ? "Starting…" : game.status === "ready" ? "Start game" : STATUS[game.status]}

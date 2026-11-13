@@ -3,7 +3,7 @@
 import { useAuthToken } from "@convex-dev/auth/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AutoPassMode, StepId } from "./phases";
-import type { CardView, GameView } from "./view";
+import type { CardView, GameView, RewindLevel } from "./view";
 
 /** Socket URL of the game server: VITE_GAME_SERVER in builds, this origin (Vite's proxy) in dev. */
 export function gameSocketUrl(): string {
@@ -252,14 +252,14 @@ export function useLiveGame() {
     signedIn: !!token,
     clearError: () => setError(null),
     /** `freePlay`: allow manual overrides (tap, move, counters…) and paying mana costs with nothing. */
-    start(deck: DeckPayload, name: string, opponents = 3, freePlay = true) {
+    start(deck: DeckPayload, name: string, opponents = 3, freePlay = true, rewind: RewindLevel = 0) {
       setError(null);
       setView(null);
       setPrompt(null);
       setAsk(null);
       setAutoPassState(null);
       setStatus("starting");
-      send({ t: "start", deck, name, opponents, freePlay });
+      send({ t: "start", deck, name, opponents, freePlay, rewind });
     },
     ok: () => send({ t: "ok" }),
     cancel: () => send({ t: "cancel" }),
@@ -317,6 +317,12 @@ export function useLiveGame() {
     useAbility: (id: number, a: CardAction) => send({ t: "ability", id, ability: a.ability, label: a.label }),
     clickPlayer: (id: string) => send({ t: "player", id: Number(id) }),
     concede: () => send({ t: "concede" }),
+    /** Ask to rewind to a point of `view.rewind.options` (everyone else in the game has to agree). */
+    rewindTo: (point: number) => send({ t: "rewind", action: "ask", point }),
+    /** Answer someone else's rewind request. */
+    rewindVote: (yes: boolean) => send({ t: "rewind", action: yes ? "yes" : "no" }),
+    /** Take back your own rewind request. */
+    rewindCancel: () => send({ t: "rewind", action: "cancel" }),
     answer(id: number, choice: number[] | null, text?: string) {
       setAsk(null);
       send({ t: "answer", id, choice: choice ?? [], text });

@@ -2,6 +2,7 @@
 // prompt (with Forge's own button labels) or question, and the auto-pass skips.
 import { useEffect, useState } from "react";
 import { AUTO_PASS } from "./ActionRail";
+import { RewindPanel } from "./RewindPanel";
 import { Kbd, useHotkeys } from "./useHotkeys";
 import { cardImage, previewFor, usePreview, type Preview } from "./cards";
 import type { LiveAsk, LiveGame } from "./useLiveGame";
@@ -48,6 +49,8 @@ export function LiveRail(props: {
           </button>
         ))}
       </section>
+
+      {!!game.view?.rewind?.level && game.status === "playing" && <RewindPanel game={game} rewind={game.view.rewind} />}
     </aside>
   );
 }

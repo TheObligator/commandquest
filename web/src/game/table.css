@@ -409,3 +409,14 @@ dialog.counter-dialog { width: min(360px, calc(100vw - 32px)); background: var(-
 .ask-label { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .ask-label img { width: 34px; border-radius: 3px; }
 .order-btns button.flip { width: auto; padding: 0 8px; font-size: .75rem; }
+
+/* Rewind (RewindPanel): the host's setting on the setup screen, and the timeline in the rail. */
+.rewind-option { flex-direction: column; gap: 6px; }
+.rewind-option input[type="range"] { width: 100%; max-width: 320px; height: auto; margin: 0; accent-color: var(--accent); }
+.rewind-panel .ar-skip:disabled { opacity: .45; cursor: not-allowed; }
+.rewind-what { margin: 4px 0; font-size: .86rem; color: var(--text); }
+.rewind-timeline { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; max-height: 320px; overflow-y: auto; }
+.rewind-timeline ul { list-style: none; margin: 4px 0 0; padding: 0 0 0 8px; border-left: 2px solid var(--line); display: grid; gap: 2px; }
+.rewind-step { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.rewind-timeline button { width: 100%; text-align: left; padding: 5px 8px; border-radius: 6px; border: 1px solid transparent; background: none; color: #c9cdd6; font-size: .8rem; cursor: pointer; overflow-wrap: anywhere; }
+.rewind-timeline button:hover, .rewind-timeline button:focus-visible { border-color: var(--accent); color: var(--text); background: rgb(224 168 79 / 8%); }

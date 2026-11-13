@@ -63,6 +63,8 @@ public final class ForgeEngine {
         }
         FModel.getPreferences().setPref(FPref.UI_RECORD_REPLAYS, false);
         FModel.getPreferences().setPref(FPref.UI_SHOW_ACTIONABLE_HIGHLIGHTS, false);
+        // Forge's own undo is for one person against the AI; our Rewind (any player, agreed by all) replaces it.
+        FModel.getPreferences().setPref(FPref.UI_UNDO_MODE, ForgeConstants.UNDO_MODE_OFF);
         // Auto-yields and "always yes/no" for triggers: per card, for one game. Forge's "per
         // install" mode would share one player's choices with everyone on this server.
         FModel.getPreferences().setPref(FPref.UI_AUTO_DECISION_MODE, ForgeConstants.AUTO_DECISION_PER_CARD);

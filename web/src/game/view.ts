@@ -149,6 +149,8 @@ export interface GameView {
   autoPassing?: boolean;
   /** Free play is on in this game: manual overrides and paying mana costs with nothing. */
   freePlay?: boolean;
+  /** Live games: rewinding (docs/rewind.md). Missing when the game doesn't allow it. */
+  rewind?: RewindView;
   /** Live games: your cards you can use right now (cast, play or activate). */
   playable?: number[];
   /** In turn order, starting with the viewer. */
@@ -158,6 +160,35 @@ export interface GameView {
   active: string;
   step: StepId;
   log: string[];
+}
+
+/** How far back the host lets players rewind: 0 off … 4 into the previous turn. */
+export type RewindLevel = 0 | 1 | 2 | 3 | 4;
+
+/** One moment on the rewind timeline: rewinding there takes back what happened after it (`label`). */
+export interface RewindPoint {
+  point: number;
+  /** The host level that allows going back this far. */
+  level: number;
+  label: string;
+  turn: number;
+  /** Forge's name for the step ("Main phase, precombat"). */
+  phase: string;
+  /** Whose turn it was. */
+  player: string;
+  /** The first moment of its step. */
+  stepStart: boolean;
+}
+
+export interface RewindView {
+  level: RewindLevel;
+  /** Newest first. */
+  options?: RewindPoint[];
+  /** A request waiting on the other players (`needsMe`: yours to answer; `mine`: you asked). */
+  pending?: { by: string; mine: boolean; label: string; approved: boolean; needsMe: boolean; waitingOn: string[] };
+  /** The last thing that happened ("Bob declined to rewind."), with an id that changes each time. */
+  note?: string;
+  noteId?: number;
 }
 
 /** May `viewer` see the face of this card? */

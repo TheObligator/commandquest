@@ -97,6 +97,17 @@ public final class BrowserSeat implements IRemote {
         return me;
     }
 
+    /** Rewinding in this seat's game (null while it's off). */
+    private volatile java.util.function.Supplier<Rewind> rewind = () -> null;
+
+    void setRewind(java.util.function.Supplier<Rewind> rewind) {
+        this.rewind = rewind;
+    }
+
+    public Rewind rewind() {
+        return rewind.get();
+    }
+
     /** A card of yours shown face up to you (your library, while you search it). */
     public ObjectNode revealedCard(CardView c) {
         IGuiGame g = gui;
@@ -240,6 +251,10 @@ public final class BrowserSeat implements IRemote {
             ObjectNode view = views.game(gv, me);
             view.set("playable", playable());
             view.put("freePlay", freePlay);
+            Rewind rw = rewind.get();
+            if (rw != null && live != null) {
+                view.set("rewind", rw.json(json, live.getPlayer(me.getId())));
+            }
             if (!revealed.isEmpty()) {
                 ArrayNode shown = view.putArray("revealed");
                 revealed.forEach(c -> shown.add(views.card(gv, c, me, true))); // Forge chose to show you these

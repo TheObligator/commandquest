@@ -51,16 +51,30 @@ public final class GameSession {
     /** Each player's token art (by player name, which is the seat name). */
     private final Map<String, Map<String, String>> tokenArt = new java.util.concurrent.ConcurrentHashMap<>();
 
-    private GameSession() {
+    /** How far back players may ask to rewind (0 = off, up to {@link Rewind#MAX_LEVEL}), chosen by the host. */
+    private final int rewindLevel;
+    private volatile Rewind rewind;
+    private final List<BrowserSeat> browsers = new ArrayList<>();
+
+    private GameSession(int rewindLevel) {
+        this.rewindLevel = Math.max(0, Math.min(Rewind.MAX_LEVEL, rewindLevel));
     }
 
-    /** Starts a Commander game. Each seat's deck needs its commander in the Commander section. */
+    /** Starts a Commander game with rewinding off. */
     public static GameSession startCommander(List<Seat> seats) {
+        return startCommander(seats, 0);
+    }
+
+    /**
+     * Starts a Commander game. Each seat's deck needs its commander in the Commander section.
+     * {@code rewindLevel}: how far back players may ask to rewind ({@link Rewind}), 0 for never.
+     */
+    public static GameSession startCommander(List<Seat> seats, int rewindLevel) {
         if (seats.size() < 2 || seats.size() > 8) {
             throw new IllegalArgumentException("A game needs 2 to 8 seats");
         }
         ForgeEngine.start();
-        GameSession s = new GameSession();
+        GameSession s = new GameSession(rewindLevel);
         List<RegisteredPlayer> players = new ArrayList<>();
         Map<RegisteredPlayer, IGuiGame> guiMap = new LinkedHashMap<>();
         for (Seat seat : seats) {
@@ -72,10 +86,18 @@ public final class GameSession {
             RegisteredPlayer rp = RegisteredPlayer.forCommander(seat.deck());
             if (seat.human()) {
                 rp.setPlayer(new LobbyPlayerHuman(seat.name()));
-                ProtocolGuiGame gui = new ProtocolGuiGame(seat.remote());
+                ProtocolGuiGame gui = new ProtocolGuiGame(seat.remote()) {
+                    @Override
+                    public void openView(forge.trackable.TrackableCollection<PlayerView> myPlayers) {
+                        s.gameCreated(); // before the game thread starts: nothing has happened yet
+                        super.openView(myPlayers);
+                    }
+                };
                 gui.setNetGame();
                 if (seat.remote() instanceof BrowserSeat browser) {
                     browser.attach(gui, s.tokenArt, s::game);
+                    browser.setRewind(s::rewind);
+                    s.browsers.add(browser);
                 }
                 guiMap.put(rp, gui);
                 s.guis.put(seat.name(), gui);
@@ -92,6 +114,23 @@ public final class GameSession {
         rules.setWarnAboutAICards(false);
         s.match.startMatch(rules, EnumSet.of(GameType.Commander), players, guiMap, null);
         return s;
+    }
+
+    /** Hooks rewinding into the game Forge just created (once). */
+    private synchronized void gameCreated() {
+        Game g = match.getGame();
+        if (rewind != null || g == null || rewindLevel == 0) {
+            return;
+        }
+        Rewind r = new Rewind(g, rewindLevel);
+        r.onChange(() -> browsers.forEach(BrowserSeat::refresh));
+        g.subscribeToEvents(r);
+        rewind = r;
+    }
+
+    /** Rewinding in this game, or null when it's off. */
+    public Rewind rewind() {
+        return rewind;
     }
 
     /** The live game, or null once it has ended. Read it on the game or forge-ui thread. */

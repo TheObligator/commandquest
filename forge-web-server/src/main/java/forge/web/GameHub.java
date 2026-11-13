@@ -25,6 +25,7 @@ import forge.web.engine.Explain;
 import forge.web.engine.ManualActions;
 import forge.web.engine.AutoPay;
 import forge.web.engine.Payment;
+import forge.web.engine.Rewind;
 import forge.web.engine.ForgeEngine;
 import forge.web.engine.GameSession;
 import io.javalin.websocket.WsContext;
@@ -119,6 +120,7 @@ public final class GameHub {
                 if (seat != null) {
                     seat.answerOpenWithDefaults(); // Forge can't take the concession while it waits on a question
                 }
+                rewindLeft(c);
                 act(c, IGameController::concede);
             }
             case "card" -> {
@@ -166,6 +168,7 @@ public final class GameHub {
                 }
             });
             case "autopass" -> autoPass(c, m.path("mode").asText(null));
+            case "rewind" -> rewind(c, m);
             default -> error(c, "Unknown message: " + t);
         }
     }
@@ -204,6 +207,7 @@ public final class GameHub {
                 List<GameSession.Seat> seats = new ArrayList<>();
                 BrowserSeat seat = new BrowserSeat(json, s -> sendRaw(c, s));
                 seat.setFreePlay(m.path("freePlay").asBoolean(true));
+                int rewindLevel = m.path("rewind").asInt(0);
                 String name = m.path("name").asText("You").trim();
                 name = name.isEmpty() || name.length() > 40 || name.startsWith("AI ") ? "You" : name;
                 seats.add(new GameSession.Seat(name, mine, seat, tokenArt(m.path("deck").path("tokens"))));
@@ -213,7 +217,7 @@ public final class GameHub {
                     seats.add(new GameSession.Seat("AI " + (i + 1), ai.get(i), null));
                 }
                 c.seat = seat;
-                c.session = GameSession.startCommander(seats);
+                c.session = GameSession.startCommander(seats, rewindLevel);
                 Logger.info("Game started for {} ({} AI)", c.user, ai.size());
             } catch (IllegalArgumentException e) {
                 error(c, e.getMessage());
@@ -536,6 +540,43 @@ public final class GameHub {
         });
     }
 
+    /**
+     * Rewinding ({@code engine/Rewind}): {@code action} {@code ask} (to {@code point}, one of the view's
+     * {@code rewind.options}), {@code yes} / {@code no} (answering someone else's request) or {@code cancel}.
+     */
+    private void rewind(Conn c, JsonNode m) {
+        GameSession s = c.session;
+        BrowserSeat seat = c.seat;
+        Game g = game(c);
+        Rewind r = s == null ? null : s.rewind();
+        if (r == null || g == null || seat == null || seat.player() == null) {
+            notice(c, "Rewinding is off in this game.");
+            return;
+        }
+        Player me = g.getPlayer(seat.player().getId());
+        String why = switch (m.path("action").asText("ask")) {
+            case "ask" -> r.request(me, m.path("point").asInt(-1));
+            case "yes" -> r.vote(me, true);
+            case "no" -> r.vote(me, false);
+            case "cancel" -> r.cancel(me);
+            default -> "Unknown rewind action.";
+        };
+        if (why != null) {
+            notice(c, why);
+        }
+    }
+
+    /** This player is leaving the game: a rewind request mustn't wait on them. */
+    private void rewindLeft(Conn c) {
+        GameSession s = c.session;
+        BrowserSeat seat = c.seat;
+        Game g = game(c);
+        Rewind r = s == null ? null : s.rewind();
+        if (r != null && g != null && seat != null && seat.player() != null) {
+            r.playerLeft(g.getPlayer(seat.player().getId()));
+        }
+    }
+
     private void notice(Conn c, String message) {
         ObjectNode o = msg("notice");
         o.put("message", message);
@@ -661,6 +702,7 @@ public final class GameHub {
     }
 
     private void endGame(Conn c) {
+        rewindLeft(c);
         BrowserSeat seat = c.seat;
         GameSession s = c.session;
         c.seat = null;
