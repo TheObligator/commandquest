@@ -78,5 +78,26 @@ required reviewer, so nothing reaches the public site without a click.
 
 ## Not covered yet
 
-The Java game server runs on the Mac (docs/game-host.md) and is deployed there by hand with
-`forge-web-server/scripts/game-service.sh deploy`. CI tests it but doesn't deploy it.
+CI tests the Java game server but doesn't deploy it: it runs on the Mac (docs/game-host.md), which
+deploys a new `web` itself when no game is running (`game-service.sh auto-on`).
+
+## Nightly Forge sync
+
+`.github/workflows/forge-sync.yml` runs at 10:00 UTC (2 am Pacific), and by hand from
+`Actions → Forge sync → Run workflow`. When Card-Forge/forge has new commits, it:
+
+1. merges `upstream/master` into `web` (as one merge commit),
+2. regenerates `web/public/precons.json` and `card-support.json` into that commit,
+3. runs the server's and the site's tests and the staging build,
+4. pushes `master` (the mirror) and `web` together, never forced,
+5. starts the Web workflow, which deploys staging. The Mac's auto-deploy then picks up the new game
+   server once nobody's playing.
+
+Nothing is pushed if the merge conflicts or a test fails: the run fails, and GitHub emails a failed
+scheduled run to whoever last changed its schedule. Then merge by hand: `git fetch upstream`,
+`git merge upstream/master` on `web`, fix, `npm run precons && npm run cardsupport` in `web/`,
+test, push. If someone pushed to `web` while the run was testing, the push is refused and the next
+night tries again.
+
+Every run, merging or not, also runs `npm run broken:check`. Known-broken cards whose Forge issue
+has closed show as a warning on the run, listed in its summary. `live` is never touched.
