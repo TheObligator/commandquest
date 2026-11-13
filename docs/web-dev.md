@@ -75,7 +75,10 @@ The deck editor, its search results and the game start screen mark cards that wo
   until a Forge merge brings its script in. Reprints match by name, so they're never marked. The
   game server refuses to start a game with one of these, so the start screen says so up front.
 - **Known issue**: Forge has the card but it misbehaves. List it in `overrides/broken.json` with
-  the reason, shown on hover. Remove the entry once Forge or an override fixes the card.
+  the reason, shown on hover, and the Forge issue it's waiting on. Remove the entry once Forge or
+  an override fixes the card. After each Forge merge, `npm run broken:check` lists the entries
+  whose issue has closed (it exits 1 if there are any). It uses GitHub's API, 60 requests an hour
+  without a `GITHUB_TOKEN`.
 
 `npm run cardsupport` builds the JSON from both. Like `precons.json`, it's committed, and
 `npm test` fails locally while it's stale: after merging upstream Forge, or editing

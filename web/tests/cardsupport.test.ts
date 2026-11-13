@@ -67,3 +67,16 @@ test("every known-broken card is one Forge has (a typo would mark nothing)", () 
   const known = new Set(d.cards);
   for (const name of Object.keys(d.broken)) assert.ok(known.has(name), `${name} in overrides/broken.json isn't a Forge card name`);
 });
+
+test("broken:check reads issue links and says what to do about closed ones", async () => {
+  const { issueApiPath, verdict } = await import("../scripts/brokencheck.ts");
+  assert.equal(issueApiPath("https://github.com/Card-Forge/forge/issues/5176"), "/repos/Card-Forge/forge/issues/5176");
+  assert.equal(issueApiPath("https://github.com/Card-Forge/forge/pull/12218"), null);
+  const entry = { reason: "x", issue: "https://github.com/Card-Forge/forge/issues/1" };
+  assert.deepEqual(verdict("A", entry, { state: "open" }), { name: "A", ok: true });
+  const fixed = verdict("A", entry, { state: "closed", state_reason: "completed", closed_at: "2026-11-01T00:00:00Z" });
+  assert.ok(!fixed.ok && fixed.message.startsWith("fixed on 2026-11-01"));
+  const stale = verdict("A", entry, { state: "closed", state_reason: "not_planned" });
+  assert.ok(!stale.ok && stale.message.includes("not_planned"));
+  assert.equal(verdict("A", { reason: "x" }, undefined).ok, false);
+});
