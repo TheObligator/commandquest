@@ -333,7 +333,10 @@ public class GameHubTest {
                         boolean mulliganPrompt = m.path("cancel").path("label").asText().equals("Mulligan");
                         boolean priority = m.path("cancel").path("label").asText().equals("End Turn");
                         seen.add((mulliganPrompt ? "keep?" : priority ? "priority" : "choose") + " hand=" + hand.size() + " " + m.path("message").asText().replace("\n", " ") + " " + m.path("ok") + m.path("cancel"));
-                        if (mulliganPrompt) {
+                        if (m.path("message").asText().contains("play or draw")) {
+                            // Won the coin toss (it depends on the shared random's state, so on test order).
+                            ws.sendText("{\"t\":\"ok\"}", true);
+                        } else if (mulliganPrompt) {
                             Assert.assertEquals(hand.size(), 7, "every new hand is seven cards: " + seen);
                             if (mulligans < 2) {
                                 mulligans++;
