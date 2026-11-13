@@ -28,7 +28,8 @@ import org.tinylog.Logger;
  * from this directory), {@code ALLOWED_ORIGINS} (comma-separated site origins that may open the
  * WebSocket and read {@code /health}; unset allows any, for local dev), {@code GIT_SHA} (reported
  * by {@code /health}), {@code CONVEX_ISSUERS} (Convex deployments whose sign-ins are accepted),
- * {@code MAX_GAMES} (simultaneous games, default 4), {@code FORGE_ASSETS} (upstream forge-gui dir).
+ * {@code MAX_GAMES} (simultaneous games, default 4), {@code FORGE_ASSETS} (upstream forge-gui dir),
+ * {@code REPLAY_SECRET} (record games and send their replays to Convex, docs/replays.md; unset: no replays).
  */
 public final class WebServer {
 
@@ -59,7 +60,7 @@ public final class WebServer {
 
     public static Javalin create(Options opts) {
         ObjectMapper mapper = new ObjectMapper();
-        GameHub hub = new GameHub(opts.auth() != null ? opts.auth() : ConvexAuth.fromEnv(), opts.maxGames());
+        GameHub hub = new GameHub(opts.auth() != null ? opts.auth() : ConvexAuth.fromEnv(), opts.maxGames(), ReplayUploads.fromEnv());
         return Javalin.create(config -> {
             config.startup.showJavalinBanner = false;
             config.jsonMapper(new JavalinJackson(mapper, false));

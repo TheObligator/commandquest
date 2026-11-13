@@ -420,3 +420,19 @@ dialog.counter-dialog { width: min(360px, calc(100vw - 32px)); background: var(-
 .rewind-step { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .rewind-timeline button { width: 100%; text-align: left; padding: 5px 8px; border-radius: 6px; border: 1px solid transparent; background: none; color: #c9cdd6; font-size: .8rem; cursor: pointer; overflow-wrap: anywhere; }
 .rewind-timeline button:hover, .rewind-timeline button:focus-visible { border-color: var(--accent); color: var(--text); background: rgb(224 168 79 / 8%); }
+
+/* Replays (pages/Replays.tsx, pages/ReplayViewer.tsx). */
+.replay-section { margin-bottom: 28px; }
+.replay-section h2 { display: flex; align-items: baseline; gap: 10px; }
+.replay-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.replay-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.replay-info { min-width: 0; flex: 1 1 260px; }
+.replay-info h3 { margin: 0 0 4px; overflow-wrap: anywhere; }
+.replay-info p { margin: 2px 0; }
+.replay-player:not(:last-child)::after { content: " · "; color: var(--muted); }
+.replay-controls input[type="range"] { width: 100%; margin: 8px 0; accent-color: var(--accent); }
+.replay-buttons { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.replay-buttons .ar-btn { justify-content: center; padding: 6px 0; }
+.replay-settings { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 4px; font-size: .8rem; }
+.replay-happened { margin: 4px 0 0; padding-left: 16px; font-size: .8rem; display: grid; gap: 3px; }
+.replay-hand { margin: 4px 0; overflow-wrap: anywhere; }

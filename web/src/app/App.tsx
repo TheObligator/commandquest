@@ -11,6 +11,8 @@ import { Settings } from "../pages/Settings";
 import { HotkeysSync } from "../game/useHotkeys";
 import { SignIn, takeNextPath } from "../pages/SignIn";
 import { LiveGame } from "../pages/LiveGame";
+import { Replays } from "../pages/Replays";
+import { ReplayViewer } from "../pages/ReplayViewer";
 import { Table } from "../pages/Table";
 import { Loading } from "../components/Spinner";
 import { Layout } from "./Layout";
@@ -59,6 +61,8 @@ export function App() {
   else if (route.path === "/table") page = <Table />;
   else if (route.path === "/settings") page = <Settings />;
   else if (route.path === "/game") page = <RequireAuth><LiveGame /></RequireAuth>;
+  else if (route.path === "/replays") page = <RequireAuth><Replays /></RequireAuth>;
+  else if (route.path === "/replay") page = <RequireAuth><ReplayViewer /></RequireAuth>;
   else if (route.path === "/decks") page = <RequireAuth><DeckList /></RequireAuth>;
   else if (route.path === "/decks/precons") page = <RequireAuth><Precons /></RequireAuth>;
   else if (route.path === "/decks/new") page = <RequireAuth><Editor key="new" /></RequireAuth>;
@@ -66,7 +70,7 @@ export function App() {
   else page = <p className="empty">Page not found.</p>;
 
   return (
-    <Layout full={route.path === "/table" || route.path === "/game"}>
+    <Layout full={route.path === "/table" || route.path === "/game" || route.path === "/replay"}>
       <HotkeysSync />
       {page}
     </Layout>

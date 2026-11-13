@@ -70,9 +70,17 @@ public final class GameHub {
         }
     }
 
+    /** Where finished games' replays go; null: games aren't recorded. */
+    private final GameSession.ReplaySink replays;
+
     public GameHub(ConvexAuth auth, int maxGames) {
+        this(auth, maxGames, null);
+    }
+
+    public GameHub(ConvexAuth auth, int maxGames, GameSession.ReplaySink replays) {
         this.auth = auth;
         this.maxGames = maxGames;
+        this.replays = replays;
     }
 
     public void onConnect(WsContext ws) {
@@ -217,7 +225,8 @@ public final class GameHub {
                     seats.add(new GameSession.Seat("AI " + (i + 1), ai.get(i), null));
                 }
                 c.seat = seat;
-                c.session = GameSession.startCommander(seats, rewindLevel);
+                c.session = GameSession.startCommander(seats,
+                        new GameSession.Options(rewindLevel, replays, Map.of(name, c.user)));
                 Logger.info("Game started for {} ({} AI)", c.user, ai.size());
             } catch (IllegalArgumentException e) {
                 error(c, e.getMessage());

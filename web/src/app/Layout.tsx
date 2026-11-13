@@ -16,6 +16,7 @@ export function Layout({ children, full }: { children: React.ReactNode; full?: b
         <nav>
           {nav("/play", "Play")}
           {nav("/decks", "Decks")}
+          {nav("/replays", "Replays")}
           {nav("/settings", "Settings")}
         </nav>
         <Account />

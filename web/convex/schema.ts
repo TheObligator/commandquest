@@ -60,6 +60,32 @@ export default defineSchema({
     .index("by_pair", ["pair"])
     .index("by_created", ["createdAt"]),
 
+  /** A finished game's replay (convex/replays.ts, docs/replays.md): the file and what it's about. */
+  replays: defineTable({
+    storageId: v.id("_storage"),
+    size: v.number(),
+    title: v.string(),
+    playedAt: v.number(),
+    turns: v.number(),
+    frames: v.number(),
+    players: v.array(v.object({ name: v.string(), human: v.boolean(), commander: v.optional(v.string()) })),
+    winner: v.optional(v.string()),
+    /** The game ran past the frame limit: the replay stops early. */
+    truncated: v.optional(v.boolean()),
+  }),
+
+  /** Who keeps which replay: the last 5 automatically (`saved` false), up to 5 more saved. */
+  replayLinks: defineTable({
+    userId: v.id("users"),
+    replayId: v.id("replays"),
+    saved: v.boolean(),
+    /** The replay's, for ordering. */
+    playedAt: v.number(),
+  })
+    .index("by_user_saved", ["userId", "saved", "playedAt"])
+    .index("by_user_replay", ["userId", "replayId"])
+    .index("by_replay", ["replayId"]),
+
   /** Per-user settings (convex/settings.ts). One row per user; absent = the defaults. */
   settings: defineTable({
     userId: v.id("users"),

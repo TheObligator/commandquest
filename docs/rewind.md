@@ -56,8 +56,6 @@ switched off (`ForgeEngine` sets `UI_UNDO_MODE` to Off). `Rewind` takes its plac
 any upstream code: it listens to the game's events (`GameEventPlayerPriority`) and uses Forge's
 public memento API.
 
-## Not yet
+## See also
 
-- Playback: recording finished games so they can be watched later (e.g. the last few games each
-  player played). The timeline is the in-game half of this. A saved replay would need its own
-  format (what each player saw, or everything for after the game) and storage limits.
+- [Replays](replays.md) of finished games.

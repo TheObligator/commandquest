@@ -84,6 +84,7 @@ export function LiveGame() {
           <span className="muted">{gameOverText(game.view?.log ?? [], game.view?.players[0]?.name ?? "")}</span>
           <span className="sb-spacer" />
           <button className="btn small" onClick={start} disabled={!deck}>Play again</button>
+          <a className="btn small ghost" href="#/replays" title="The replay is ready a few seconds after the game ends">Replays</a>
           <a className="btn small ghost" href="#/play">Back</a>
         </div>
       )}

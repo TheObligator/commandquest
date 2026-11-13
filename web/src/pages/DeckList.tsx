@@ -6,7 +6,7 @@ import { artistOf, cachedById, cardsById } from "../scryfall";
 
 export const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-function ago(ms: number) {
+export function ago(ms: number) {
   const s = (Date.now() - ms) / 1000;
   if (s < 60) return "just now";
   if (s < 3600) return `${Math.floor(s / 60)} min ago`;

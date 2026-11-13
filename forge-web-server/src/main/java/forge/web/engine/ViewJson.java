@@ -37,12 +37,25 @@ public final class ViewJson {
     private static final int LOG_LINES = 80;
 
     private final ObjectMapper json;
+    /** Everything face up, every hand shown: for replays, watched once the game is over. */
+    private final boolean seeAll;
 
     /** A player's token art (identity -> Scryfall id), from their deck. */
     private java.util.function.Function<PlayerView, Map<String, String>> tokenArt = p -> null;
 
     public ViewJson(ObjectMapper json) {
+        this(json, false);
+    }
+
+    /** {@code seeAll}: show every card face up, whoever the viewer is (replays, after the game). */
+    public ViewJson(ObjectMapper json, boolean seeAll) {
         this.json = json;
+        this.seeAll = seeAll;
+    }
+
+    /** May {@code viewer} see this card's face? */
+    private boolean sees(CardView c, PlayerView viewer) {
+        return seeAll || c.canBeShownTo(viewer) && (!c.isFaceDown() || c.canFaceDownBeShownTo(viewer));
     }
 
     void setTokenArt(java.util.function.Function<PlayerView, Map<String, String>> tokenArt) {
@@ -126,7 +139,7 @@ public final class ViewJson {
         o.put("commanderCasts", casts);
         o.put("libraryCount", p.getZoneSize(ZoneType.Library));
         o.put("handCount", p.getZoneSize(ZoneType.Hand));
-        o.set("hand", cards(gv, p.equals(viewer) ? p.getHand() : null, viewer));
+        o.set("hand", cards(gv, p.equals(viewer) || seeAll ? p.getHand() : null, viewer));
         o.set("battlefield", cards(gv, p.getBattlefield(), viewer));
         o.set("graveyard", cards(gv, p.getGraveyard(), viewer));
         o.set("exile", cards(gv, p.getExile(), viewer));
@@ -166,7 +179,7 @@ public final class ViewJson {
             o.put("faceDown", true);
         }
         CardStateView state = c.getCurrentState();
-        boolean seen = revealed || c.canBeShownTo(viewer) && (!c.isFaceDown() || c.canFaceDownBeShownTo(viewer));
+        boolean seen = revealed || sees(c, viewer);
         if (seen) {
             CardStateView face = c.isFaceDown() && c.getAlternateState() != null ? c.getAlternateState() : state;
             o.put("name", face.getName());
@@ -229,7 +242,7 @@ public final class ViewJson {
             // Blocking (also while blockers are being declared): the attacker it blocks, by name.
             for (CardView attacker : combat.getAttackers()) {
                 if (combat.getBlockers(attacker) != null && combat.getBlockers(attacker).contains(c)) {
-                    boolean attackerSeen = attacker.canBeShownTo(viewer) && !attacker.isFaceDown();
+                    boolean attackerSeen = seeAll || attacker.canBeShownTo(viewer) && !attacker.isFaceDown();
                     o.put("blocking", attackerSeen ? attacker.getCurrentState().getName() : "a creature");
                     break;
                 }
@@ -243,13 +256,13 @@ public final class ViewJson {
         o.put("id", s.getId());
         o.put("controller", id(s.getActivatingPlayer()));
         CardView source = s.getSourceCard();
-        o.put("name", source != null && source.canBeShownTo(viewer) ? source.getCurrentState().getName() : "Hidden");
+        o.put("name", source != null && (seeAll || source.canBeShownTo(viewer)) ? source.getCurrentState().getName() : "Hidden");
         o.put("kind", s.isTrigger() ? "Triggered ability" : s.isAbility() ? "Activated ability" : "Spell");
         o.put("text", s.getText());
         ArrayNode targets = o.putArray("targets");
         if (s.getTargetCards() != null) {
             for (CardView t : s.getTargetCards()) {
-                boolean seen = t.canBeShownTo(viewer) && (!t.isFaceDown() || t.canFaceDownBeShownTo(viewer));
+                boolean seen = sees(t, viewer);
                 targets.addObject().put("cardId", t.getId()).put("label", seen ? t.getCurrentState().getName() : "Face-down card");
             }
         }

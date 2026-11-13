@@ -51,30 +51,49 @@ public final class GameSession {
     /** Each player's token art (by player name, which is the seat name). */
     private final Map<String, Map<String, String>> tokenArt = new java.util.concurrent.ConcurrentHashMap<>();
 
-    /** How far back players may ask to rewind (0 = off, up to {@link Rewind#MAX_LEVEL}), chosen by the host. */
-    private final int rewindLevel;
-    private volatile Rewind rewind;
-    private final List<BrowserSeat> browsers = new ArrayList<>();
-
-    private GameSession(int rewindLevel) {
-        this.rewindLevel = Math.max(0, Math.min(Rewind.MAX_LEVEL, rewindLevel));
-    }
-
-    /** Starts a Commander game with rewinding off. */
-    public static GameSession startCommander(List<Seat> seats) {
-        return startCommander(seats, 0);
+    /** Where a finished game's replay goes ({@code users}: the signed-in user of each human seat). */
+    public interface ReplaySink {
+        void finished(Recording replay, java.util.Collection<String> users);
     }
 
     /**
-     * Starts a Commander game. Each seat's deck needs its commander in the Commander section.
-     * {@code rewindLevel}: how far back players may ask to rewind ({@link Rewind}), 0 for never.
+     * How the game is set up beyond its seats. {@code rewindLevel}: how far back players may ask
+     * to rewind ({@link Rewind}), 0 for never. {@code replays}: record the game and hand it there
+     * when it's over (null: don't record). {@code users}: seat name -> signed-in user, for replays.
      */
+    public record Options(int rewindLevel, ReplaySink replays, Map<String, String> users) {
+        public Options {
+            rewindLevel = Math.max(0, Math.min(Rewind.MAX_LEVEL, rewindLevel));
+            users = users == null ? Map.of() : Map.copyOf(users);
+        }
+    }
+
+    private final Options options;
+    private volatile Rewind rewind;
+    private volatile Recording recording;
+    private final List<BrowserSeat> browsers = new ArrayList<>();
+
+    private GameSession(Options options) {
+        this.options = options;
+    }
+
+    /** Starts a Commander game with rewinding off and no replay. */
+    public static GameSession startCommander(List<Seat> seats) {
+        return startCommander(seats, new Options(0, null, null));
+    }
+
+    /** Starts a Commander game with no replay. */
     public static GameSession startCommander(List<Seat> seats, int rewindLevel) {
+        return startCommander(seats, new Options(rewindLevel, null, null));
+    }
+
+    /** Starts a Commander game. Each seat's deck needs its commander in the Commander section. */
+    public static GameSession startCommander(List<Seat> seats, Options options) {
         if (seats.size() < 2 || seats.size() > 8) {
             throw new IllegalArgumentException("A game needs 2 to 8 seats");
         }
         ForgeEngine.start();
-        GameSession s = new GameSession(rewindLevel);
+        GameSession s = new GameSession(options);
         List<RegisteredPlayer> players = new ArrayList<>();
         Map<RegisteredPlayer, IGuiGame> guiMap = new LinkedHashMap<>();
         for (Seat seat : seats) {
@@ -116,16 +135,33 @@ public final class GameSession {
         return s;
     }
 
-    /** Hooks rewinding into the game Forge just created (once). */
+    /** Hooks rewinding and recording into the game Forge just created (once). */
     private synchronized void gameCreated() {
         Game g = match.getGame();
-        if (rewind != null || g == null || rewindLevel == 0) {
+        if (g == null || hooked) {
             return;
         }
-        Rewind r = new Rewind(g, rewindLevel);
-        r.onChange(() -> browsers.forEach(BrowserSeat::refresh));
-        g.subscribeToEvents(r);
-        rewind = r;
+        hooked = true;
+        if (options.replays() != null) {
+            Recording rec = new Recording(g, new com.fasterxml.jackson.databind.ObjectMapper(), tokenArt);
+            ReplaySink sink = options.replays();
+            rec.onFinish(r -> sink.finished(r, options.users().values()));
+            g.subscribeToEvents(rec);
+            recording = rec;
+        }
+        if (options.rewindLevel() > 0) {
+            Rewind r = new Rewind(g, options.rewindLevel());
+            r.onChange(() -> browsers.forEach(BrowserSeat::refresh));
+            g.subscribeToEvents(r);
+            rewind = r;
+        }
+    }
+
+    private boolean hooked;
+
+    /** This game's recording, or null when it isn't recorded. */
+    public Recording recording() {
+        return recording;
     }
 
     /** Rewinding in this game, or null when it's off. */
