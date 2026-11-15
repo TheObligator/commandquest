@@ -134,6 +134,8 @@ export interface GameView {
   autoYieldsOff?: boolean;
   /** Live games: your cards you can use right now (cast, play or activate). */
   playable?: number[];
+  /** Live games: it's your turn and you could still play a land from your hand this turn. */
+  landDrop?: boolean;
   /** In turn order, starting with the viewer. */
   players: PlayerView[];
   stack: StackItemView[];

@@ -12,6 +12,8 @@ import { ME, SIM_CARD_NAMES } from "../game/sim";
 import { LayoutPicker, TableBoard, useStored, useTableStops, type LayoutId } from "../game/TableBoard";
 import { useHotkeys } from "../game/useHotkeys";
 import { useSimGame } from "../game/useSimGame";
+import { useLandCheck } from "../game/useLandCheck";
+import type { AutoPassMode } from "../game/phases";
 
 const OPPONENT_NAMES = ["Opponent 1", "Opponent 2", "Opponent 3"];
 
@@ -68,12 +70,26 @@ function Game({ count, start, layout, myName }: { count: number; start: "new" | 
   const err = (msg: string | undefined) => msg && toast(msg, "error");
   const playCard = (id: number) => err(sim.play(id));
 
+  // Passing your turn with a land still to play: ask first.
+  const landCheck = useLandCheck({
+    stops: st.stops, me: ME, active: v.active, step: v.step, turn: v.turn, stackNonEmpty: v.stack.length > 0, landDrop: sim.landDrop,
+  });
+  const pass = () => {
+    if (sim.priority && !landCheck("pass")) return;
+    sim.pass();
+  };
+  const setAutoPass = (mode: AutoPassMode) => {
+    if (sim.autoPass?.mode !== mode && !landCheck("skip")) return;
+    sim.setAutoPass(mode);
+  };
+  const railSim = { ...sim, pass, setAutoPass };
+
   // Your hotkeys (Settings): auto-pass skips and hold priority. The decision's buttons handle their own.
   const playing = sim.phase === "playing";
   useHotkeys({
-    autoEndOfTurn: () => (playing ? sim.setAutoPass("END_OF_TURN") : false),
-    autoBeforeMyTurn: () => (playing ? sim.setAutoPass("BEFORE_MY_TURN") : false),
-    autoActionOrEnd: () => (playing ? sim.setAutoPass("ACTION_OR_END_STEP") : false),
+    autoEndOfTurn: () => (playing ? setAutoPass("END_OF_TURN") : false),
+    autoBeforeMyTurn: () => (playing ? setAutoPass("BEFORE_MY_TURN") : false),
+    autoActionOrEnd: () => (playing ? setAutoPass("ACTION_OR_END_STEP") : false),
     holdPriority: () => st.setHoldPriority(!st.holdPriority),
   });
 
@@ -84,7 +100,7 @@ function Game({ count, start, layout, myName }: { count: number; start: "new" | 
       stops={st}
       priority={sim.priority && sim.phase === "playing"}
       rail={(preview) => (
-        <ActionRail sim={sim} nameOf={nameOf} colorOf={colorOf} bottomIds={bottomIds} preview={preview} onError={(m) => toast(m, "error")} />
+        <ActionRail sim={railSim} nameOf={nameOf} colorOf={colorOf} bottomIds={bottomIds} preview={preview} onError={(m) => toast(m, "error")} />
       )}
       hand={{
         selecting: sim.phase === "bottom",

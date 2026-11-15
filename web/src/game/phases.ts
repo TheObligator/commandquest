@@ -178,3 +178,38 @@ export function nextStep(turnOrder: string[], active: string, step: StepId, firs
   const next = turnOrder[(turnOrder.indexOf(active) + 1) % turnOrder.length];
   return { active: next, step: "UNTAP" };
 }
+
+/** Main-phase stops on your own turn: without them you never get priority to play lands or sorceries. */
+export const VITAL_STOPS: readonly StepId[] = ["MAIN1", "MAIN2"];
+
+/** True when turning `step` off for `player` takes away a main-phase stop on your own turn. */
+export function removesVitalStop(stops: TableStops, me: string, player: string, step: StepId): boolean {
+  return player === me && VITAL_STOPS.includes(step) && (stops.get(me)?.has(step) ?? false);
+}
+
+/**
+ * How a player gives up priority:
+ *  - "pass": pass once (OK / Space). Your stops decide where you get it back.
+ *  - "skip": an auto-pass or Forge's End Turn, which ignores your stops for the rest of the turn.
+ */
+export type PassKind = "pass" | "skip";
+
+/**
+ * Should the client ask before this pass? True on your own turn, up to main 2, when you could
+ * still play a land and the pass would take you past your last main phase: a skip always does,
+ * and a pass does when the stack is empty and none of your stops after this step is a main phase.
+ * (With something on the stack you get priority back once it resolves.)
+ */
+export function passSkipsLandDrop(
+  stops: TableStops,
+  ctx: { me: string; activePlayer: string; step: StepId; stackNonEmpty: boolean; landDrop: boolean; kind: PassKind },
+): boolean {
+  if (!ctx.landDrop || ctx.activePlayer !== ctx.me) return false;
+  const order = STEPS.map((s) => s.id);
+  const i = order.indexOf(ctx.step);
+  if (i < 0 || i > order.indexOf("MAIN2")) return false;
+  if (ctx.kind === "skip") return true;
+  if (ctx.stackNonEmpty) return false;
+  const mine = stops.get(ctx.me);
+  return !VITAL_STOPS.some((m) => order.indexOf(m) > i && mine?.has(m));
+}

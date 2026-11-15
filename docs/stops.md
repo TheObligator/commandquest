@@ -28,6 +28,17 @@ The game screen has a vertical phase strip on the right. Every step is a tile sp
   or respond to your own spell before passing. In live games the browser does the pass: once your
   item is on top of the stack, it answers Forge's next priority prompt (OK + End Turn / Undo) with
   OK (`LiveGame.tsx`).
+- **Land-drop check** (`passSkipsLandDrop` in `phases.ts`, `web/src/game/useLandCheck.ts`): on your
+  own turn, up to main 2, while you could still play a land from your hand, the game asks before you
+  give up your last main phase: passing with an empty stack when none of your stops after this step
+  is a main phase (always in main 2), Forge's End Turn, or any auto-pass. Once you say yes it doesn't
+  ask again that turn. Live games learn whether a land can still be played from the server's
+  `landDrop` (`docs/game-protocol.md`), which counts extra land drops and lands on the back of
+  modal double-faced cards.
+- **Your main-phase stops are vital.** Turning off your own Main 1 or Main 2 stop asks first, since
+  without it you lose priority there and can't play lands or sorcery-speed spells
+  (`removesVitalStop`). Every other stop, including main phases on opponents' turns, toggles
+  without asking.
 - **Presets.** Each account has a default preset (Convex `stops.get` / `stops.save` / `stops.reset`):
   one list for your turn, one per seat (`seats[0]` is the player after you in turn order, and so on),
   and a general opponents list (the stops all opponents share), used for any seat with no saved list.

@@ -26,6 +26,8 @@ export interface SimGame {
   priority: boolean;
   autoPass?: AutoPass;
   canPlayLand: boolean;
+  /** Your turn, you haven't played a land yet, and there's one in your hand (any step). */
+  landDrop: boolean;
   pass(): void;
   setAutoPass(mode: AutoPassMode): void;
   play(cardId: number): string | undefined;
@@ -96,6 +98,8 @@ export function useSimGame(opts: { kind: "new" | "mid"; names: string[]; stops: 
     priority: sim.priority,
     autoPass: sim.autoPass,
     canPlayLand: sim.priority && sorcerySpeed && sim.landTurn !== sim.game.turn,
+    landDrop: sim.phase === "playing" && sim.game.active === ME && sim.landTurn !== sim.game.turn
+      && sim.game.cards.some((c) => c.owner === ME && c.zone === "hand" && c.types.includes("Land")),
 
     pass: () => void update((s) => (s.priority ? passIn(s) : undefined)),
 

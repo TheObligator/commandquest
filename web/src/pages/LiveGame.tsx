@@ -10,6 +10,8 @@ import { LiveRail } from "../game/LiveRail";
 import { LayoutPicker, TableBoard, useStored, useTableStops, type LayoutId, type MenuPart, type MenuTarget } from "../game/TableBoard";
 import { useHotkeys } from "../game/useHotkeys";
 import { useLiveGame, type DeckPayload } from "../game/useLiveGame";
+import { useLandCheck } from "../game/useLandCheck";
+import type { AutoPassMode } from "../game/phases";
 import { tokenArtMap } from "../tokens";
 import { useDeckTokens } from "../useDeckTokens";
 import type { CardView, GameView } from "../game/view";
@@ -256,8 +258,8 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
         title: "Priority",
         items: [
           { label: game.prompt?.ok.label && game.prompt.ok.label !== "OK" ? game.prompt.ok.label : "Pass priority (OK)", disabled: !game.prompt?.ok.enabled, onSelect: ok },
-          { label: "Pass until end of turn", onSelect: () => game.setAutoPass("END_OF_TURN") },
-          { label: "Pass until my turn", onSelect: () => game.setAutoPass("BEFORE_MY_TURN") },
+          { label: "Pass until end of turn", onSelect: () => setAutoPass("END_OF_TURN") },
+          { label: "Pass until my turn", onSelect: () => setAutoPass("BEFORE_MY_TURN") },
         ],
       },
     ];
@@ -297,22 +299,35 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
     castDone.current = false;
     if (!st.holdPriority && p.ok.enabled) game.ok();
   }, [game.prompt, game.ask, view, st.holdPriority, game]);
+  // Passing your turn with a land still to play: ask first (OK past your last main phase, Forge's
+  // End Turn, or an auto-pass).
+  const landCheck = useLandCheck({
+    stops: st.stops, me: view.viewer, active: view.active, step: view.step, turn: view.turn,
+    stackNonEmpty: view.stack.length > 0, landDrop: !!view.landDrop,
+  });
+  const priorityPrompt = !!game.prompt && !game.ask && isPriorityPrompt(game.prompt);
   const ok = () => {
+    if (priorityPrompt && !landCheck("pass")) return;
     castFrom.current = null;
     castDone.current = false;
     game.ok();
   };
   const cancel = () => {
+    if (priorityPrompt && game.prompt?.cancel.label === "End Turn" && !landCheck("skip")) return;
     castFrom.current = null;
     castDone.current = false;
     game.cancel();
   };
+  const setAutoPass = (mode: AutoPassMode) => {
+    if (game.autoPass !== mode && !landCheck("skip")) return; // turning one off needs no question
+    game.setAutoPass(mode);
+  };
 
   // Your hotkeys (Settings): auto-pass skips, hold priority, cast your commander.
   useHotkeys({
-    autoEndOfTurn: () => game.setAutoPass("END_OF_TURN"),
-    autoBeforeMyTurn: () => game.setAutoPass("BEFORE_MY_TURN"),
-    autoActionOrEnd: () => game.setAutoPass("ACTION_OR_END_STEP"),
+    autoEndOfTurn: () => setAutoPass("END_OF_TURN"),
+    autoBeforeMyTurn: () => setAutoPass("BEFORE_MY_TURN"),
+    autoActionOrEnd: () => setAutoPass("ACTION_OR_END_STEP"),
     holdPriority: () => st.setHoldPriority(!st.holdPriority),
     castCommander: () => (commander ? click(commander.id) : false),
   });
@@ -335,7 +350,7 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
       layout={layout}
       stops={st}
       priority={!!game.prompt?.ok.enabled || !!game.ask}
-      rail={(preview) => <LiveRail game={{ ...game, ok, cancel, clickCard: click }} nameOf={nameOf} colorOf={colorOf} preview={preview} />}
+      rail={(preview) => <LiveRail game={{ ...game, ok, cancel, setAutoPass, clickCard: click }} nameOf={nameOf} colorOf={colorOf} preview={preview} />}
       hand={{ onPlay: click, onClick: click }}
       onCardClick={click}
       onPlayerClick={game.clickPlayer}

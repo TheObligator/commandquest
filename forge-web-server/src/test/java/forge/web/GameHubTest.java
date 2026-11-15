@@ -101,6 +101,8 @@ public class GameHubTest {
             String notice = null;
             boolean clickedEarly = false;
             boolean landWasPlayable = false;
+            boolean landDropInMain = false;
+            boolean landDropOffTurn = false;
             boolean askedActions = false;
             boolean usedMenu = false;
             java.util.List<String> trace = new java.util.ArrayList<>();
@@ -115,7 +117,11 @@ public class GameHubTest {
                         : m.path("t").asText().equals("state") ? " T" + m.path("view").path("turn") + " " + m.path("view").path("step") + " active=" + m.path("view").path("active")
                         : m.path("t").asText().equals("ask") ? " " + m.path("message") + " " + m.path("options") : ""));
                 switch (m.path("t").asText()) {
-                    case "state" -> state = m.path("view");
+                    case "state" -> {
+                        state = m.path("view");
+                        landDropOffTurn |= state.path("landDrop").asBoolean()
+                                && !state.path("active").asText().equals(state.path("viewer").asText());
+                    }
                     case "ask" -> { // answer any question with its preselected or first option
                         ObjectNode a = json.createObjectNode();
                         a.put("t", "answer");
@@ -150,6 +156,7 @@ public class GameHubTest {
                             for (JsonNode id : state.path("playable")) {
                                 landWasPlayable |= id.asInt() == land.path("id").asInt();
                             }
+                            landDropInMain |= state.path("landDrop").asBoolean();
                             if (!askedActions) {
                                 // The first land goes in through its right-click menu.
                                 askedActions = true;
@@ -248,6 +255,8 @@ public class GameHubTest {
                 Assert.assertTrue(prompts > 3, "Forge's prompts reached the browser");
                 Assert.assertTrue(clickedEarly && notice != null && notice.contains("land"), "a land clicked too early says why: " + notice);
                 Assert.assertTrue(landWasPlayable, "the land showed as playable in our main phase");
+                Assert.assertTrue(landDropInMain, "landDrop is on in our main phase with a land to play");
+                Assert.assertFalse(landDropOffTurn, "landDrop is never on during an opponent's turn");
                 Assert.assertTrue(usedMenu, "a land was played from its menu");
                 Assert.assertTrue(landsPlayed >= 2, "played lands: " + landsPlayed);
                 me = state.path("players").get(0);
