@@ -181,15 +181,20 @@ label.inline select { width: auto; padding: 5px 8px; }
 .precon-dialog .dialog-head .actions { align-items: center; }
 .precon-dialog .view-toggle { float: none; margin: 0; }
 
-/* Stacked card pictures: each type is a column of cards overlapping so only the name bars show
-   (card = 488 × 680, so a card is 139.34% as tall as it is wide). The last card shows whole, the
-   hover preview shows any card whole, and clicking opens its details. */
+/* Card pictures: each type is a column of overlapping cards (card = 488 × 680, so a card is 139.34%
+   as tall as it is wide; a negative top margin in % of the width sets how much of each card shows).
+   "Stacked" shows the name bars, "Spread" the name and art, "Grid" whole cards with no overlap.
+   The last card in a column shows whole, hover previews any card, and clicking opens its details. */
 .stack-groups { display: flex; flex-wrap: wrap; gap: 18px 14px; align-items: flex-start; }
 .stack-col { width: 150px; }
 .stack-col h4 { font-size: .85rem; text-transform: uppercase; letter-spacing: .06em; color: var(--accent-2); margin: 6px 0; white-space: nowrap; }
 .stack { display: flex; flex-direction: column; }
+.stack.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.grid-group { margin-bottom: 16px; }
+.grid-group h4 { font-size: .85rem; text-transform: uppercase; letter-spacing: .06em; color: var(--accent-2); margin: 6px 0 8px; }
 .stack-card { position: relative; display: block; width: 100%; padding: 0; border: 0; background: none; cursor: pointer; border-radius: 4.75% / 3.5%; container-type: inline-size; }
-.stack-card + .stack-card { margin-top: -124.3%; }
+.stack.stacked .stack-card + .stack-card { margin-top: -124.3%; } /* 15% of the width shows */
+.stack.spread .stack-card + .stack-card { margin-top: -84.3%; }   /* 55%: name bar and most of the art */
 .stack-card:disabled { cursor: default; }
 .stack-card img { width: 100%; aspect-ratio: 488 / 680; display: block; border-radius: 4.75% / 3.5%; background: var(--panel-2); box-shadow: 0 -2px 6px rgb(0 0 0 / 35%); }
 .stack-card:hover:not(:disabled) img, .stack-card:focus-visible img { outline: 2px solid var(--accent-2); outline-offset: -1px; }

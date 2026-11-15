@@ -149,16 +149,24 @@ export function Precons() {
   );
 }
 
-type View = "stacks" | "list";
+/** How much stacked cards overlap, or a grid of whole cards, or a text list. */
+type View = "stacked" | "spread" | "grid" | "list";
+const VIEWS: { id: View; label: string; title: string }[] = [
+  { id: "stacked", label: "Stacked", title: "Cards overlap so only their names show" },
+  { id: "spread", label: "Spread", title: "Cards overlap so their names and art show" },
+  { id: "grid", label: "Grid", title: "Whole cards, no overlap" },
+  { id: "list", label: "List", title: "Card names only" },
+];
 const VIEW_KEY = "cq.preconView";
 
-/** Card pictures (the default) or a text list; remembered per browser. */
+/** Remembered per browser. Spread is the default (and replaces the old "stacks" setting). */
 function usePreconView(): [View, (v: View) => void] {
   const [view, setView] = useState<View>(() => {
     try {
-      return localStorage.getItem(VIEW_KEY) === "list" ? "list" : "stacks";
+      const saved = localStorage.getItem(VIEW_KEY);
+      return VIEWS.some((v) => v.id === saved) ? (saved as View) : "spread";
     } catch {
-      return "stacks";
+      return "spread";
     }
   });
   const set = (v: View) => {
@@ -235,11 +243,11 @@ function PreconList({ precon, addButton, onClose }: { precon: Precon; addButton:
     showCardDetails(s);
   };
 
-  /** Cards overlap so only their name bars show; hover shows the whole card, click opens details. */
+  /** A column of overlapping cards (or, in the grid, whole cards); hover shows a card, click opens details. */
   const stack = (g: Group) => (
-    <div key={g.key} className="stack-col">
+    <div key={g.key} className={view === "grid" ? "grid-group" : "stack-col"}>
       <h4>{g.label}<span className="muted"> {total(g.cards)}</span></h4>
-      <div className="stack">
+      <div className={`stack ${view}`}>
         {g.cards.map((c) => {
           const s = lookup(c);
           const img = s && scry.imageUrl(s, "normal");
@@ -277,7 +285,7 @@ function PreconList({ precon, addButton, onClose }: { precon: Precon; addButton:
     groups.length > 0 && (
       <section className="board">
         <h2>{title}<span className="muted"> {groups.reduce((n, g) => n + total(g.cards), 0)}</span></h2>
-        {view === "stacks" ? <div className="stack-groups">{groups.map(stack)}</div> : <div className="type-groups">{groups.map(list)}</div>}
+        {view === "list" ? <div className="type-groups">{groups.map(list)}</div> : <div className={view === "grid" ? "grid-groups" : "stack-groups"}>{groups.map(stack)}</div>}
       </section>
     );
 
@@ -291,8 +299,9 @@ function PreconList({ precon, addButton, onClose }: { precon: Precon; addButton:
         </div>
         <div className="actions">
           <div className="view-toggle" role="group" aria-label="Show the deck as">
-            <button aria-pressed={view === "stacks"} onClick={() => setView("stacks")}>▦ Cards</button>
-            <button aria-pressed={view === "list"} onClick={() => setView("list")}>☰ List</button>
+            {VIEWS.map((v) => (
+              <button key={v.id} aria-pressed={view === v.id} title={v.title} onClick={() => setView(v.id)}>{v.label}</button>
+            ))}
           </div>
           {addButton}
         </div>
