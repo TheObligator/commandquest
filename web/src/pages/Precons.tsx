@@ -3,12 +3,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import type { DeckCard } from "../../convex/model/deckRules";
 import { errorMessage } from "../app/errors";
-import { closeOnBackdrop } from "../carddetails";
+import { closeOnBackdrop, showCardDetails } from "../carddetails";
 import { mergeDuplicates } from "../decklist";
 import { toast } from "../dom";
+import { ManaCost } from "../components/ManaCost";
 import { Loading } from "../components/Spinner";
 import { cardCount, deckCards, formatOf, loadPrecons, matches, releaseLabel, type Precon } from "../precons";
 import * as scry from "../scryfall";
+import { useCardPreview } from "../useCardPreview";
+import { TYPE_ORDER } from "./boards";
 
 type Kind = Precon["kind"];
 
@@ -124,7 +127,7 @@ export function Precons() {
             const art = card && (card.card_faces?.[0]?.image_uris?.art_crop ?? card.image_uris?.art_crop);
             return (
               <div key={p.id} className="deck-tile precon-tile">
-                <button className="deck-cover precon-cover" style={art ? { backgroundImage: `url("${art}")` } : undefined} onClick={() => setViewing(p)} aria-label={`View the ${p.name} decklist`}>
+                <button className="deck-cover precon-cover" style={art ? { backgroundImage: `url("${art}")` } : undefined} onClick={() => setViewing(p)} aria-label={`View the ${p.name} deck`}>
                   {art ? <span className="art-credit">Art by {scry.artistOf(card!) ?? "unknown"} · © Wizards of the Coast</span> : <span className="precon-set">{p.set.toUpperCase()}</span>}
                 </button>
                 <div className="deck-meta">
@@ -133,7 +136,7 @@ export function Precons() {
                   <p className="muted small">{p.setName} · {releaseLabel(p.date) || "Undated"} · {cardCount(p)} cards</p>
                   <div className="actions precon-actions">
                     {addButton(p)}
-                    <button className="btn ghost small" onClick={() => setViewing(p)}>View list</button>
+                    <button className="btn ghost small" onClick={() => setViewing(p)}>View deck</button>
                   </div>
                 </div>
               </div>
@@ -146,15 +149,138 @@ export function Precons() {
   );
 }
 
-const SECTIONS = [
-  { key: "commander", label: "Commander" },
-  { key: "main", label: "Main deck" },
-  { key: "side", label: "Sideboard" },
-] as const;
+type View = "stacks" | "list";
+const VIEW_KEY = "cq.preconView";
+
+/** Card pictures (the default) or a text list; remembered per browser. */
+function usePreconView(): [View, (v: View) => void] {
+  const [view, setView] = useState<View>(() => {
+    try {
+      return localStorage.getItem(VIEW_KEY) === "list" ? "list" : "stacks";
+    } catch {
+      return "stacks";
+    }
+  });
+  const set = (v: View) => {
+    setView(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      // Storage blocked: the choice lasts until the page reloads.
+    }
+  };
+  return [view, set];
+}
+
+interface Group {
+  key: string;
+  label: string;
+  cards: DeckCard[];
+}
+
+const lookup = (c: DeckCard) => scry.cachedExact(c) ?? scry.cached(c);
+const total = (cards: DeckCard[]) => cards.reduce((n, c) => n + c.quantity, 0);
+
+/** One entry per name (Forge lists basic lands once per art), keeping the first printing. */
+function byName(cards: DeckCard[]): DeckCard[] {
+  const merged = new Map<string, DeckCard>();
+  for (const c of cards) {
+    const had = merged.get(c.name);
+    merged.set(c.name, had ? { ...had, quantity: had.quantity + c.quantity } : c);
+  }
+  return [...merged.values()];
+}
+
+/** Commander, then the main deck by card type (cheapest first), then the sideboard. */
+function groupsOf(p: Precon, resolved: boolean): { deck: Group[]; side: Group[] } {
+  const all = deckCards(p);
+  const board = (b: DeckCard["board"]) => byName(all.filter((c) => c.board === b));
+  const sorted = (g: DeckCard[]) => g.sort((a, z) => (lookup(a)?.cmc ?? 0) - (lookup(z)?.cmc ?? 0) || a.name.localeCompare(z.name));
+  const byType = (cards: DeckCard[], prefix: string): Group[] => {
+    if (!resolved) return cards.length ? [{ key: `${prefix}cards`, label: "Cards", cards: sorted(cards) }] : [];
+    const types = new Map<string, DeckCard[]>();
+    for (const c of cards) {
+      const t = scry.primaryType(lookup(c));
+      types.set(t, [...(types.get(t) ?? []), c]);
+    }
+    return TYPE_ORDER.filter((t) => types.has(t)).map((t) => ({ key: prefix + t, label: t, cards: sorted(types.get(t)!) }));
+  };
+  const commander = board("commander");
+  const side = board("side");
+  return {
+    deck: [...(commander.length ? [{ key: "commander", label: "Commander", cards: commander }] : []), ...byType(board("main"), "main-")],
+    side: side.length ? [{ key: "side", label: "Sideboard", cards: sorted(side) }] : [],
+  };
+}
 
 function PreconList({ precon, addButton, onClose }: { precon: Precon; addButton: React.ReactNode; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const [view, setView] = usePreconView();
+  // undefined while Scryfall loads; false if it couldn't (names only).
+  const [resolved, setResolved] = useState<boolean | undefined>(undefined);
+  const preview = useCardPreview();
   useEffect(() => ref.current?.showModal(), []);
+  useEffect(() => {
+    let live = true;
+    scry.resolve(deckCards(precon)).then(() => live && setResolved(true), () => live && setResolved(false));
+    return () => {
+      live = false;
+    };
+  }, [precon]);
+
+  const { deck, side } = useMemo(() => groupsOf(precon, resolved === true), [precon, resolved]);
+
+  const details = (s: scry.ScryCard) => {
+    preview.hide();
+    showCardDetails(s);
+  };
+
+  /** Cards overlap so only their name bars show; hover shows the whole card, click opens details. */
+  const stack = (g: Group) => (
+    <div key={g.key} className="stack-col">
+      <h4>{g.label}<span className="muted"> {total(g.cards)}</span></h4>
+      <div className="stack">
+        {g.cards.map((c) => {
+          const s = lookup(c);
+          const img = s && scry.imageUrl(s, "normal");
+          return (
+            <button key={c.name} className="stack-card" title={s ? undefined : c.name} disabled={!s} onClick={() => s && details(s)} aria-label={`${c.quantity} × ${c.name}: card details`} {...preview.handlers(s)}>
+              {img ? <img src={img} alt="" loading="lazy" /> : <span className="noimg">{c.name}</span>}
+              {img && <span className="tile-name" aria-hidden="true">{c.name}</span>}
+              {c.quantity > 1 && <span className="stack-qty">×{c.quantity}</span>}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  const list = (g: Group) => (
+    <div key={g.key} className="type-group">
+      <h4>{g.label}<span className="muted"> {total(g.cards)}</span></h4>
+      <ul className="flat">
+        {g.cards.map((c) => {
+          const s = lookup(c);
+          return (
+            <li key={c.name} className="card-row" {...preview.handlers(s)}>
+              <span className="qty">{c.quantity}</span>
+              {s ? <button className="cname" title="Card details" onClick={() => details(s)}>{c.name}</button> : <span className="cname">{c.name}</span>}
+              {s && <ManaCost cost={s.mana_cost ?? s.card_faces?.map((f) => f.mana_cost).filter(Boolean).join(" // ")} />}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+
+  const section = (title: string, groups: Group[]) =>
+    groups.length > 0 && (
+      <section className="board">
+        <h2>{title}<span className="muted"> {groups.reduce((n, g) => n + total(g.cards), 0)}</span></h2>
+        {view === "stacks" ? <div className="stack-groups">{groups.map(stack)}</div> : <div className="type-groups">{groups.map(list)}</div>}
+      </section>
+    );
+
   return (
     <dialog ref={ref} className="printings precon-dialog" onClose={onClose} onClick={(e) => closeOnBackdrop(e.nativeEvent, ref.current)}>
       <button className="dialog-close" aria-label="Close" onClick={() => ref.current?.close()}>×</button>
@@ -163,26 +289,27 @@ function PreconList({ precon, addButton, onClose }: { precon: Precon; addButton:
           <h3>{precon.name}</h3>
           <p className="muted small">{precon.setName} · {releaseLabel(precon.date) || "Undated"} · {cardCount(precon)} cards</p>
         </div>
-        {addButton}
+        <div className="actions">
+          <div className="view-toggle" role="group" aria-label="Show the deck as">
+            <button aria-pressed={view === "stacks"} onClick={() => setView("stacks")}>▦ Cards</button>
+            <button aria-pressed={view === "list"} onClick={() => setView("list")}>☰ List</button>
+          </div>
+          {addButton}
+        </div>
       </div>
-      <div className="precon-list">
+      <div className="precon-list" onScroll={preview.hide}>
         {precon.description && <p className="muted">{precon.description}</p>}
-        {SECTIONS.filter((s) => precon[s.key].length).map((s) => {
-          // Forge lists basic lands once per art; show each name once.
-          const merged = new Map<string, number>();
-          for (const [n, name] of precon[s.key]) merged.set(name, (merged.get(name) ?? 0) + n);
-          return (
-            <section key={s.key} className="board">
-              <h2>{s.label} ({[...merged.values()].reduce((a, b) => a + b, 0)})</h2>
-              <ul className="flat">
-                {[...merged].map(([name, n]) => (
-                  <li key={name} className="card-row"><span className="qty">{n}</span><span className="cname">{name}</span></li>
-                ))}
-              </ul>
-            </section>
-          );
-        })}
+        {resolved === undefined ? (
+          <Loading />
+        ) : (
+          <>
+            {resolved === false && <p className="muted small">Couldn't reach Scryfall, so only card names are shown.</p>}
+            {section("Deck", deck)}
+            {section("Sideboard", side)}
+          </>
+        )}
       </div>
+      {preview.element}
     </dialog>
   );
 }

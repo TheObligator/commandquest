@@ -16,14 +16,14 @@ import { Loading } from "../components/Spinner";
 import { CONQUEST, validateConquest } from "../formats/conquest";
 import * as scry from "../scryfall";
 import { tokenPicks } from "../tokens";
-import { BOARDS } from "./boards";
+import { useCardPreview } from "../useCardPreview";
+import { BOARDS, TYPE_ORDER } from "./boards";
 import { SearchBox, SearchResults } from "./EditorSearch";
 import { capitalize } from "./DeckList";
 
 const FORMATS = ["commander", "conquest", "standard", "pioneer", "modern", "legacy", "vintage", "pauper", "other"];
 /** Up to this many main-deck planeswalkers are shown beside the commander(s). */
 const MAX_WALKERS_BESIDE_COMMANDER = 3;
-const TYPE_ORDER = ["Creature", "Planeswalker", "Battle", "Instant", "Sorcery", "Artifact", "Enchantment", "Land", "Other"];
 const COLORS: Record<string, string> = { W: "White", U: "Blue", B: "Black", R: "Red", G: "Green" };
 const UNTITLED = "Untitled deck";
 
@@ -397,34 +397,6 @@ function DeckEditor({ initial }: { initial: Draft }) {
   );
 }
 
-// ---- Hover preview (beside the cursor) ----------------------------------------------
-
-function usePreview() {
-  const [preview, setPreview] = useState<{ url: string; x: number; y: number } | null>(null);
-  const position = (e: React.MouseEvent) => {
-    const w = 250, h = 349, pad = 18;
-    let x = e.clientX + pad;
-    if (x + w > innerWidth) x = e.clientX - w - pad;
-    const y = Math.min(Math.max(8, e.clientY - h / 2), innerHeight - h - 8);
-    return { x, y };
-  };
-  const handlers = (c: scry.ScryCard | undefined) => ({
-    onMouseEnter: (e: React.MouseEvent) => {
-      if (!c || matchMedia("(hover: none)").matches) return;
-      const url = scry.imageUrl(c, "normal");
-      if (url) setPreview({ url, ...position(e) });
-    },
-    onMouseMove: (e: React.MouseEvent) => setPreview((p) => (p ? { ...p, ...position(e) } : p)),
-    onMouseLeave: () => setPreview(null),
-  });
-  const element = preview && (
-    <div className="preview" style={{ transform: `translate(${preview.x}px, ${preview.y}px)` }}>
-      <img src={preview.url} alt="" />
-    </div>
-  );
-  return { handlers, element, hide: () => setPreview(null) };
-}
-
 // ---- Search ---------------------------------------------------------------------------
 
 function SearchPane(props: { hidden: boolean; addTo: Board; onAddTo: (b: Board) => void; onPick: (name: string) => void; onSubmit: (q: string) => void; autoFocus: boolean }) {
@@ -530,7 +502,7 @@ function DeckView(props: {
   onPrinting: (c: DeckCard, p: scry.ScryCard) => void;
 }) {
   const { deck, missing, count } = props;
-  const preview = usePreview();
+  const preview = useCardPreview();
   const [printingsFor, setPrintingsFor] = useState<DeckCard | null>(null);
   const [view, setView] = useDeckViewMode();
   const support = useCardSupport();
