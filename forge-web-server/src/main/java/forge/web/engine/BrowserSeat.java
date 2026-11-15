@@ -14,6 +14,7 @@ import java.util.HashSet;
 import java.util.Set;
 import forge.game.card.CardView;
 import forge.game.player.PlayerView;
+import forge.game.spellability.SpellAbility;
 import forge.game.spellability.StackItemView;
 import forge.interfaces.IGameController;
 import forge.game.spellability.SpellAbilityView;
@@ -268,6 +269,7 @@ public final class BrowserSeat implements IRemote {
             if (sel != null) {
                 view.set("selection", sel);
             }
+            view.put("landDrop", landDrop());
             untapLocks(live, view);
             if (!searching.isEmpty()) {
                 ArrayNode s = view.putArray("searching"); // players whose library you may search
@@ -284,6 +286,29 @@ public final class BrowserSeat implements IRemote {
             lastState = state;
             emitRaw(state);
         }
+    }
+
+    /**
+     * It's your turn and a land in your hand could still be played this turn (land drops left),
+     * ignoring timing, so it's also true in combat. The browser asks before you pass the rest of
+     * your turn with it unplayed. Lands include modal double-faced cards with a land face.
+     */
+    private boolean landDrop() {
+        try {
+            Game g = game.get();
+            Player p = g == null || me == null ? null : g.getPlayer(me.getId());
+            if (p == null || g.isGameOver() || !g.getPhaseHandler().isPlayerTurn(p)) {
+                return false;
+            }
+            for (Card c : p.getCardsIn(ZoneType.Hand)) {
+                if (c.getAllSpellAbilities().anyMatch(SpellAbility::isLandAbility) && p.canPlayLand(c, true, null)) {
+                    return true;
+                }
+            }
+        } catch (RuntimeException e) {
+            Logger.debug(e, "Couldn't check for a land drop");
+        }
+        return false;
     }
 
     /**

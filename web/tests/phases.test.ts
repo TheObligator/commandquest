@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  DEFAULT_PRESET, autoPassStatus, nextStep, presetFromStops, shouldStop, stopsFromPreset, toggleForAll, toggleStop,
+  DEFAULT_PRESET, autoPassStatus, nextStep, passSkipsLandDrop, presetFromStops, removesVitalStop, shouldStop, stopsFromPreset, toggleForAll, toggleStop,
 } from "../src/game/phases.ts";
 
 const opps = ["o1", "o2", "o3"];
@@ -102,4 +102,36 @@ test("auto-pass: end of turn expires next turn, R stops at this turn's end step,
   assert.equal(shouldStop(s, { ...at("o3", "END_OF_TURN", 7), autoPass: ap }), true);
   // Once expired, the normal stops apply again.
   assert.equal(shouldStop(s, { ...at("o1", "COMBAT_DECLARE_ATTACKERS", 6), autoPass: { mode: "END_OF_TURN", turn: 5 } }), true);
+});
+
+test("turning off your own main-phase stops is flagged, nothing else is", () => {
+  const s = stopsFromPreset(DEFAULT_PRESET, "me", opps);
+  assert.ok(removesVitalStop(s, "me", "me", "MAIN1"));
+  assert.ok(removesVitalStop(s, "me", "me", "MAIN2"));
+  assert.ok(!removesVitalStop(s, "me", "me", "COMBAT_BEGIN"));
+  toggleStop(s, "o1", "MAIN1");
+  assert.ok(!removesVitalStop(s, "me", "o1", "MAIN1")); // an opponent's main phase
+  toggleStop(s, "me", "MAIN2");
+  assert.ok(!removesVitalStop(s, "me", "me", "MAIN2")); // turning it back on
+});
+
+test("passing with a land still to play asks only when it ends your main phases", () => {
+  const s = stopsFromPreset(DEFAULT_PRESET, "me", opps);
+  const ctx = { me: "me", activePlayer: "me", step: "MAIN2" as const, stackNonEmpty: false, landDrop: true, kind: "pass" as const };
+  assert.ok(passSkipsLandDrop(s, ctx));
+  assert.ok(!passSkipsLandDrop(s, { ...ctx, landDrop: false }));
+  assert.ok(!passSkipsLandDrop(s, { ...ctx, stackNonEmpty: true })); // you get priority back after it resolves
+  assert.ok(!passSkipsLandDrop(s, { ...ctx, activePlayer: "o1" }));
+  assert.ok(!passSkipsLandDrop(s, { ...ctx, step: "END_OF_TURN" }));
+  // Main 1 and combat: fine while your main 2 stop is on.
+  assert.ok(!passSkipsLandDrop(s, { ...ctx, step: "MAIN1" }));
+  assert.ok(!passSkipsLandDrop(s, { ...ctx, step: "COMBAT_DECLARE_BLOCKERS" }));
+  toggleStop(s, "me", "MAIN2");
+  assert.ok(passSkipsLandDrop(s, { ...ctx, step: "MAIN1" }));
+  assert.ok(passSkipsLandDrop(s, { ...ctx, step: "COMBAT_BEGIN" }));
+  assert.ok(!passSkipsLandDrop(s, { ...ctx, step: "UPKEEP" })); // main 1 is still ahead
+  // Auto-passes and End Turn skip the rest of the turn, stack or not.
+  toggleStop(s, "me", "MAIN2");
+  assert.ok(passSkipsLandDrop(s, { ...ctx, step: "MAIN1", kind: "skip", stackNonEmpty: true }));
+  assert.ok(!passSkipsLandDrop(s, { ...ctx, step: "END_OF_TURN", kind: "skip" }));
 });

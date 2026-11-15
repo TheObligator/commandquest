@@ -5,7 +5,8 @@
 // (in turn order, in their seat colors), so each opponent can have different stops. Otherwise one
 // click sets the step for every opponent at once.
 import { Fragment } from "react";
-import { STEPS, toggleForAll, toggleStop, type StepId, type TableStops } from "./phases";
+import { STEPS, removesVitalStop, toggleForAll, toggleStop, type StepId, type TableStops } from "./phases";
+import { confirmVitalStop } from "./useLandCheck";
 
 export interface Seat {
   id: string;
@@ -74,6 +75,8 @@ export function PhaseStrip(props: {
                       aria-pressed={meOn}
                       title={`${meOn ? "Don't stop" : "Stop"} at ${step.label} on your turn`}
                       onClick={() => {
+                        // Your own main phases: ask first. Every other stop just toggles.
+                        if (removesVitalStop(stops, me.id, me.id, step.id) && !confirmVitalStop(step.label)) return;
                         toggleStop(stops, me.id, step.id);
                         onChange(stops);
                       }}
