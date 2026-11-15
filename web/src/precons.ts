@@ -9,7 +9,8 @@ export interface Precon {
   /** Stable id from the file name. */
   id: string;
   name: string;
-  kind: "commander" | "constructed";
+  /** Its tab: Secret Lair Commander decks, or every other Commander precon. */
+  kind: "commander" | "secret-lair";
   /** Scryfall set code of the product, e.g. "tdc". "" when unknown. */
   set: string;
   setName: string;
@@ -54,8 +55,6 @@ export function cardCount(p: Precon): number {
   return [...p.commander, ...p.main].reduce((n, c) => n + c[0], 0);
 }
 
-/** The format a copied deck gets. */
-export const formatOf = (p: Precon) => (p.kind === "commander" ? "commander" : "other");
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 

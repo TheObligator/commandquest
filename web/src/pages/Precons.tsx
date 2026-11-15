@@ -8,7 +8,7 @@ import { mergeDuplicates } from "../decklist";
 import { toast } from "../dom";
 import { ManaCost } from "../components/ManaCost";
 import { Loading } from "../components/Spinner";
-import { cardCount, deckCards, formatOf, loadPrecons, matches, releaseLabel, type Precon } from "../precons";
+import { cardCount, deckCards, loadPrecons, matches, releaseLabel, type Precon } from "../precons";
 import * as scry from "../scryfall";
 import { useCardPreview } from "../useCardPreview";
 import { TYPE_ORDER } from "./boards";
@@ -50,7 +50,7 @@ export function Precons() {
   const shown = useMemo(() => (precons ?? []).filter((p) => p.kind === kind && matches(p, query)), [precons, kind, query]);
   const counts = useMemo(() => ({
     commander: (precons ?? []).filter((p) => p.kind === "commander").length,
-    constructed: (precons ?? []).filter((p) => p.kind === "constructed").length,
+    "secret-lair": (precons ?? []).filter((p) => p.kind === "secret-lair").length,
   }), [precons]);
 
   // Your deck with the same name, so a precon you already added links to your copy.
@@ -71,7 +71,7 @@ export function Precons() {
   async function add(p: Precon) {
     setAdding((s) => new Set(s).add(p.id));
     try {
-      const id = await createDeck({ name: p.name, format: formatOf(p), cards: await withPrintings(p) });
+      const id = await createDeck({ name: p.name, format: "commander", cards: await withPrintings(p) });
       toast(`Added ${p.name} to your decks`);
       return id;
     } catch (e) {
@@ -108,8 +108,8 @@ export function Precons() {
         <button role="tab" aria-selected={kind === "commander"} className={kind === "commander" ? "tab active" : "tab"} onClick={() => setKind("commander")}>
           Commander{precons ? ` (${counts.commander})` : ""}
         </button>
-        <button role="tab" aria-selected={kind === "constructed"} className={kind === "constructed" ? "tab active" : "tab"} onClick={() => setKind("constructed")}>
-          Other precons{precons ? ` (${counts.constructed})` : ""}
+        <button role="tab" aria-selected={kind === "secret-lair"} className={kind === "secret-lair" ? "tab active" : "tab"} onClick={() => setKind("secret-lair")}>
+          Secret Lair{precons ? ` (${counts["secret-lair"]})` : ""}
         </button>
       </div>
       <p className="muted small">Newest first. Adding a precon copies it into your decks, where you can edit it like any other deck.</p>

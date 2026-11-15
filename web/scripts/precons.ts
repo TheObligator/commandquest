@@ -1,8 +1,7 @@
 // Builds public/precons.json, the preconstructed decks players can add to their account
 // (src/pages/Precons.tsx), from Forge's deck files:
 //
-//   forge-gui/res/quest/commanderprecons/*.dck   Commander precons
-//   forge-gui/res/quest/precons/*.dck            Other precons (theme decks, starter decks, …)
+//   forge-gui/res/quest/commanderprecons/*.dck   Commander precons (Secret Lair ones get their own tab)
 //   forge-gui/res/editions/*.txt                 Release dates, and Forge → Scryfall set codes
 //
 // The JSON is committed, because CI checks out only web/. After merging upstream Forge, run
@@ -82,7 +81,7 @@ export function splitTitle(title: string): { name: string; set?: string; year?: 
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
-export function toPrecon(fileName: string, text: string, kind: Precon["kind"], editions: Map<string, Edition>): Precon | null {
+export function toPrecon(fileName: string, text: string, editions: Map<string, Edition>): Precon | null {
   const { meta, sections } = parseDck(text);
   const base = fileName.replace(/\.dck$/i, "");
   const title = splitTitle(meta.name || base);
@@ -95,11 +94,12 @@ export function toPrecon(fileName: string, text: string, kind: Precon["kind"], e
     (sections[key] ?? []).map((c) => [c.quantity, c.name, c.set ? (editions.get(c.set.toUpperCase())?.scryfallCode ?? c.set.toLowerCase()) : "", c.collectorNumber]);
   const main = cards("main");
   if (!main.length) return null;
+  const set = ed?.scryfallCode ?? setCode.toLowerCase();
   const p: Precon = {
     id: slug(base),
     name: title.name,
-    kind,
-    set: ed?.scryfallCode ?? setCode.toLowerCase(),
+    kind: set === "sld" ? "secret-lair" : "commander",
+    set,
     setName: ed?.name ?? setCode,
     date,
     commander: cards("commander"),
@@ -125,15 +125,14 @@ export function buildPrecons(resDir: string): Precon[] {
     if (ed) editions.set(ed.code.toUpperCase(), ed);
   }
   const out: Precon[] = [];
-  const read = (dir: string, kind: Precon["kind"]) => {
-    for (const f of readdirSync(join(resDir, dir)).sort()) {
-      if (!f.endsWith(".dck")) continue;
-      const p = toPrecon(f, readFileSync(join(resDir, dir, f), "utf8"), kind, editions);
-      if (p) out.push(p);
-    }
-  };
-  read("quest/commanderprecons", "commander");
-  read("quest/precons", "constructed");
+  // Only Commander decks. (Forge's quest/precons holds 60-card theme decks, plus copies of
+  // Commander decks that are already here.)
+  const dir = join(resDir, "quest/commanderprecons");
+  for (const f of readdirSync(dir).sort()) {
+    if (!f.endsWith(".dck")) continue;
+    const p = toPrecon(f, readFileSync(join(dir, f), "utf8"), editions);
+    if (p) out.push(p);
+  }
   const seen = new Set<string>();
   for (const p of out) {
     let id = p.id;

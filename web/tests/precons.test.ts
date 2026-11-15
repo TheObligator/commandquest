@@ -35,7 +35,7 @@ test("splitTitle separates the set and year from Commander precon names", () => 
 });
 
 test("toPrecon maps set codes to Scryfall's and dates the deck", () => {
-  const p = toPrecon("Adaptive Enchantment [C18] [2018].dck", "[metadata]\nName=Adaptive Enchantment [C18] [2018]\n[Commander]\n1 Estrid, the Masked|C18|1\n[Main]\n1 Plane Thing|PCA\n10 Forest|C18|2\n", "commander", editions)!;
+  const p = toPrecon("Adaptive Enchantment [C18] [2018].dck", "[metadata]\nName=Adaptive Enchantment [C18] [2018]\n[Commander]\n1 Estrid, the Masked|C18|1\n[Main]\n1 Plane Thing|PCA\n10 Forest|C18|2\n", editions)!;
   assert.equal(p.id, "adaptive-enchantment-c18-2018");
   assert.equal(p.name, "Adaptive Enchantment");
   assert.equal(p.set, "c18");
@@ -45,8 +45,10 @@ test("toPrecon maps set codes to Scryfall's and dates the deck", () => {
   assert.deepEqual(deckCards(p)[0], { name: "Estrid, the Masked", quantity: 1, board: "commander", set: "c18" });
   assert.ok(matches(p, "estrid") && matches(p, "commander 2018") && !matches(p, "atraxa"));
   // A Secret Lair deck from 2023 isn't dated by Secret Lair's first release.
-  assert.equal(toPrecon("Y [SLD] [2023].dck", "[metadata]\nName=Y [SLD] [2023]\n[Main]\n1 Z|SLD\n", "commander", editions)!.date, "2023");
-  assert.equal(toPrecon("Empty.dck", "[metadata]\nName=Empty\n", "constructed", editions), null);
+  assert.equal(toPrecon("Y [SLD] [2023].dck", "[metadata]\nName=Y [SLD] [2023]\n[Main]\n1 Z|SLD\n", editions)!.date, "2023");
+  assert.equal(toPrecon("Empty.dck", "[metadata]\nName=Empty\n", editions), null);
+  assert.equal(p.kind, "commander");
+  assert.equal(toPrecon("Y [SLD] [2023].dck", "[metadata]\nName=Y [SLD] [2023]\n[Main]\n1 Z|SLD\n", editions)!.kind, "secret-lair");
 });
 
 test("byNewest sorts newest first, then by name, undated last", () => {
@@ -64,12 +66,12 @@ test("public/precons.json is up to date with Forge's deck files (run `npm run pr
 
 test("public/precons.json is newest first and every deck has cards", () => {
   const decks = JSON.parse(readFileSync(OUT_FILE, "utf8")) as Precon[];
-  assert.ok(decks.length > 600);
-  assert.ok(decks.some((d) => d.kind === "commander") && decks.some((d) => d.kind === "constructed"));
+  assert.ok(decks.length > 150);
+  assert.ok(decks.some((d) => d.kind === "commander") && decks.some((d) => d.kind === "secret-lair"));
   for (let i = 1; i < decks.length; i++) assert.ok(byNewest(decks[i - 1], decks[i]) <= 0, `${decks[i - 1].name} before ${decks[i].name}`);
   for (const d of decks) {
     assert.ok(d.main.length, d.name);
-    if (d.kind === "commander") assert.ok(d.commander.length, `${d.name} has no commander`);
+    assert.ok(d.commander.length, `${d.name} has no commander`);
   }
   assert.equal(new Set(decks.map((d) => d.id)).size, decks.length, "ids are unique");
 });
