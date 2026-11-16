@@ -7,7 +7,8 @@ type Entry = { name: string; quantity: number; card: scry.ScryCard };
 /** Types in the chart, bottom of a bar first. Lands have no place on a mana curve. */
 const TYPES = TYPE_ORDER.filter((t) => t !== "Land");
 const COLUMNS = 8; // 0–6, then 7+
-const EXAMPLES = 3;
+const EXAMPLES = 8;
+const PICTURES = 4;
 
 const label = (i: number) => (i === COLUMNS - 1 ? `${i}+` : String(i));
 const swatch = (t: string) => ({ background: `var(--type-${t.toLowerCase()})` });
@@ -15,10 +16,11 @@ const total = (es: Entry[]) => es.reduce((n, e) => n + e.quantity, 0);
 
 /**
  * The main deck's nonland cards by mana value, each bar split by card type. Hovering (or focusing)
- * a bar shows how many of each type it has, with a few of the cards.
+ * one type's part of a bar shows that type's cards at that mana value, and how many of each other
+ * type share it.
  */
 export function ManaCurve({ cards }: { cards: Entry[] }) {
-  const [open, setOpen] = useState<number | null>(null);
+  const [open, setOpen] = useState<{ mv: number; type: string } | null>(null);
   // columns[mv][type] = the cards of that type at that mana value, most copies first
   const columns = Array.from({ length: COLUMNS }, () => new Map<string, Entry[]>());
   for (const e of cards) {
@@ -32,57 +34,69 @@ export function ManaCurve({ cards }: { cards: Entry[] }) {
   const max = Math.max(1, ...sums);
   const present = TYPES.filter((t) => columns.some((col) => col.has(t)));
 
+  const tip = (i: number, type: string) => {
+    const col = columns[i];
+    const es = col.get(type)!;
+    const others = TYPES.filter((t) => t !== type && col.has(t));
+    const more = es.length - EXAMPLES;
+    return (
+      <div className={`curve-tip${i < 2 ? " start" : i >= COLUMNS - 2 ? " end" : ""}`} role="tooltip">
+        <strong className="curve-tip-head">
+          <span className="type-dot" style={swatch(type)} />
+          {type} <span className="muted">· mana value {label(i)} · {total(es)}</span>
+        </strong>
+        <div className="curve-tip-art">
+          {es.slice(0, PICTURES).map((e) => {
+            const img = scry.imageUrl(e.card, "normal");
+            return img && <img key={e.name} src={img} alt="" />;
+          })}
+        </div>
+        <ul className="curve-tip-cards">
+          {es.slice(0, EXAMPLES).map((e) => <li key={e.name}>{e.quantity > 1 ? `${e.name} ×${e.quantity}` : e.name}</li>)}
+          {more > 0 && <li className="muted">+{more} more</li>}
+        </ul>
+        {others.length > 0 && (
+          <p className="curve-tip-others muted">
+            Also at {label(i)}:{" "}
+            {others.map((t) => (
+              <span key={t}><span className="type-dot" style={swatch(t)} />{total(col.get(t)!)} {t.toLowerCase()}</span>
+            ))}
+          </p>
+        )}
+      </div>
+    );
+  };
+
   return (
     <figure className="curve-chart">
-      <figcaption>Mana curve <span className="muted small">main deck, nonland · hover a bar for its cards</span></figcaption>
+      <figcaption>Mana curve <span className="muted small">main deck, nonland · hover a color for its cards</span></figcaption>
       <div className="curve">
         {columns.map((col, i) => {
           const types = TYPES.filter((t) => col.has(t));
-          const summary = types.map((t) => `${total(col.get(t)!)} ${t.toLowerCase()}`).join(", ");
+          const here = open?.mv === i ? open.type : null;
           return (
-            <div
-              key={i}
-              className={open === i ? "bar-col open" : "bar-col"}
-              tabIndex={sums[i] ? 0 : -1}
-              aria-label={`Mana value ${label(i)}: ${sums[i]} card${sums[i] === 1 ? "" : "s"}${summary ? ` (${summary})` : ""}`}
-              onMouseEnter={() => setOpen(i)}
-              onMouseLeave={() => setOpen(null)}
-              onFocus={() => setOpen(i)}
-              onBlur={() => setOpen(null)}
-            >
+            <div key={i} className={here ? "bar-col open" : "bar-col"}>
               <span className="bar-n">{sums[i] || ""}</span>
               <div className="bar" style={{ height: `${(sums[i] / max) * 100}%` }}>
-                {types.map((t) => <div key={t} className="bar-seg" style={{ ...swatch(t), flexGrow: total(col.get(t)!) }} />)}
+                {types.map((t) => {
+                  const n = total(col.get(t)!);
+                  return (
+                    <div
+                      key={t}
+                      className={here === t ? "bar-seg open" : "bar-seg"}
+                      style={{ ...swatch(t), flexGrow: n }}
+                      tabIndex={0}
+                      aria-label={`Mana value ${label(i)}: ${n} ${t.toLowerCase()}`}
+                      onMouseEnter={() => setOpen({ mv: i, type: t })}
+                      onMouseLeave={() => setOpen(null)}
+                      onFocus={() => setOpen({ mv: i, type: t })}
+                      onBlur={() => setOpen(null)}
+                    />
+                  );
+                })}
               </div>
               <span className="bar-label">{label(i)}</span>
-              {open === i && sums[i] > 0 && (
-                <div className={`curve-tip${i < 2 ? " start" : i >= COLUMNS - 2 ? " end" : ""}`} role="tooltip">
-                  <strong>Mana value {label(i)}<span className="muted"> · {sums[i]}</span></strong>
-                  <div className="curve-tip-art">
-                    {types.slice(0, 4).map((t) => {
-                      const top = col.get(t)![0].card;
-                      const img = scry.imageUrl(top, "normal");
-                      return img && <img key={t} src={img} alt="" />;
-                    })}
-                  </div>
-                  <ul>
-                    {types.map((t) => {
-                      const es = col.get(t)!;
-                      const more = es.length - EXAMPLES;
-                      return (
-                        <li key={t}>
-                          <span className="type-dot" style={swatch(t)} />
-                          <span className="curve-tip-type">{t} <b>{total(es)}</b></span>
-                          <span className="muted">
-                            {es.slice(0, EXAMPLES).map((e) => (e.quantity > 1 ? `${e.name} ×${e.quantity}` : e.name)).join(", ")}
-                            {more > 0 && `, +${more} more`}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              )}
+              {here && tip(i, here)}
             </div>
           );
         })}
