@@ -75,3 +75,20 @@ test("newest skips retro-frame reprints, Universes Beyond and printings not out 
   assert.equal(choosePrinting([p("ub", "2026-11-13", { promo_types: ["universesbeyond"] })], "newest", "2026-11-16")?.id, "ub");
   assert.equal(choosePrinting([p("future", "2099-01-01")], "newest", "2026-11-16")?.id, "future", "only unreleased: still one");
 });
+
+test("newest skips Japanese alternate art, Masterpieces and white borders; Universes Beyond-only cards get a plain one", () => {
+  const jace = [
+    p("war-ja", "2019-05-03", { set: "war", collector_number: "54★", lang: "ja", promo_types: ["jpwalker"] }),
+    p("war", "2019-05-03", { collector_number: "54" }),
+  ];
+  assert.equal(choosePrinting(jace, "newest", "2026-11-16")?.id, "war");
+  const grindstone = [p("mps", "2016-09-30", { set_type: "masterpiece" }), p("tmp", "1997-10-14", { frame: "1997" })];
+  assert.equal(choosePrinting(grindstone, "newest", "2026-11-16")?.id, "tmp");
+  const bolt = [p("4ed", "1995-04-01", { border_color: "white", frame: "1993" }), p("m10", "2009-07-17", { frame: "2003" })];
+  assert.equal(choosePrinting([p("lea", "1993-08-05"), ...bolt], "newest", "2026-11-16")?.id, "m10");
+  const ring = [
+    p("hoc", "2026-08-14", { set_type: "eternal", border_color: "borderless", promo_types: ["surgefoil", "universesbeyond"] }),
+    p("ltr", "2023-06-23", { promo_types: ["universesbeyond"] }),
+  ];
+  assert.equal(choosePrinting(ring, "newest", "2026-11-16")?.id, "ltr");
+});

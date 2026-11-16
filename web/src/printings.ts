@@ -4,7 +4,7 @@
 export type PrintingPref = "default" | "newest" | "cheapest" | "oldest";
 
 export const PRINTING_PREFS: { id: PrintingPref; label: string; hint: string }[] = [
-  { id: "newest", label: "Newest regular printing", hint: "The latest normal printing: no promos, The List, Secret Lair, Universes Beyond, or borderless, showcase, extended-art and retro-frame versions." },
+  { id: "newest", label: "Newest regular printing", hint: "The latest normal English printing: no promos, The List, Secret Lair, Masterpieces, Universes Beyond, or borderless, white-bordered, showcase, extended-art, retro-frame and alternate-art versions." },
   { id: "cheapest", label: "Cheapest printing", hint: "The lowest Scryfall USD price when you add the card." },
   { id: "oldest", label: "Original printing", hint: "The card's first normal printing." },
   { id: "default", label: "Scryfall's default", hint: "Whatever Scryfall shows for the name, sometimes a promo." },
@@ -31,35 +31,40 @@ export interface Print {
   frame?: string;
   frame_effects?: string[];
   promo_types?: string[];
+  lang?: string;
   type_line?: string;
   prices?: { usd?: string | null; usd_foil?: string | null; usd_etched?: string | null };
 }
 
 /** Set types that aren't regular printings. */
-const ODD_SET_TYPES = new Set(["promo", "token", "memorabilia", "funny", "minigame", "alchemy", "vanguard", "treasure_chest"]);
+const ODD_SET_TYPES = new Set(["promo", "token", "memorabilia", "funny", "minigame", "alchemy", "vanguard", "treasure_chest", "masterpiece"]);
 /** The List, its Un- version, and Secret Lair. */
 const ODD_SETS = new Set(["plst", "ulst", "sld"]);
 const ODD_FRAMES = ["showcase", "extendedart", "etched", "inverted"];
 
 const date = (p: Print) => p.released_at ?? "";
 
-/** A normal paper printing from a normal set. */
+/** A normal English paper printing from a normal set (no Masterpieces, Japanese alternate art, ...). */
 export const isRegular = (p: Print) =>
+  (p.lang ?? "en") === "en" &&
   !p.promo && !p.digital && !p.oversized && !ODD_SETS.has(p.set) && !ODD_SET_TYPES.has(p.set_type ?? "");
 
 /** The first set with the current (2015) frame; later printings in an older frame are retro variants. */
 const MODERN_FRAME_FROM = "2014-07-18";
 
 /**
- * No alternate frame: not borderless, showcase, extended art, retro frame or (except basics) full
- * art, and not Universes Beyond.
+ * No alternate frame: not borderless, white-bordered, showcase, extended art, retro frame or (except basics) full
+ * art, no special treatment (Universes Beyond, serialized, ...) and a plain collector number.
  */
-export const isPlainFrame = (p: Print) =>
+export const isPlainFrame = (p: Print, allowUniversesBeyond = false) =>
   p.border_color !== "borderless" &&
+  p.border_color !== "white" &&
   !p.frame_effects?.some((f) => ODD_FRAMES.includes(f)) &&
   (!p.full_art || /\bBasic\b/.test(p.type_line ?? "")) &&
   !(p.frame && p.frame !== "2015" && p.frame !== "future" && date(p) >= MODERN_FRAME_FROM) &&
-  !p.promo_types?.includes("universesbeyond");
+  // Scryfall tags special treatments (Japanese walkers, galaxy foils, Universes Beyond, ...).
+  !p.promo_types?.some((t) => !(allowUniversesBeyond && t === "universesbeyond")) &&
+  !/[^\d]/.test(p.collector_number);
 
 /** The lowest USD price Scryfall lists for it (any finish), or null. */
 export function price(p: Print): number | null {
@@ -88,7 +93,8 @@ export function choosePrinting<T extends Print>(prints: T[], pref: PrintingPref,
   // Paper printings that are out (Scryfall lists previewed sets before release).
   const pool = firstTier(prints, [(p) => !p.digital && date(p) <= today, (p) => !p.digital]);
   if (!pool.length || pref === "default") return undefined;
-  const tiers = [(p: T) => isRegular(p) && isPlainFrame(p), isRegular, (p: T) => !p.oversized];
+  // Best first; a card only printed in Universes Beyond gets its plainest one.
+  const tiers = [(p: T) => isRegular(p) && isPlainFrame(p), (p: T) => isRegular(p) && isPlainFrame(p, true), isRegular, (p: T) => !p.oversized];
   if (pref === "newest") return newestOf(firstTier(pool, tiers));
   if (pref === "oldest") return oldestOf(firstTier(pool, tiers));
   // Cheapest: the lowest price among normal-sized printings; ties go to the newest regular one.
