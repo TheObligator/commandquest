@@ -543,6 +543,12 @@ kbd { font-family: var(--font-mono, ui-monospace, monospace); font-size: .72rem;
 .search-page-box { flex: 1 1 320px; }
 .search-page > p { margin: 0; }
 .search-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 18px 14px; }
+.search-section { margin: 6px 0 0; font-size: 1rem; }
+.search-notice { margin: 0; padding: 8px 12px; border-radius: 8px; background: var(--bg-2); border: 1px solid var(--line); }
+.search-notice code { font-size: .8rem; }
+button.text-link { background: none; border: 0; padding: 0; color: var(--accent-2); font-weight: 500; cursor: pointer; }
+button.text-link:hover { text-decoration: underline; }
+.edh-share { justify-self: center; }
 .search-card { position: relative; display: grid; gap: 6px; align-content: start; }
 .search-card.in-deck .tile-img img { outline: 2px solid var(--ok); outline-offset: 1px; }
 .search-card.not-legal .tile-img img { outline: 2px solid var(--danger); outline-offset: 1px; }

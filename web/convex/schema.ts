@@ -93,5 +93,7 @@ export default defineSchema({
     userId: v.id("users"),
     /** Game hotkeys that differ from the defaults, action → key name (src/game/hotkeys.ts). */
     hotkeys: v.record(v.string(), v.string()),
+    /** Added to every deck search, e.g. "order:cmc game:paper" (src/searchquery.ts). */
+    searchAdditions: v.optional(v.string()),
   }).index("by_user", ["userId"]),
 });

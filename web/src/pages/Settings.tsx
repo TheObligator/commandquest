@@ -1,4 +1,4 @@
-// Settings (#/settings): your username and the game hotkeys. Changes apply right away, are kept in this browser, and
+// Settings (#/settings): your username, deck search additions and the game hotkeys. Changes apply right away, are kept in this browser, and
 // are saved to your account when you're signed in, so they follow you to other devices.
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
@@ -7,6 +7,7 @@ import { errorMessage } from "../app/errors";
 import { toast } from "../dom";
 import { bind, changedKeys, DEFAULT_HOTKEYS, HOTKEY_ACTIONS, keyLabel, keyName, MODIFIER_KEYS, RESERVED_KEYS, type HotkeyAction, type Hotkeys } from "../game/hotkeys";
 import { setHotkeys, useHotkeyMap } from "../game/useHotkeys";
+import { MAX_ADDITIONS } from "../searchquery";
 import { checkUsername, USERNAME_MAX } from "../username";
 
 export function Settings() {
@@ -70,6 +71,7 @@ export function Settings() {
     <div className="settings">
       <h1>Settings</h1>
       <UsernameSection />
+      <SearchAdditionsSection />
       <section className="card settings-section">
         <h2>Game hotkeys</h2>
         <p className="muted small">
@@ -176,6 +178,52 @@ function UsernameSection() {
         </button>
       </form>
       <p className="form-error small" id="username-error" role="alert">{error}</p>
+    </section>
+  );
+}
+
+/** Scryfall syntax added to every deck search. Signed-in only; stored on the account. */
+function SearchAdditionsSection() {
+  const { isAuthenticated } = useConvexAuth();
+  const settings = useQuery(api.settings.get, isAuthenticated ? {} : "skip");
+  const save = useMutation(api.settings.saveSearchAdditions);
+  const [text, setText] = useState<string | null>(null);
+  const saved = settings?.searchAdditions ?? "";
+  const value = text ?? saved;
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      await save({ additions: value });
+      setText(null);
+      toast(value.trim() ? "Search additions saved" : "Search additions cleared");
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
+  return (
+    <section className="card settings-section" id="search-additions">
+      <h2>Deck search additions</h2>
+      <p className="muted small">
+        Scryfall search syntax added to every search in the deck editor, for example <code>game:paper</code>, <code>-is:digital</code>,{" "}
+        <code>order:cmc</code> or <code>prefer:newest</code>. You can turn it off for one search from the results.
+      </p>
+      {isAuthenticated ? (
+        <form className="inline" onSubmit={(e) => void submit(e)}>
+          <input
+            type="text"
+            aria-label="Search additions"
+            placeholder="e.g. game:paper order:cmc"
+            maxLength={MAX_ADDITIONS}
+            value={value}
+            onChange={(e) => setText(e.target.value)}
+          />
+          <button className="btn small" type="submit" disabled={value.trim() === saved}>Save</button>
+        </form>
+      ) : (
+        <p className="muted small">Sign in to set search additions.</p>
+      )}
     </section>
   );
 }

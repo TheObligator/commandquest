@@ -1,5 +1,7 @@
 // Deck-editor search: a name box with a suggestions dropdown, and a full search results page.
+import { useQuery } from "convex/react";
 import { useEffect, useRef, useState } from "react";
+import { api } from "../../convex/_generated/api";
 import type { Board, DeckCard } from "../../convex/model/deckRules";
 import { errorMessage } from "../app/errors";
 import { showCardDetails } from "../carddetails";
@@ -7,7 +9,10 @@ import { useCardSupport } from "../cardsupport";
 import { CardMenu } from "../components/CardMenu";
 import { cardLegality, fitsIdentity, isCommanderEligible } from "../formats/conquest";
 import { bestExtraColor, identityQuery, mentionsIdentity, offIdentity } from "../formats/rulebreakers";
+import { commanderCards } from "../edhrec";
+import { compileQuery } from "../game/scryquery";
 import * as scry from "../scryfall";
+import { displayTerms, forEdhrecCards, hasOrder, joinQuery, locallyReadable, stripDisplay } from "../searchquery";
 import { BOARDS, boardLabel } from "./boards";
 
 /** The ⓘ button, drawn in CSS (the Unicode glyph renders badly in many fonts). */
@@ -163,23 +168,74 @@ export function SearchResults(props: {
   const [loadingMore, setLoadingMore] = useState(false);
   const support = useCardSupport();
   const [allColors, setAllColors] = useState(false);
+  const [order, setOrder] = useState<"commander" | "overall">("commander");
+  // The player's saved additions, which they can turn off for one search.
+  const settings = useQuery(api.settings.get);
+  const additions = settings?.searchAdditions ?? "";
+  const [skipAdditions, setSkipAdditions] = useState(false);
+  const [withoutTotal, setWithoutTotal] = useState<number | null>(null);
+  const [ranked, setRanked] = useState<{ card: scry.ScryCard; inclusion: number }[]>([]);
+  useEffect(() => setSkipAdditions(false), [props.query]);
 
   // In a Commander or Conquest deck, only cards the commanders allow, Rulebreakers included,
   // unless the query already filters by color identity or the player asks for every color.
   const conquest = props.format === "conquest";
-  const canFilter = (props.format === "commander" || conquest) && props.commanders.length > 0 && !mentionsIdentity(props.query);
+  const commanderDeck = (props.format === "commander" || conquest) && props.commanders.length > 0;
+  const canFilter = commanderDeck && !mentionsIdentity(props.query);
   const filtered = canFilter && !allColors;
   const fits = conquest ? fitsIdentity : (card: { color_identity: string[] }, id: Set<string>) => card.color_identity.every((x) => id.has(x));
   const extraColor =
     props.extraColor ??
     bestExtraColor(props.deck.flatMap((d) => { const card = d.board === "main" ? scry.cached(d) : undefined; return card ? [{ card, quantity: d.quantity }] : []; }), props.commanders, fits);
   const idClause = filtered ? identityQuery(props.commanders, extraColor, conquest) : "";
-  const fullQuery = idClause ? `(${props.query}) ${idClause}` : props.query;
+  const additionsOn = !!additions.trim() && !skipAdditions;
+  const added = additionsOn ? additions : "";
+  // Display keywords (order:, unique:) go last and outside the parentheses.
+  const fullQuery = [joinQuery(props.query, idClause, stripDisplay(added)), displayTerms(added)].filter(Boolean).join(" ");
+  const queryWithout = joinQuery(props.query, idClause);
+  const additionsFilter = additionsOn && !!stripDisplay(additions).trim();
   // Conquest's hybrid rule has no Scryfall syntax: hybrid cards come back and are checked here.
-  const off = filtered && conquest ? new Set(offIdentity(cards.map((c) => ({ name: c.id, card: c })), props.commanders, fitsIdentity, extraColor).map((e) => e.name)) : null;
-  const shown = off ? cards.filter((c) => !off.has(c.id)) : cards;
+  const offIds = (cs: scry.ScryCard[]) => new Set(offIdentity(cs.map((c) => ({ name: c.id, card: c })), props.commanders, fitsIdentity, extraColor).map((e) => e.name));
+  const off = filtered && conquest ? offIds(cards) : null;
+
+  // Most played with the commander first (EDHREC), when the search is one we can check locally
+  // against that list. A search with its own order: keeps it.
+  const commanderNames = props.commanders.map((c) => scry.deckName(c)).join(" and ");
+  const localQuery = joinQuery(forEdhrecCards(props.query), forEdhrecCards(added));
+  const canRank = commanderDeck && !hasOrder(fullQuery) && locallyReadable(localQuery);
+  const rankByCommander = canRank && order === "commander";
+  const commanderKey = props.commanders.map((c) => c.name).join("|");
 
   useEffect(() => {
+    setRanked([]);
+    if (!rankByCommander) return;
+    let live = true;
+    const pred = compileQuery(localQuery);
+    if (typeof pred !== "function") return;
+    void (async () => {
+      const list = await commanderCards(props.commanders.map((c) => scry.deckName(c)));
+      await scry.cardsById(list.map((e) => e.id)).catch(() => undefined);
+      let found = list.flatMap((e) => {
+        const card = scry.cachedById(e.id);
+        return card && pred(card) ? [{ card, inclusion: e.inclusion }] : [];
+      });
+      if (filtered) {
+        const outside = new Set(offIdentity(found.map((f) => ({ name: f.card.id, card: f.card })), props.commanders, fits, extraColor).map((e) => e.name));
+        found = found.filter((f) => !outside.has(f.card.id));
+      }
+      if (live) setRanked(found);
+    })();
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rankByCommander, localQuery, commanderKey, filtered, extraColor, conquest]);
+
+  const rankedNames = new Set(ranked.map((r) => scry.deckName(r.card)));
+  const shown = cards.filter((c) => !off?.has(c.id) && !rankedNames.has(scry.deckName(c)));
+
+  useEffect(() => {
+    if (settings === undefined) return; // wait for the additions
     let live = true;
     setCards([]);
     setTotal(null);
@@ -191,7 +247,22 @@ export function SearchResults(props: {
     return () => {
       live = false;
     };
-  }, [fullQuery]);
+  }, [fullQuery, settings === undefined]);
+
+  // How many cards the additions hid: the same search without them.
+  useEffect(() => {
+    setWithoutTotal(null);
+    if (!additionsFilter) return;
+    let live = true;
+    scry.search(queryWithout).then(
+      (p) => live && setWithoutTotal(p.total),
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [queryWithout, additionsFilter]);
+  const hidden = additionsFilter && total !== null && withoutTotal !== null ? withoutTotal - total : 0;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -221,6 +292,79 @@ export function SearchResults(props: {
     return props.deck.filter((d) => d.name.toLowerCase() === name);
   };
 
+  const tile = (c: scry.ScryCard, inclusion?: number) => {
+    const inDeck = entries(c);
+    const count = inDeck.reduce((n, e) => n + e.quantity, 0);
+    const verdict = props.format === "conquest" ? cardLegality(c) : { ok: true, reason: undefined };
+    const playable = support?.status(c);
+    const img = scry.imageUrl(c, "normal");
+    const commander = canCommand(c, props.format);
+    const details = () =>
+      showCardDetails(c, [
+        { label: `+ Add to ${boardLabel(props.defaultBoard).toLowerCase()}`, run: () => props.onAdd(c, props.defaultBoard) },
+        ...(commander ? [{ label: "★ Set as commander", run: () => props.onAdd(c, "commander") }] : []),
+      ]);
+    return (
+      <div key={c.id} className={`search-card${count ? " in-deck" : ""}${verdict.ok ? "" : " not-legal"}`}>
+        <button className="tile-img" title={`${c.name}: card details`} onClick={details}>
+          {img ? <img src={img} alt={c.name} loading="lazy" /> : <span className="noimg">{c.name}</span>}
+        </button>
+        {!verdict.ok && <span className="legal-badge" title={`Not legal in Conquest: ${verdict.reason}`}>Not legal</span>}
+        {playable && !playable.works && (
+          <span className={`nw-badge tile-nw${verdict.ok ? "" : " below"}`} title={playable.reason}>{playable.missing ? "Not playable" : "Known issue"}</span>
+        )}
+        {count > 0 && (
+          <span className="in-deck-badge" title={inDeck.map((e) => `${e.quantity} in ${boardLabel(e.board).toLowerCase()}`).join(", ")}>
+            {count} in deck
+          </span>
+        )}
+        {inclusion !== undefined && (
+          <span className="edh-share muted small" title={`EDHREC: in ${Math.round(inclusion * 100)}% of decks with ${commanderNames}`}>
+            In {Math.round(inclusion * 100)}% of decks
+          </span>
+        )}
+        <div className="search-card-bar">
+          {count > 0 && (
+            <CardMenu
+              label={`Remove ${c.name}`}
+              className="qty-btn"
+              trigger={<span aria-hidden="true">−</span>}
+              sections={[
+                {
+                  title: "Remove one from",
+                  items: inDeck.map((e) => ({
+                    label: `${boardLabel(e.board)} (${e.quantity})`,
+                    keepOpen: inDeck.length > 1 || e.quantity > 1,
+                    onSelect: () => props.onQty(e, e.quantity - 1),
+                  })),
+                },
+              ]}
+            />
+          )}
+          <button className="btn small add-btn" onClick={() => props.onAdd(c, props.defaultBoard)} title={`Add to ${boardLabel(props.defaultBoard).toLowerCase()}`}>
+            + Add
+          </button>
+          <CardMenu
+            label={`Add ${c.name} to…`}
+            className="split-btn"
+            trigger={<span aria-hidden="true">▾</span>}
+            sections={[
+              {
+                title: "Add to",
+                items: BOARDS.filter((b) => b.id !== "commander" || commander).map((b) => ({
+                  label: b.label,
+                  keepOpen: true,
+                  onSelect: () => props.onAdd(c, b.id),
+                })),
+              },
+            ]}
+          />
+          <InfoButton label={`Details for ${c.name}`} onClick={details} />
+        </div>
+      </div>
+    );
+  };
+
   return (
     <section className="panel search-page">
       <div className="search-page-head">
@@ -243,76 +387,39 @@ export function SearchResults(props: {
             <input type="checkbox" checked={!allColors} onChange={(e) => setAllColors(!e.target.checked)} /> Only cards your commander allows
           </label>
         )}
+        {commanderDeck && (
+          <label className="inline">
+            {" "}Order{" "}
+            <select value={canRank ? order : "overall"} disabled={!canRank} onChange={(e) => setOrder(e.target.value as "commander" | "overall")}>
+              <option value="commander">Most played with your commander</option>
+              <option value="overall">{hasOrder(fullQuery) ? "As the search says (order:)" : "Most played overall"}</option>
+            </select>
+          </label>
+        )}
       </p>
-      <div className="search-grid">
-        {shown.map((c) => {
-          const inDeck = entries(c);
-          const count = inDeck.reduce((n, e) => n + e.quantity, 0);
-          const verdict = props.format === "conquest" ? cardLegality(c) : { ok: true, reason: undefined };
-          const playable = support?.status(c);
-          const img = scry.imageUrl(c, "normal");
-          const commander = canCommand(c, props.format);
-          const details = () =>
-            showCardDetails(c, [
-              { label: `+ Add to ${boardLabel(props.defaultBoard).toLowerCase()}`, run: () => props.onAdd(c, props.defaultBoard) },
-              ...(commander ? [{ label: "★ Set as commander", run: () => props.onAdd(c, "commander") }] : []),
-            ]);
-          return (
-            <div key={c.id} className={`search-card${count ? " in-deck" : ""}${verdict.ok ? "" : " not-legal"}`}>
-              <button className="tile-img" title={`${c.name}: card details`} onClick={details}>
-                {img ? <img src={img} alt={c.name} loading="lazy" /> : <span className="noimg">{c.name}</span>}
-              </button>
-              {!verdict.ok && <span className="legal-badge" title={`Not legal in Conquest: ${verdict.reason}`}>Not legal</span>}
-              {playable && !playable.works && (
-                <span className={`nw-badge tile-nw${verdict.ok ? "" : " below"}`} title={playable.reason}>{playable.missing ? "Not playable" : "Known issue"}</span>
-              )}
-              {count > 0 && (
-                <span className="in-deck-badge" title={inDeck.map((e) => `${e.quantity} in ${boardLabel(e.board).toLowerCase()}`).join(", ")}>
-                  {count} in deck
-                </span>
-              )}
-              <div className="search-card-bar">
-                {count > 0 && (
-                  <CardMenu
-                    label={`Remove ${c.name}`}
-                    className="qty-btn"
-                    trigger={<span aria-hidden="true">−</span>}
-                    sections={[
-                      {
-                        title: "Remove one from",
-                        items: inDeck.map((e) => ({
-                          label: `${boardLabel(e.board)} (${e.quantity})`,
-                          keepOpen: inDeck.length > 1 || e.quantity > 1,
-                          onSelect: () => props.onQty(e, e.quantity - 1),
-                        })),
-                      },
-                    ]}
-                  />
-                )}
-                <button className="btn small add-btn" onClick={() => props.onAdd(c, props.defaultBoard)} title={`Add to ${boardLabel(props.defaultBoard).toLowerCase()}`}>
-                  + Add
-                </button>
-                <CardMenu
-                  label={`Add ${c.name} to…`}
-                  className="split-btn"
-                  trigger={<span aria-hidden="true">▾</span>}
-                  sections={[
-                    {
-                      title: "Add to",
-                      items: BOARDS.filter((b) => b.id !== "commander" || commander).map((b) => ({
-                        label: b.label,
-                        keepOpen: true,
-                        onSelect: () => props.onAdd(c, b.id),
-                      })),
-                    },
-                  ]}
-                />
-                <InfoButton label={`Details for ${c.name}`} onClick={details} />
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      {commanderDeck && !canRank && !hasOrder(fullQuery) && (
+        <p className="muted small">This search uses terms we can't check against your commander's EDHREC list, so it's in overall EDHREC order.</p>
+      )}
+      {additionsOn && hidden > 0 && (
+        <p className="small search-notice">
+          Your search additions (<code>{additions}</code>) hid {hidden.toLocaleString()} card{hidden === 1 ? "" : "s"}.{" "}
+          <button className="text-link" onClick={() => setSkipAdditions(true)}>Search without them</button>
+        </p>
+      )}
+      {skipAdditions && (
+        <p className="small search-notice">
+          Search additions (<code>{additions}</code>) are off for this search.{" "}
+          <button className="text-link" onClick={() => setSkipAdditions(false)}>Turn them back on</button>
+        </p>
+      )}
+      {ranked.length > 0 && (
+        <>
+          <h3 className="search-section">Most played with {commanderNames}</h3>
+          <div className="search-grid">{ranked.map((r) => tile(r.card, r.inclusion))}</div>
+          {shown.length > 0 && <h3 className="search-section">More cards</h3>}
+        </>
+      )}
+      <div className="search-grid">{shown.map((c) => tile(c))}</div>
       {next && (
         <button className="btn ghost wide" disabled={loadingMore} onClick={() => void more()}>
           {loadingMore ? "Loading…" : "Load more"}
