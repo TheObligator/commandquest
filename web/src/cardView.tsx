@@ -1,7 +1,7 @@
 // How a deck's cards are shown, on the precon decks and in the deck editor: overlapping card
 // pictures (two amounts of overlap), whole cards in a grid, or a text list. One choice for both
 // pages, remembered per browser: the last one you picked, else Stacked.
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type CardView = "stacked" | "spread" | "grid" | "list";
 
@@ -53,3 +53,46 @@ export function CardViewToggle({ view, onChange }: { view: CardView; onChange: (
     </div>
   );
 }
+
+// ---- Overlapping views: a big type takes two columns when the row has room ----
+
+/** A stack column's width and the gap between columns (`.stack-col`, `.stack-groups` in style.css). */
+const COL = 150;
+const GAP = 14;
+/** Types with fewer cards than this stay in one column. */
+const MIN_TO_SPLIT = 7;
+
+/** How many stack columns fit across the element given the returned ref (0 until measured). */
+export function useStackColumns(): [(el: HTMLElement | null) => void, number] {
+  const [cols, setCols] = useState(0);
+  const observer = useRef<ResizeObserver | null>(null);
+  useEffect(() => () => observer.current?.disconnect(), []);
+  const ref = useCallback((el: HTMLElement | null) => {
+    if (!el || typeof ResizeObserver === "undefined") return;
+    observer.current ??= new ResizeObserver((entries) => {
+      const width = entries[entries.length - 1].contentRect.width;
+      setCols(Math.max(1, Math.floor((width + GAP) / (COL + GAP))));
+    });
+    observer.current.observe(el);
+  }, []);
+  return [ref, cols];
+}
+
+/**
+ * Which groups (by index) get a second column: the biggest first, one per column the row has
+ * spare, and only groups of at least MIN_TO_SPLIT cards.
+ */
+export function doubledGroups(sizes: number[], cols: number): Set<number> {
+  let spare = cols - sizes.length;
+  const out = new Set<number>();
+  const biggest = sizes.map((_, i) => i).sort((a, z) => sizes[z] - sizes[a]);
+  for (const i of biggest) {
+    if (spare <= 0 || sizes[i] < MIN_TO_SPLIT) break;
+    out.add(i);
+    spare--;
+  }
+  return out;
+}
+
+/** A group's cards as one column, or two (the first gets the extra card). */
+export const columnsOf = <T,>(cards: T[], double: boolean): T[][] => (double ? [cards.slice(0, Math.ceil(cards.length / 2)), cards.slice(Math.ceil(cards.length / 2))] : [cards]);

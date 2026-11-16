@@ -4,7 +4,7 @@ import { api } from "../../convex/_generated/api";
 import type { DeckCard } from "../../convex/model/deckRules";
 import { errorMessage } from "../app/errors";
 import { closeOnBackdrop, showCardDetails } from "../carddetails";
-import { CardViewToggle, useCardView } from "../cardView";
+import { CardViewToggle, columnsOf, doubledGroups, useCardView, useStackColumns } from "../cardView";
 import { mergeDuplicates } from "../decklist";
 import { toast } from "../dom";
 import { ManaCost } from "../components/ManaCost";
@@ -215,6 +215,7 @@ function groupsOf(p: Precon, lookup: Lookup, resolved: boolean): { deck: Group[]
 function PreconList({ precon, addButton, onClose }: { precon: Precon; addButton: React.ReactNode; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [view, setView] = useCardView();
+  const [measure, stackCols] = useStackColumns();
   // undefined while the cards load; false if they couldn't (names only).
   const [resolved, setResolved] = useState<boolean | undefined>(undefined);
   const [baked, setBaked] = useState<Map<string, scry.ScryCard> | null>(null);
@@ -261,22 +262,26 @@ function PreconList({ precon, addButton, onClose }: { precon: Precon; addButton:
     else toast(`Couldn't load ${c.name} from Scryfall`, "error");
   };
 
-  /** A column of overlapping cards (or, in the grid, whole cards); hover shows a card, click opens details. */
-  const stack = (g: Group) => (
-    <div key={g.key} className={view === "grid" ? "grid-group" : "stack-col"}>
+  /** A column of overlapping cards (two for a big type when there's room; in the grid, whole cards). Hover shows a card, click opens details. */
+  const stack = (g: Group, double = false) => (
+    <div key={g.key} className={view === "grid" ? "grid-group" : double ? "stack-col double" : "stack-col"}>
       <h4>{g.label}<span className="muted"> {total(g.cards)}</span></h4>
-      <div className={`stack ${view}`}>
-        {g.cards.map((c) => {
-          const s = lookup(c);
-          const img = s && scry.imageUrl(s, "normal");
-          return (
-            <button key={c.name} className="stack-card" title={s ? undefined : c.name} disabled={!s} onClick={() => void details(c)} aria-label={`${c.quantity} × ${c.name}: card details`} {...preview.handlers(s)}>
-              {img ? <img src={img} alt="" loading="lazy" /> : <span className="noimg">{c.name}</span>}
-              {img && <span className="tile-name" aria-hidden="true">{c.name}</span>}
-              {c.quantity > 1 && <span className="stack-qty">×{c.quantity}</span>}
-            </button>
-          );
-        })}
+      <div className="stack-pair">
+        {columnsOf(g.cards, double).map((cards, i) => (
+          <div key={i} className={`stack ${view}`}>
+            {cards.map((c) => {
+              const s = lookup(c);
+              const img = s && scry.imageUrl(s, "normal");
+              return (
+                <button key={c.name} className="stack-card" title={s ? undefined : c.name} disabled={!s} onClick={() => void details(c)} aria-label={`${c.quantity} × ${c.name}: card details`} {...preview.handlers(s)}>
+                  {img ? <img src={img} alt="" loading="lazy" /> : <span className="noimg">{c.name}</span>}
+                  {img && <span className="tile-name" aria-hidden="true">{c.name}</span>}
+                  {c.quantity > 1 && <span className="stack-qty">×{c.quantity}</span>}
+                </button>
+              );
+            })}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -303,7 +308,16 @@ function PreconList({ precon, addButton, onClose }: { precon: Precon; addButton:
     groups.length > 0 && (
       <section className="board">
         <h2>{title}<span className="muted"> {groups.reduce((n, g) => n + total(g.cards), 0)}</span></h2>
-        {view === "list" ? <div className="type-groups">{groups.map(list)}</div> : <div className={view === "grid" ? "grid-groups" : "stack-groups"}>{groups.map(stack)}</div>}
+        {view === "list" ? (
+          <div className="type-groups">{groups.map(list)}</div>
+        ) : view === "grid" ? (
+          <div className="grid-groups">{groups.map((g) => stack(g))}</div>
+        ) : (
+          (() => {
+            const double = doubledGroups(groups.map((g) => g.cards.length), stackCols);
+            return <div className="stack-groups" ref={measure}>{groups.map((g, i) => stack(g, double.has(i)))}</div>;
+          })()
+        )}
       </section>
     );
 

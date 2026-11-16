@@ -11,7 +11,7 @@ import { mergeDuplicates, parseDecklist, writeDecklist, type ParsedToken } from 
 import { toast } from "../dom";
 import { CardMenu } from "../components/CardMenu";
 import { DeckTokens } from "../components/DeckTokens";
-import { CardViewToggle, useCardView } from "../cardView";
+import { CardViewToggle, columnsOf, doubledGroups, useCardView, useStackColumns } from "../cardView";
 import { ManaCost } from "../components/ManaCost";
 import { Loading } from "../components/Spinner";
 import { CONQUEST, validateConquest } from "../formats/conquest";
@@ -522,6 +522,7 @@ function DeckView(props: {
   const [printingsFor, setPrintingsFor] = useState<DeckCard | null>(null);
   const [view, setView] = useCardView();
   const stacked = view === "stacked" || view === "spread";
+  const [measure, stackCols] = useStackColumns();
   const support = useCardSupport();
   const warnings = useMemo(() => deckWarnings(deck, missing, count, support), [deck, missing, count, support]);
   /** "Not playable" on cards that won't work in a game (src/cardsupport.ts). */
@@ -627,11 +628,13 @@ function DeckView(props: {
     );
   };
 
-  /** A column of overlapping cards (Stacked, Spread). */
-  const stack = (cards: DeckCard[], k: string, head?: React.ReactNode) => (
-    <div key={k} className="stack-col">
+  /** A column of overlapping cards (Stacked, Spread), or two side by side for a big type. */
+  const stack = (cards: DeckCard[], k: string, head?: React.ReactNode, double = false) => (
+    <div key={k} className={double ? "stack-col double" : "stack-col"}>
       {head}
-      <div className={`stack ${view}`}>{cards.map(tile)}</div>
+      <div className="stack-pair">
+        {columnsOf(cards, double).map((g, i) => <div key={i} className={`stack ${view}`}>{g.map(tile)}</div>)}
+      </div>
     </div>
   );
   /** Cards that aren't split by type (commander, considering): rows, a grid, or columns of up to 10. */
@@ -640,7 +643,7 @@ function DeckView(props: {
     if (view === "grid") return <div className="card-tiles">{cards.map(tile)}</div>;
     const cols: DeckCard[][] = [];
     for (let i = 0; i < cards.length; i += 10) cols.push(cards.slice(i, i + 10));
-    return <div className="stack-groups">{cols.map((g, i) => stack(g, String(i)))}</div>;
+    return <div className="stack-groups" ref={measure}>{cols.map((g, i) => stack(g, String(i)))}</div>;
   };
 
   return (
@@ -687,7 +690,10 @@ function DeckView(props: {
               return { t, g, head };
             });
             body = stacked ? (
-              <div className="stack-groups">{types.map(({ t, g, head }) => stack(g, t, head))}</div>
+              (() => {
+                const double = doubledGroups(types.map(({ g }) => g.length), stackCols);
+                return <div className="stack-groups" ref={measure}>{types.map(({ t, g, head }, i) => stack(g, t, head, double.has(i)))}</div>;
+              })()
             ) : (
               <div className={view === "grid" ? "image-groups" : "type-groups"}>
                 {types.map(({ t, g, head }) => (
@@ -856,5 +862,6 @@ function Printings({ card, onPick, onClose }: { card: DeckCard; onPick: (p: scry
     </dialog>
   );
 }
+
 
 
