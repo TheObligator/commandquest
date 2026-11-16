@@ -11,7 +11,8 @@ import { mergeDuplicates, parseDecklist, writeDecklist, type ParsedToken } from 
 import { toast } from "../dom";
 import { CardMenu } from "../components/CardMenu";
 import { DeckTokens } from "../components/DeckTokens";
-import { CardViewToggle, columnsOf, doubledGroups, useCardView, useStackColumns } from "../cardView";
+import { CardViewToggle, useCardView, useStackColumns } from "../cardView";
+import { columnsOf, doubledGroups } from "../stackLayout";
 import { ManaCost } from "../components/ManaCost";
 import { Loading } from "../components/Spinner";
 import { CONQUEST, validateConquest } from "../formats/conquest";

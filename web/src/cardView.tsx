@@ -59,9 +59,6 @@ export function CardViewToggle({ view, onChange }: { view: CardView; onChange: (
 /** A stack column's width and the gap between columns (`.stack-col`, `.stack-groups` in style.css). */
 const COL = 150;
 const GAP = 14;
-/** Types with fewer cards than this stay in one column. */
-const MIN_TO_SPLIT = 7;
-
 /** How many stack columns fit across the element given the returned ref (0 until measured). */
 export function useStackColumns(): [(el: HTMLElement | null) => void, number] {
   const [cols, setCols] = useState(0);
@@ -77,22 +74,3 @@ export function useStackColumns(): [(el: HTMLElement | null) => void, number] {
   }, []);
   return [ref, cols];
 }
-
-/**
- * Which groups (by index) get a second column: the biggest first, one per column the row has
- * spare, and only groups of at least MIN_TO_SPLIT cards.
- */
-export function doubledGroups(sizes: number[], cols: number): Set<number> {
-  let spare = cols - sizes.length;
-  const out = new Set<number>();
-  const biggest = sizes.map((_, i) => i).sort((a, z) => sizes[z] - sizes[a]);
-  for (const i of biggest) {
-    if (spare <= 0 || sizes[i] < MIN_TO_SPLIT) break;
-    out.add(i);
-    spare--;
-  }
-  return out;
-}
-
-/** A group's cards as one column, or two (the first gets the extra card). */
-export const columnsOf = <T,>(cards: T[], double: boolean): T[][] => (double ? [cards.slice(0, Math.ceil(cards.length / 2)), cards.slice(Math.ceil(cards.length / 2))] : [cards]);
