@@ -1,12 +1,13 @@
 // Under the deck: the Commander bracket the player gives the deck (with their reasons), what its
 // cards say about the lowest bracket it fits, and counts of the cards that matter at a glance
 // (Game Changers, tutors, fast mana, removal…). See src/brackets.ts and src/cardtags.ts.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DeckCard } from "../../convex/model/deckRules";
 import { MAX_BRACKET_TAG_LENGTH, MAX_BRACKET_TAGS } from "../../convex/model/deckRules";
 import { BRACKETS, GLANCE, REASON_TAGS, bracketFloor, bracketName, glance, total, type GlanceCard } from "../brackets";
 import { knownTags, lookUpTags, pendingQueries } from "../cardtags";
 import { errorMessage } from "../app/errors";
+import { CardMenu } from "./CardMenu";
 import * as scry from "../scryfall";
 
 export function DeckBracket(props: {
@@ -78,39 +79,29 @@ export function DeckBracket(props: {
     <section className="board glance-panel">
       <h2>{props.commander ? "Bracket and key cards" : "Key cards"}</h2>
       {props.commander && (
-        <div className="bracket-block">
-          <div className="bracket-pick" role="radiogroup" aria-label="This deck's bracket">
-            {BRACKETS.map((b) => (
-              <button
-                key={b.n}
-                role="radio"
-                aria-checked={props.bracket === b.n}
-                className={`bracket-opt${props.bracket === b.n ? " on" : ""}${b.n < floor.bracket ? " below" : ""}`}
-                title={`${b.blurb}${props.bracket === b.n ? " Click again to clear." : ""}`}
-                onClick={() => props.onBracket(props.bracket === b.n ? undefined : b.n)}
-              >
-                <span className="bracket-n">{b.n}</span>
-                <span className="bracket-name">{b.name}</span>
-              </button>
-            ))}
-          </div>
-          <p className="muted small bracket-hint">
-            {props.bracket ? `${BRACKETS[props.bracket - 1].name}: ${BRACKETS[props.bracket - 1].blurb}` : "Pick the bracket you'd call this deck."}
-          </p>
-          <div className={`bracket-floor${props.bracket && props.bracket < floor.bracket ? " warn" : ""}`}>
-            {floor.reasons.length ? (
+        <div className="bracket-line">
+          <CardMenu
+            label="Set this deck's bracket"
+            className="bracket-btn"
+            trigger={
               <>
-                <p>
-                  <strong>Its cards fit Bracket {floor.bracket} ({bracketName(floor.bracket)}) or higher</strong>
-                  {props.bracket && props.bracket < floor.bracket ? `, but you've picked ${props.bracket}.` : "."}
-                </p>
-                <ul>{floor.reasons.map((r) => <li key={r.text}>{r.text}</li>)}</ul>
+                <span className="muted">Bracket</span>
+                <strong>{props.bracket ? `${props.bracket} · ${bracketName(props.bracket)}` : "Not set"}</strong>
+                <span aria-hidden="true" className="caret">▾</span>
               </>
-            ) : (
-              <p>Nothing in the list rules out Bracket 1.</p>
-            )}
-            <p className="muted small">Two-card combos and how early the deck can win aren't checked: tag them below.</p>
-          </div>
+            }
+            sections={[
+              {
+                title: "This deck's bracket",
+                items: BRACKETS.map((b) => ({
+                  label: `${props.bracket === b.n ? "✓ " : ""}${b.n} · ${b.name}: ${b.short}`,
+                  onSelect: () => props.onBracket(b.n),
+                })),
+              },
+              ...(props.bracket ? [{ items: [{ label: "Clear", onSelect: () => props.onBracket(undefined) }] }] : []),
+            ]}
+          />
+          <FloorIndicator floor={floor} picked={props.bracket} />
           <ReasonTags tags={props.tags} onTags={props.onTags} />
         </div>
       )}
@@ -167,8 +158,63 @@ export function DeckBracket(props: {
   );
 }
 
+/**
+ * A small chip saying what the cards allow ("Cards: Bracket 2+"); red when the picked bracket is
+ * lower. Click (or hover) for the reasons.
+ */
+function FloorIndicator({ floor, picked }: { floor: ReturnType<typeof bracketFloor>; picked?: number }) {
+  const [open, setOpen] = useState(false);
+  const ref = useDismiss(open, () => setOpen(false));
+  const below = !!picked && picked < floor.bracket;
+  const state = below ? "warn" : floor.reasons.length ? "info" : "ok";
+  const text = below ? `Cards say ${floor.bracket}+` : floor.reasons.length ? `Cards: ${floor.bracket}+` : "Cards: any bracket";
+  return (
+    <div className="floor-ind-wrap" ref={ref}>
+      <button className={`floor-ind ${state}`} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <span aria-hidden="true">{below ? "⚠" : "ⓘ"}</span> {text}
+      </button>
+      {open && (
+        <div className="floor-pop" role="dialog" aria-label="What the cards say about the bracket">
+          {floor.reasons.length ? (
+            <>
+              <p>
+                <strong>Bracket {floor.bracket} ({bracketName(floor.bracket)}) or higher</strong>
+                {below ? `, but you picked ${picked}.` : "."}
+              </p>
+              <ul>{floor.reasons.map((r) => <li key={r.text}>{r.text}</li>)}</ul>
+            </>
+          ) : (
+            <p>Nothing in the list rules out Bracket 1.</p>
+          )}
+          <p className="muted small">Checks Game Changers, mass land denial and extra turns. Two-card combos and how early the deck wins aren't checked: tag them.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Hook: closes a popover on an outside click or Escape. */
+function useDismiss(open: boolean, close: () => void) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && close();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open, close]);
+  return ref;
+}
+
+/** The chosen reasons as small chips (click one to remove it), and "+ Reason" to pick more. */
 function ReasonTags({ tags, onTags }: { tags: string[]; onTags: (t: string[]) => void }) {
+  const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
+  const ref = useDismiss(open, () => setOpen(false));
   const has = (t: string) => tags.some((x) => x.toLowerCase() === t.toLowerCase());
   const toggle = (t: string) => onTags(has(t) ? tags.filter((x) => x.toLowerCase() !== t.toLowerCase()) : [...tags, t]);
   const custom = tags.filter((t) => !REASON_TAGS.some((r) => r.toLowerCase() === t.toLowerCase()));
@@ -180,29 +226,42 @@ function ReasonTags({ tags, onTags }: { tags: string[]; onTags: (t: string[]) =>
     setDraft("");
   }
   return (
-    <div className="reason-tags">
-      <span className="muted small">Why this bracket:</span>
-      {[...REASON_TAGS, ...custom].map((t) => (
-        <button key={t} className={`reason-tag${has(t) ? " on" : ""}`} aria-pressed={has(t)} disabled={!has(t) && full} onClick={() => toggle(t)}>
-          {t}
+    <div className="reason-tags" ref={ref}>
+      {tags.map((t) => (
+        <button key={t} className="reason-tag on" title="Remove this reason" onClick={() => toggle(t)}>
+          {t} <span aria-hidden="true">×</span>
         </button>
       ))}
-      <input
-        className="reason-input"
-        placeholder="+ Your own tag"
-        aria-label="Add your own tag"
-        maxLength={MAX_BRACKET_TAG_LENGTH}
-        value={draft}
-        disabled={full}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            add();
-          }
-        }}
-        onBlur={add}
-      />
+      <button className="reason-tag add" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        + Reason
+      </button>
+      {open && (
+        <div className="reason-pop" role="dialog" aria-label="Reasons for this bracket">
+          <p className="muted small">Why this bracket?</p>
+          <div className="reason-choices">
+            {[...REASON_TAGS, ...custom].map((t) => (
+              <button key={t} className={`reason-tag${has(t) ? " on" : ""}`} aria-pressed={has(t)} disabled={!has(t) && full} onClick={() => toggle(t)}>
+                {t}
+              </button>
+            ))}
+          </div>
+          <input
+            className="reason-input"
+            placeholder="Your own reason, then Enter"
+            aria-label="Add your own reason"
+            maxLength={MAX_BRACKET_TAG_LENGTH}
+            value={draft}
+            disabled={full}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                add();
+              }
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

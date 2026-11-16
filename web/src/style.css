@@ -636,27 +636,29 @@ table.hotkeys { width: 100%; border-collapse: collapse; }
 }
 
 /* Bracket and key cards, under the deck stats (src/components/DeckBracket.tsx). */
-.glance-panel .bracket-block { display: grid; gap: 10px; margin-bottom: 18px; }
-.bracket-pick { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; max-width: 720px; }
-.bracket-opt { display: grid; justify-items: center; gap: 2px; padding: 8px 4px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg-2); color: var(--text); cursor: pointer; transition: border-color .12s, background .12s; }
-.bracket-opt:hover { border-color: var(--accent); }
-.bracket-opt.on { background: rgb(224 168 79 / 16%); border-color: var(--accent); }
-.bracket-opt.below:not(.on) { opacity: .55; }
-.bracket-opt.on.below { border-color: var(--danger); background: rgb(239 107 107 / 12%); }
-.bracket-n { font-size: 1.3rem; font-weight: 800; line-height: 1; color: var(--accent-2); }
-.bracket-name { font-size: .78rem; color: var(--muted); }
-.bracket-opt.on .bracket-name { color: var(--text); }
-.bracket-hint { margin: 0; }
-.bracket-floor { padding: 10px 14px; border-radius: 8px; background: var(--bg-2); border: 1px solid var(--line); font-size: .9rem; max-width: 720px; }
-.bracket-floor.warn { background: rgb(239 107 107 / 8%); border-color: rgb(239 107 107 / 45%); }
-.bracket-floor p { margin: 0 0 4px; }
-.bracket-floor ul { margin: 4px 0 6px; padding-left: 20px; }
-.reason-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; max-width: 900px; }
-.reason-tag { font-size: .78rem; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); background: none; color: var(--muted); cursor: pointer; }
+/* One line: bracket picker, what the cards say, reason chips (popovers for details). */
+.bracket-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-bottom: 10px; }
+.menu-btn.bracket-btn { opacity: 1; width: auto; height: 28px; gap: 6px; padding: 0 10px; font-size: .85rem; color: var(--text); background: var(--bg-2); border: 1px solid var(--line); border-radius: 7px; }
+.menu-btn.bracket-btn:hover, .menu-btn.bracket-btn.open { border-color: var(--accent); background: var(--panel-2); }
+.bracket-btn strong { color: var(--accent-2); }
+.bracket-btn .caret { font-size: .7rem; color: var(--muted); }
+.floor-ind-wrap, .reason-tags { position: relative; }
+.floor-ind { height: 26px; padding: 0 9px; border-radius: 99px; font-size: .78rem; cursor: pointer; border: 1px solid var(--line); background: none; color: var(--muted); white-space: nowrap; }
+.floor-ind.info { color: var(--accent-2); border-color: rgb(224 168 79 / 45%); }
+.floor-ind.warn { color: var(--danger); border-color: rgb(239 107 107 / 55%); background: rgb(239 107 107 / 10%); }
+.floor-ind:hover { filter: brightness(1.15); }
+.floor-pop, .reason-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 40; width: max-content; max-width: min(380px, 86vw); padding: 10px 12px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); box-shadow: var(--shadow); font-size: .85rem; }
+.floor-pop p { margin: 0 0 6px; }
+.floor-pop ul { margin: 0 0 6px; padding-left: 18px; }
+.reason-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.reason-tag { font-size: .74rem; padding: 2px 9px; border-radius: 99px; border: 1px solid var(--line); background: none; color: var(--muted); cursor: pointer; }
 .reason-tag:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
 .reason-tag.on { background: rgb(224 168 79 / 18%); border-color: var(--accent); color: var(--accent-2); }
+.reason-tag.add { border-style: dashed; }
 .reason-tag:disabled { opacity: .4; cursor: default; }
-.reason-input { width: 150px; font-size: .78rem; padding: 3px 10px; border-radius: 99px; }
+.reason-pop p { margin: 0 0 6px; }
+.reason-choices { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.reason-input { width: 100%; font-size: .8rem; padding: 4px 8px; }
 .glance-head { margin: 4px 0 8px; }
 /* Small enough that all 11 fit on one row on a laptop-width deck; they wrap below that. */
 .glance-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: 5px; }
@@ -687,8 +689,4 @@ table.hotkeys { width: 100%; border-collapse: collapse; }
   .color-grid { gap: 5px; }
   .color-sym { width: 36px; height: 36px; }
   .color-big { font-size: 1rem; }
-}
-@media (max-width: 560px) {
-  .bracket-pick { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
-  .bracket-name { font-size: .64rem; }
 }

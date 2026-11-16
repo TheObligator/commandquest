@@ -17,11 +17,11 @@
 // player marks those with a reason tag.
 
 export const BRACKETS = [
-  { n: 1, name: "Exhibition", blurb: "Theme over power. Games go 9+ turns." },
-  { n: 2, name: "Core", blurb: "Precon level: no Game Changers. Games go 8+ turns." },
-  { n: 3, name: "Upgraded", blurb: "Tuned, up to 3 Game Changers, no early combos. Games go 6+ turns." },
-  { n: 4, name: "Optimized", blurb: "High power, anything legal. Games go 4+ turns." },
-  { n: 5, name: "cEDH", blurb: "Competitive: built to win as fast as possible." },
+  { n: 1, name: "Exhibition", short: "theme over power", blurb: "Theme over power. Games go 9+ turns." },
+  { n: 2, name: "Core", short: "precon level", blurb: "Precon level: no Game Changers. Games go 8+ turns." },
+  { n: 3, name: "Upgraded", short: "up to 3 Game Changers", blurb: "Tuned, up to 3 Game Changers, no early combos. Games go 6+ turns." },
+  { n: 4, name: "Optimized", short: "anything legal", blurb: "High power, anything legal. Games go 4+ turns." },
+  { n: 5, name: "cEDH", short: "competitive", blurb: "Competitive: built to win as fast as possible." },
 ] as const;
 
 export const bracketName = (n: number) => BRACKETS.find((b) => b.n === n)?.name ?? "";
