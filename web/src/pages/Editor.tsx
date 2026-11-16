@@ -11,6 +11,7 @@ import { mergeDuplicates, parseDecklist, writeDecklist, type ParsedToken } from 
 import { toast } from "../dom";
 import { CardMenu } from "../components/CardMenu";
 import { DeckBracket } from "../components/DeckBracket";
+import { deckAverages } from "../deckstats";
 import { DeckTokens } from "../components/DeckTokens";
 import { CardViewToggle, useCardView, useStackColumns } from "../cardView";
 import { ManaCurve } from "../components/ManaCurve";
@@ -934,6 +935,9 @@ function Stats({ deck, count, onExtraColor }: { deck: Draft; count: (b?: Board) 
     return card ? [{ name: c.name, quantity: c.quantity, card }] : [];
   });
   const lands = main.filter((e) => scry.primaryType(e.card) === "Land").reduce((n, e) => n + e.quantity, 0);
+  const mainCount = main.reduce((n, e) => n + e.quantity, 0);
+  const avg = deckAverages(main.map((e) => ({ quantity: e.quantity, cmc: e.card.cmc ?? 0, land: scry.primaryType(e.card) === "Land" })));
+  const fmt = (n: number | undefined) => (n === undefined ? "—" : n.toFixed(2));
   const commanders = deck.cards.filter((c) => c.board === "commander").flatMap((c) => scry.cached(c) ?? []);
   const identity = [...new Set(commanders.flatMap((c) => c.color_identity))];
   const extraFor = deck.format === "commander" || deck.format === "conquest" ? extraColorChoice(commanders) : undefined;
@@ -970,6 +974,20 @@ function Stats({ deck, count, onExtraColor }: { deck: Draft; count: (b?: Board) 
             </p>
           )}
           <p><span className="muted">Lands </span>{lands}</p>
+          <p title="Average mana value of the main deck, counting lands as 0">
+            <span className="muted">Average mana value </span>
+            {fmt(avg.withLands)}
+            <span className="muted small"> with lands</span>
+          </p>
+          <p title="Average mana value of the main deck's nonland cards">
+            <span className="muted">Average mana value </span>
+            {fmt(avg.withoutLands)}
+            <span className="muted small"> without lands</span>
+          </p>
+          <p title={`Lands you can expect in a 7-card opening hand: 7 × ${lands} lands ÷ ${mainCount} cards`}>
+            <span className="muted">Lands per opening hand </span>
+            {fmt(avg.landsPerHand)}
+          </p>
           <p><span className="muted">Sideboard / maybe </span>{count("side")} / {count("maybe")}</p>
         </div>
       </div>
