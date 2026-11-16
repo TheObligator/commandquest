@@ -7,7 +7,7 @@
 //    they never go through the API.
 //  - On HTTP 429 we pause all requests for 30 seconds, as Scryfall requires.
 //  - The browser's own User-Agent is left intact and an Accept header is sent.
-//  - Card data is cached in localStorage for 24 hours (Scryfall asks for at least 24h).
+//  - Card data is cached in localStorage for 7 days (Scryfall asks for at least 24h).
 
 import type { DeckCard } from "../convex/model/deckRules";
 
@@ -127,11 +127,13 @@ async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
   });
 }
 
-// ---- Cache (memory + localStorage, 24h) -----------------------------------------
+// ---- Cache (memory + localStorage, 7 days) ---------------------------------------
 
 // Bump the version when `trim` keeps new fields, so old entries without them are dropped.
 const STORE_KEY = "cq.scryfall.cards.v3"; // v3 keeps colors and the tokens a card makes
-const TTL_MS = 24 * 60 * 60 * 1000;
+// Card data rarely changes (a ban updates legality), and a deck opened again within the week then
+// needs no lookups. The size cap, not the age, is what keeps this within localStorage's ~5 MB.
+const TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_STORED = 1500;
 
 const byId = new Map<string, ScryCard>();
@@ -326,10 +328,30 @@ function identifier(c: DeckCard): Identifier {
  * `cached()` for printings Scryfall didn't know) afterwards.
  */
 export async function resolve(cards: DeckCard[]): Promise<string[]> {
-  const todo = cards.filter((c) => !cachedExact(c));
   const unique = new Map<string, DeckCard>();
-  for (const c of todo) unique.set(JSON.stringify(identifier(c)), c);
-  const list = [...unique.values()];
+  for (const c of cards) if (!cachedExact(c)) unique.set(JSON.stringify(identifier(c)), c);
+  // Cards another caller is already looking up (the editor and its token list open together) share
+  // that request instead of sending a second one.
+  const waits = new Set<Promise<string[]>>();
+  const mine: [string, DeckCard][] = [];
+  for (const [k, c] of unique) {
+    const p = inFlight.get(k);
+    if (p) waits.add(p);
+    else mine.push([k, c]);
+  }
+  if (mine.length) {
+    const p = lookUp(mine.map(([, c]) => c));
+    for (const [k] of mine) inFlight.set(k, p);
+    p.finally(() => mine.forEach(([k]) => inFlight.get(k) === p && inFlight.delete(k))).catch(() => undefined);
+    waits.add(p);
+  }
+  const names = new Set(cards.map((c) => c.name));
+  return [...new Set((await Promise.all(waits)).flat().filter((n) => names.has(n)))];
+}
+
+const inFlight = new Map<string, Promise<string[]>>();
+
+async function lookUp(list: DeckCard[]): Promise<string[]> {
   const missing: string[] = [];
   const retry: DeckCard[] = [];
   for (let i = 0; i < list.length; i += 75) {

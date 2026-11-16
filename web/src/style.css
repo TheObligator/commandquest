@@ -141,6 +141,13 @@ label.inline select { width: auto; padding: 5px 8px; }
 .page-head.row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
 .page-head h1 { margin: 0; }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.editor-loading { min-height: 60vh; display: grid; place-content: center; justify-items: center; gap: 10px; text-align: center; position: relative; }
+.editor-loading .back { position: absolute; top: 0; left: 0; }
+.editor-loading h2 { margin: 8px 0 0; }
+.editor-loading p { margin: 0; }
+.spinner { width: 40px; height: 40px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
 .empty { text-align: center; padding: 48px 20px; color: var(--muted); }
 .empty h3 { color: var(--text); }
 .empty .actions { justify-content: center; margin-top: 16px; }

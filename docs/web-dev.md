@@ -144,7 +144,7 @@ the app blocked:
   Images and symbols come from `cards.scryfall.io` / `svgs.scryfall.io`, which have no rate limit.
 - **Headers.** Browser code keeps the browser's own User-Agent and sends `Accept`. Server-side code
   must send an accurate User-Agent such as `CommandQuest/<version>`.
-- **Caching.** Card data is cached in `localStorage` for 24 hours (Scryfall asks for at least 24h).
+- **Caching.** Card data is cached in `localStorage` for 7 days, up to 1500 cards (Scryfall asks for at least 24h). Lookups already in flight are shared, so the editor and its token list don't fetch the same cards twice.
   To look up large numbers of cards (e.g. every card in a 4-player game), use Scryfall's daily
   bulk data files on the server rather than the API.
 - **Images.** Never crop, cover or clip the artist name or copyright on a card image. Never distort,

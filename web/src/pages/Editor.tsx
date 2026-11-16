@@ -60,6 +60,9 @@ function DeckEditor({ initial }: { initial: Draft }) {
   const [saveError, setSaveError] = useState("");
   const [savedOnce, setSavedOnce] = useState(!!initial.id);
   const [missing, setMissing] = useState<string[]>([]);
+  // A deck whose cards aren't cached waits on Scryfall (a second or more): show a loading screen
+  // until they're in rather than a list that fills in piece by piece.
+  const [loadingCards, setLoadingCards] = useState(() => initial.cards.some((c) => !scry.cachedExact(c) && !scry.cached(c)));
   const [, setCardData] = useState(0); // bumped when Scryfall data arrives, to re-render
   const [tab, setTab] = useState<"search" | "import">(query.has("import") ? "import" : "search");
   const [searchQuery, setSearchQuery] = useState<string | null>(null);
@@ -130,7 +133,7 @@ function DeckEditor({ initial }: { initial: Draft }) {
   }, []);
 
   useEffect(() => {
-    void resolveCards(initial.cards);
+    void resolveCards(initial.cards).finally(() => setLoadingCards(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -346,6 +349,18 @@ function DeckEditor({ initial }: { initial: Draft }) {
         : savedOnce
           ? "All changes saved"
           : "Saves automatically";
+
+  if (loadingCards) {
+    const count = initial.cards.reduce((n, c) => n + c.quantity, 0);
+    return (
+      <div className="editor-loading" role="status">
+        <a href="#/decks" className="back link">← Your decks</a>
+        <div className="spinner" aria-hidden="true" />
+        <h2>{deck.name}</h2>
+        <p className="muted">Loading {count} cards from Scryfall…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="editor">
@@ -845,3 +860,4 @@ function Printings({ card, onPick, onClose }: { card: DeckCard; onPick: (p: scry
     </dialog>
   );
 }
+
