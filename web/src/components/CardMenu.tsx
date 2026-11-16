@@ -14,6 +14,11 @@ export interface MenuItem {
   steppers?: { label: string; title: string; onSelect: () => void }[];
   /** Right-click menus: a menu that opens beside this item (e.g. "Reveal to ▸"). */
   submenu?: MenuItem[];
+  /**
+   * A number box after the label (e.g. "Add [4] copies"): Enter or the button calls `onAmount`.
+   * `onSelect` isn't used for these.
+   */
+  amount?: { initial: number; min: number; max: number; button: string; onAmount: (n: number) => void };
 }
 
 export interface MenuSection {
@@ -92,7 +97,10 @@ export function CardMenu({ label, sections, className = "", trigger }: { label: 
           {sections.map((s, i) => (
             <div key={i} className="card-menu-section">
               {s.title && <div className="card-menu-title">{s.title}</div>}
-              {s.items.map((item) => (
+              {s.items.map((item) =>
+                item.amount ? (
+                  <AmountRow key={item.label} item={item} amount={item.amount} onDone={() => setOpen(false)} />
+                ) : (
                 <button
                   key={item.label}
                   role="menuitem"
@@ -105,11 +113,47 @@ export function CardMenu({ label, sections, className = "", trigger }: { label: 
                 >
                   {item.label}
                 </button>
-              ))}
+                ),
+              )}
             </div>
           ))}
         </div>
       )}
     </>
+  );
+}
+
+/** "Add [4] [Add]": a number box in the menu. Enter or the button applies it and closes the menu. */
+function AmountRow({ item, amount, onDone }: { item: MenuItem; amount: NonNullable<MenuItem["amount"]>; onDone: () => void }) {
+  const [value, setValue] = useState(String(amount.initial));
+  const n = Math.floor(Number(value));
+  const ok = value.trim() !== "" && Number.isFinite(n) && n >= amount.min && n <= amount.max;
+  const apply = () => {
+    if (!ok) return;
+    amount.onAmount(n);
+    onDone();
+  };
+  return (
+    <div className="card-menu-amount" role="group" aria-label={item.label}>
+      <label>
+        <span>{item.label}</span>
+        <input
+          type="number"
+          inputMode="numeric"
+          min={amount.min}
+          max={amount.max}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onFocus={(e) => e.target.select()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              apply();
+            }
+          }}
+        />
+      </label>
+      <button className="amount-go" disabled={!ok} onClick={apply}>{amount.button}</button>
+    </div>
   );
 }

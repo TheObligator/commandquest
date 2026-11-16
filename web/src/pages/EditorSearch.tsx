@@ -2,7 +2,7 @@
 import { useQuery } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
-import type { Board, DeckCard } from "../../convex/model/deckRules";
+import { MAX_QUANTITY, type Board, type DeckCard } from "../../convex/model/deckRules";
 import { errorMessage } from "../app/errors";
 import { showCardDetails } from "../carddetails";
 import { useCardSupport } from "../cardsupport";
@@ -161,7 +161,7 @@ export function SearchResults(props: {
   defaultBoard: Board;
   onDefaultBoard: (b: Board) => void;
   /** `exact`: the search shows specific printings, so add that one instead of the default printing. */
-  onAdd: (c: scry.ScryCard, b: Board, exact: boolean) => void;
+  onAdd: (c: scry.ScryCard, b: Board, exact: boolean, copies?: number) => void;
   onQty: (entry: DeckCard, q: number) => void;
   onSearch: (q: string) => void;
   onPickName: (name: string) => void;
@@ -392,6 +392,15 @@ export function SearchResults(props: {
                   keepOpen: true,
                   onSelect: () => props.onAdd(c, b.id, exact),
                 })),
+              },
+              {
+                items: [
+                  {
+                    label: `Add to ${boardLabel(props.defaultBoard).toLowerCase()}`,
+                    onSelect: () => {},
+                    amount: { initial: 2, min: 1, max: MAX_QUANTITY, button: "Add", onAmount: (n) => props.onAdd(c, props.defaultBoard, exact, n) },
+                  },
+                ],
               },
             ]}
           />

@@ -341,6 +341,9 @@ label.inline select { width: auto; padding: 5px 8px; }
 .stack .card-tile:has(.tile-qty):has(.tile-nw) .tile-gc { right: calc(4cqw + 10em); }
 .qty { display: inline-flex; align-items: center; gap: 2px; font-variant-numeric: tabular-nums; min-width: 58px; }
 .qty > span { min-width: 1.6em; text-align: center; }
+.qty-input { width: 2.4em; padding: 1px 2px; text-align: center; font: inherit; font-variant-numeric: tabular-nums; color: inherit; background: none; border: 1px solid transparent; border-radius: 4px; }
+.card-row:hover .qty-input { border-color: var(--line); }
+.qty-input:focus { border-color: var(--accent); background: var(--bg-2); outline: none; }
 .qbtn { width: 20px; height: 20px; padding: 0; border-radius: 4px; border: 1px solid var(--line); background: var(--bg-2); cursor: pointer; line-height: 1; opacity: 0; transition: opacity .1s; }
 .card-row:hover .qbtn, .qbtn:focus-visible { opacity: 1; }
 .cname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -501,6 +504,11 @@ dialog.card-detail { width: min(860px, calc(100vw - 32px)); max-height: 90vh; ba
 .card-menu button:hover:not(:disabled), .card-menu button:focus-visible { background: var(--line); outline: none; }
 .card-menu button:disabled { color: var(--muted); cursor: default; }
 .card-menu button.danger { color: var(--danger); }
+/* "Add [4] [Add]" rows (CardMenu amount items) */
+.card-menu-amount { display: flex; align-items: center; gap: 6px; padding: 4px 4px 4px 10px; font-size: .9rem; }
+.card-menu-amount label { flex: 1; display: flex; align-items: center; gap: 8px; }
+.card-menu-amount input { width: 4.2em; padding: 3px 6px; font-size: .88rem; }
+.card-menu .card-menu-amount button.amount-go { width: auto; flex: none; padding: 4px 10px; border: 1px solid var(--line); background: var(--bg-2); text-align: center; }
 
 /* Native dropdowns (format, "Add to"): dark popups too */
 select { color-scheme: dark; }

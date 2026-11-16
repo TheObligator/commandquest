@@ -2,7 +2,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-import type { Board, DeckCard } from "../../convex/model/deckRules";
+import { MAX_QUANTITY, type Board, type DeckCard } from "../../convex/model/deckRules";
 import { errorMessage } from "../app/errors";
 import { navigate, replaceQuietly, useLeaveGuard, useRoute } from "../app/router";
 import { closeOnBackdrop, showCardDetails } from "../carddetails";
@@ -160,7 +160,7 @@ function DeckEditor({ initial }: { initial: Draft }) {
 
   // ---- Deck changes ----
   /** Adds one copy. A new card gets your default printing unless `exact` (you picked this printing). */
-  async function addCard(c: scry.ScryCard, board: Board, exact = false) {
+  async function addCard(c: scry.ScryCard, board: Board, exact = false, copies = 1) {
     const name = scry.deckName(c);
     const p = printingPref();
     const inBoard = deckRef.current.cards.some((x) => x.board === board && x.name.toLowerCase() === name.toLowerCase());
@@ -174,11 +174,11 @@ function DeckEditor({ initial }: { initial: Draft }) {
     }
     change((d) => {
       const existing = d.cards.find((x) => x.board === board && x.name.toLowerCase() === name.toLowerCase());
-      if (existing) existing.quantity++;
-      else d.cards.push({ name, quantity: 1, board, scryfallId: print.id, set: print.set, collectorNumber: print.collector_number });
+      if (existing) existing.quantity = Math.min(MAX_QUANTITY, existing.quantity + copies);
+      else d.cards.push({ name, quantity: Math.min(MAX_QUANTITY, copies), board, scryfallId: print.id, set: print.set, collectorNumber: print.collector_number });
       return d;
     });
-    toast(`Added ${name}${board === "main" ? "" : " to " + BOARDS.find((b) => b.id === board)!.label.toLowerCase()}`);
+    toast(`Added ${copies > 1 ? `${copies} × ` : ""}${name}${board === "main" ? "" : " to " + BOARDS.find((b) => b.id === board)!.label.toLowerCase()}`);
   }
 
   /**
@@ -235,7 +235,7 @@ function DeckEditor({ initial }: { initial: Draft }) {
     const i = deck.cards.indexOf(target);
     change((d) => {
       if (q <= 0) d.cards.splice(i, 1);
-      else d.cards[i].quantity = Math.min(q, 250);
+      else d.cards[i].quantity = Math.min(q, MAX_QUANTITY);
       return d;
     });
   }
@@ -683,7 +683,7 @@ function DeckView(props: {
   const qty = (c: DeckCard) => (
     <span className="qty">
       <button className="qbtn" aria-label="One fewer" onClick={() => props.onQty(c, c.quantity - 1)}>−</button>
-      <span>{c.quantity}</span>
+      <QtyInput value={c.quantity} label={`Number of ${c.name}`} onChange={(n) => props.onQty(c, n)} />
       <button className="qbtn" aria-label="One more" onClick={() => props.onQty(c, c.quantity + 1)}>+</button>
     </span>
   );
@@ -701,6 +701,8 @@ function DeckView(props: {
             items: [
               { label: "+ Add one", keepOpen: true, onSelect: () => props.onQty(c, c.quantity + 1) },
               { label: "− Remove one", keepOpen: c.quantity > 1, onSelect: () => props.onQty(c, c.quantity - 1) },
+              { label: "Add", onSelect: () => {}, amount: { initial: 1, min: 1, max: MAX_QUANTITY - c.quantity, button: "Add", onAmount: (n) => props.onQty(c, c.quantity + n) } },
+              { label: "Set to", onSelect: () => {}, amount: { initial: c.quantity, min: 0, max: MAX_QUANTITY, button: "Set", onAmount: (n) => props.onQty(c, n) } },
             ],
           },
           {
@@ -871,6 +873,42 @@ function DeckView(props: {
       {preview.element}
       {printingsFor && <Printings card={printingsFor} onPick={(p) => props.onPrinting(printingsFor, p)} onClose={() => setPrintingsFor(null)} />}
     </section>
+  );
+}
+
+/**
+ * The number of copies, typed straight in: Enter or leaving the box applies it, Escape puts it
+ * back, 0 removes the card.
+ */
+function QtyInput({ value, label, onChange }: { value: number; label: string; onChange: (n: number) => void }) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  const commit = () => {
+    const n = Math.floor(Number(draft));
+    if (draft.trim() === "" || !Number.isFinite(n) || n < 0) return setDraft(String(value));
+    if (n !== value) onChange(Math.min(n, MAX_QUANTITY));
+    else setDraft(String(value));
+  };
+  return (
+    <input
+      className="qty-input"
+      type="text"
+      inputMode="numeric"
+      aria-label={label}
+      title="Type a number of copies (0 removes the card)"
+      value={draft}
+      size={3}
+      onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, "").slice(0, 3))}
+      onFocus={(e) => e.target.select()}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur();
+        else if (e.key === "Escape") {
+          setDraft(String(value));
+          requestAnimationFrame(() => (e.target as HTMLInputElement).blur());
+        }
+      }}
+    />
   );
 }
 
