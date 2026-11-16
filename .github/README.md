@@ -15,14 +15,18 @@
 
 CommandQuest is a free web client for Magic: The Gathering, built for Commander. You bring a deck,
 and the [Forge](https://github.com/Card-Forge/forge) rules engine handles the stack, the triggers,
-the state-based actions and the combat math, for more than 30,000 cards. Nothing to install: it
-runs in any modern browser.
+the state-based actions and the combat math, for more than 30,000 cards. When the engine gets
+something wrong, or you do, **free play** lets you fix it by hand and **rewind** takes the game
+back. Nothing to install: it runs in any modern browser.
 
 ## What you can do
 
 | | |
 |---|---|
 | **Play against the AI** | Sit down with up to three Forge AI opponents under Commander rules. Games survive a reload or a dropped connection. |
+| **Free play** | The rules engine judges, but you're never stuck with it. Like at a paper table, you can tap, move, flip or copy your cards by hand, add counters, grant until-end-of-turn effects, draw, scry, mill or search your library, and cast a card free or from any zone when a new card isn't scripted right. Everything done by hand is marked "(by hand)" in the game log. |
+| **Rewind** | Misclicked, or forgot a blocker? Take the game back along a timeline of its moments, as far as the host allows: the last action, the current step, the turn or the turn before. Every other player has to agree. Until combat damage, attackers and blockers can be declared again from what you had. |
+| **Replays** | Watch finished games again, every hand face up, moment by moment. Your last five games are kept automatically, and you can save five more. |
 | **Build decks** | Search every card on Scryfall, sort by type, and check your mana curve and color identity. |
 | **Import from anywhere** | Paste a Moxfield or Archidekt link or a text export, or upload a `.txt` file. |
 | **Start from a precon** | Every Commander precon, Secret Lair decks included, opens instantly as stacked, spread, grid or list. |
