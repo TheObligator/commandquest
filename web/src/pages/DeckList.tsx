@@ -1,6 +1,7 @@
 import { useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import { api } from "../../convex/_generated/api";
+import { bracketName } from "../brackets";
 import { Loading } from "../components/Spinner";
 import { artistOf, cachedById, cardsById } from "../scryfall";
 
@@ -64,7 +65,10 @@ export function DeckList() {
                 <div className="deck-meta">
                   <h3>{d.name}</h3>
                   <p>{d.commanders.length ? d.commanders.join(" & ") : "No commander"}</p>
-                  <p className="muted small">{capitalize(d.format)} · {d.cardCount} cards · {ago(d.updatedAt)}</p>
+                  <p className="muted small">
+                    {capitalize(d.format)}
+                    {d.format === "commander" && d.bracket ? ` · Bracket ${d.bracket} (${bracketName(d.bracket)})` : ""} · {d.cardCount} cards · {ago(d.updatedAt)}
+                  </p>
                 </div>
               </a>
             );

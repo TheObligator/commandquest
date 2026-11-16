@@ -52,6 +52,8 @@ export interface RelatedPart {
 
 export interface ScryCard {
   id: string;
+  /** On the Commander Game Changers list (Commander Brackets). */
+  game_changer?: boolean;
   name: string;
   layout: string;
   mana_cost?: string;
@@ -132,7 +134,7 @@ async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
 // ---- Cache (memory + localStorage, 7 days) ---------------------------------------
 
 // Bump the version when `trim` keeps new fields, so old entries without them are dropped.
-const STORE_KEY = "cq.scryfall.cards.v3"; // v3 keeps colors and the tokens a card makes
+const STORE_KEY = "cq.scryfall.cards.v4"; // v4 keeps game_changer
 // Card data rarely changes (a ban updates legality), and a deck opened again within the week then
 // needs no lookups. The size cap, not the age, is what keeps this within localStorage's ~5 MB.
 const TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -146,7 +148,7 @@ const storedAt = new Map<string, number>();
 function trim(c: ScryCard): ScryCard {
   const pick = <O extends object>(o: O, keys: (keyof O)[]) =>
     Object.fromEntries(keys.filter((k) => o[k] !== undefined).map((k) => [k, o[k]])) as O;
-  const card = pick(c, ["id", "name", "layout", "mana_cost", "cmc", "type_line", "oracle_text", "flavor_text", "power", "toughness", "loyalty", "defense", "color_identity", "color_indicator", "colors", "keywords", "reserved", "set", "set_name", "collector_number", "rarity", "artist", "released_at", "scryfall_uri", "legalities", "image_uris"]);
+  const card = pick(c, ["id", "game_changer", "name", "layout", "mana_cost", "cmc", "type_line", "oracle_text", "flavor_text", "power", "toughness", "loyalty", "defense", "color_identity", "color_indicator", "colors", "keywords", "reserved", "set", "set_name", "collector_number", "rarity", "artist", "released_at", "scryfall_uri", "legalities", "image_uris"]);
   const tokens = c.all_parts?.filter((p) => p.component === "token" && p.id !== c.id);
   if (tokens?.length) card.all_parts = tokens.map((p) => ({ id: p.id, component: p.component, name: p.name, type_line: p.type_line }));
   else delete card.all_parts;
@@ -166,6 +168,7 @@ function loadStore() {
   try {
     localStorage.removeItem("cq.scryfall.cards.v1");
     localStorage.removeItem("cq.scryfall.cards.v2");
+    localStorage.removeItem("cq.scryfall.cards.v3");
     const raw = localStorage.getItem(STORE_KEY);
     if (!raw) return;
     const now = Date.now();
@@ -246,6 +249,28 @@ export function cachedExact(card: DeckCard): ScryCard | undefined {
 export async function search(query: string, unique: "cards" | "prints" = "cards"): Promise<SearchPage> {
   const url = `${API}/cards/search?${new URLSearchParams({ q: query, unique, order: unique === "prints" ? "released" : "edhrec" })}`;
   return page(url);
+}
+
+/**
+ * Every card name a search matches (all pages), without caching the cards: used for tag lookups
+ * (src/cardtags.ts), whose results are other printings of cards the deck already has.
+ * Double-faced cards give their full name and each face's name.
+ */
+export async function matchingNames(query: string): Promise<string[]> {
+  const names: string[] = [];
+  let url: string | undefined = `${API}/cards/search?${new URLSearchParams({ q: query, unique: "cards" })}`;
+  while (url) {
+    let data: { data: ScryCard[]; has_more: boolean; next_page?: string };
+    try {
+      data = await getJson(url);
+    } catch (e) {
+      if (e instanceof ScryfallError && e.status === 404) break; // "no cards found"
+      throw e;
+    }
+    for (const c of data.data) names.push(c.name, ...(c.card_faces?.map((f) => f.name) ?? []));
+    url = data.has_more ? data.next_page : undefined;
+  }
+  return names;
 }
 
 export async function nextPage(url: string): Promise<SearchPage> {

@@ -22,7 +22,14 @@ function checked(input: DeckInput) {
   }
 }
 
-const deckArgs = { name: v.string(), format: v.optional(v.string()), cards: v.array(deckCard), extraColor: v.optional(v.string()) };
+const deckArgs = {
+  name: v.string(),
+  format: v.optional(v.string()),
+  cards: v.array(deckCard),
+  extraColor: v.optional(v.string()),
+  bracket: v.optional(v.number()),
+  bracketTags: v.optional(v.array(v.string())),
+};
 
 export const list = query({
   args: {},
@@ -34,7 +41,7 @@ export const list = query({
       .withIndex("by_user_updated", (q) => q.eq("userId", userId))
       .order("desc")
       .take(MAX_DECKS_PER_USER);
-    return decks.map((d) => ({ _id: d._id, name: d.name, format: d.format, updatedAt: d.updatedAt, ...summarize(d.cards) }));
+    return decks.map((d) => ({ _id: d._id, name: d.name, format: d.format, bracket: d.bracket, updatedAt: d.updatedAt, ...summarize(d.cards) }));
   },
 });
 

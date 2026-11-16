@@ -36,6 +36,9 @@ export default defineSchema({
     /** Token printings you picked for this deck, by token identity (web/src/tokens.ts). Defaults aren't stored. */
     /** The color a Rulebreaker commander like Tolabow lets this deck add: W, U, B, R or G. */
     extraColor: v.optional(v.string()),
+    /** The Commander bracket (1-5) the player puts this deck in, and their reasons (web/src/brackets.ts). */
+    bracket: v.optional(v.number()),
+    bracketTags: v.optional(v.array(v.string())),
     tokenArt: v.optional(v.array(v.object({ identity: v.string(), scryfallId: v.string() }))),
     updatedAt: v.number(),
   }).index("by_user_updated", ["userId", "updatedAt"]),

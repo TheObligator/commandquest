@@ -346,6 +346,9 @@ export function SearchResults(props: {
         {playable && !playable.works && (
           <span className={`nw-badge tile-nw${verdict.ok ? "" : " below"}`} title={playable.reason}>{playable.missing ? "Not playable" : "Known issue"}</span>
         )}
+        {props.format === "commander" && c.game_changer && (
+          <span className="gc-badge tile-gc" title="Game Changer: Exhibition and Core decks allow none, Upgraded up to 3">GC</span>
+        )}
         {count > 0 && (
           <span className="in-deck-badge" title={inDeck.map((e) => `${e.quantity} in ${boardLabel(e.board).toLowerCase()}`).join(", ")}>
             {count} in deck

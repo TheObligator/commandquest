@@ -19,12 +19,18 @@ export interface DeckInput {
   cards: DeckCard[];
   /** The color a Rulebreaker commander like Tolabow lets this deck add (web/src/formats/rulebreakers.ts). */
   extraColor?: string;
+  /** The Commander bracket (1-5) the player says this deck is (web/src/brackets.ts). */
+  bracket?: number;
+  /** The player's reasons for that bracket ("Two-card combo", "Fast mana", …). */
+  bracketTags?: string[];
 }
 
 export const MAX_NAME = 100;
 export const MAX_CARDS = 1000;
 export const MAX_QUANTITY = 250;
 export const MAX_DECKS_PER_USER = 500;
+export const MAX_BRACKET_TAGS = 20;
+export const MAX_BRACKET_TAG_LENGTH = 40;
 
 const FORMAT = /^[a-z0-9_-]{1,32}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -37,7 +43,12 @@ const clip = (s: string | undefined, max: number) => {
 };
 
 /** Checks and normalizes a deck. Throws DeckError with a user-facing message. */
-export function validateDeck(input: DeckInput): Required<Pick<DeckInput, "name" | "format">> & { cards: DeckCard[]; extraColor: string | undefined } {
+export function validateDeck(input: DeckInput): Required<Pick<DeckInput, "name" | "format">> & {
+  cards: DeckCard[];
+  extraColor: string | undefined;
+  bracket: number | undefined;
+  bracketTags: string[] | undefined;
+} {
   const name = (input.name ?? "").trim();
   if (!name || name.length > MAX_NAME) throw new DeckError(`Deck names are 1-${MAX_NAME} characters.`);
   const format = (input.format ?? "").trim().toLowerCase() || "commander";
@@ -46,11 +57,17 @@ export function validateDeck(input: DeckInput): Required<Pick<DeckInput, "name" 
   if (cards.length > MAX_CARDS) throw new DeckError(`A deck can have at most ${MAX_CARDS} different entries.`);
   const extraColor = input.extraColor || undefined;
   if (extraColor !== undefined && !/^[WUBRG]$/.test(extraColor)) throw new DeckError("Unknown color.");
+  const bracket = input.bracket ?? undefined;
+  if (bracket !== undefined && !(Number.isInteger(bracket) && bracket >= 1 && bracket <= 5)) throw new DeckError("Brackets are 1 to 5.");
+  if ((input.bracketTags?.length ?? 0) > MAX_BRACKET_TAGS * 2) throw new DeckError(`A deck can have at most ${MAX_BRACKET_TAGS} bracket tags.`);
+  const bracketTags = cleanBracketTags(input.bracketTags ?? []);
   return {
     name,
     format,
     // Always present, so an update that drops the pick clears it (a patch with undefined removes a field).
     extraColor,
+    bracket,
+    bracketTags: bracketTags.length ? bracketTags : undefined,
     cards: cards.map((c) => {
       const cardName = (c.name ?? "").trim();
       if (!cardName || cardName.length > 200) throw new DeckError("Every card needs a name.");
@@ -78,6 +95,19 @@ export interface DeckSummary {
 }
 
 /** What the deck list shows: main deck + commander count, commander names, cover art id. */
+/** The player's bracket tags tidied: trimmed, no blanks or repeats (ignoring case), capped in length and number. */
+export function cleanBracketTags(tags: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const t of tags) {
+    const tag = String(t).trim().replace(/\s+/g, " ").slice(0, MAX_BRACKET_TAG_LENGTH);
+    if (!tag || seen.has(tag.toLowerCase())) continue;
+    seen.add(tag.toLowerCase());
+    out.push(tag);
+  }
+  return out.slice(0, MAX_BRACKET_TAGS);
+}
+
 export function summarize(cards: DeckCard[]): DeckSummary {
   const cardCount = cards.filter((c) => c.board === "main" || c.board === "commander").reduce((n, c) => n + c.quantity, 0);
   const cmdrs = cards.filter((c) => c.board === "commander");

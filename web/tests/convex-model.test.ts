@@ -30,6 +30,18 @@ test("validateDeck keeps a deck's extra color, and clears it when it's dropped",
   assert.ok("extraColor" in d && d.extraColor === undefined);
 });
 
+test("validateDeck checks the bracket and tidies its tags", () => {
+  const d = validateDeck({ name: "x", cards: [], bracket: 3, bracketTags: [" Fast mana ", "fast  MANA", "", "Two-card combo"] });
+  assert.equal(d.bracket, 3);
+  assert.deepEqual(d.bracketTags, ["Fast mana", "Two-card combo"]);
+  const cleared = validateDeck({ name: "x", cards: [], bracketTags: [] });
+  assert.ok("bracket" in cleared && cleared.bracket === undefined);
+  assert.ok("bracketTags" in cleared && cleared.bracketTags === undefined);
+  assert.equal(validateDeck({ name: "x", cards: [], bracketTags: ["a".repeat(80)] }).bracketTags![0].length, 40);
+  for (const bracket of [0, 6, 2.5]) assert.throws(() => validateDeck({ name: "x", cards: [], bracket }), DeckError);
+  assert.throws(() => validateDeck({ name: "x", cards: [], bracketTags: Array.from({ length: 41 }, (_, i) => `t${i}`) }), DeckError);
+});
+
 test("summarize counts main + commander and picks the commander's art", () => {
   const s = summarize([
     { name: "Atraxa", quantity: 1, board: "commander", scryfallId: "d0d33d52-3d28-4635-b985-51e126289259" },

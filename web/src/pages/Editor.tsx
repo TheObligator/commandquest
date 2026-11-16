@@ -10,6 +10,7 @@ import { useCardSupport, type CardSupport } from "../cardsupport";
 import { mergeDuplicates, parseDecklist, writeDecklist, type ParsedToken } from "../decklist";
 import { toast } from "../dom";
 import { CardMenu } from "../components/CardMenu";
+import { DeckBracket } from "../components/DeckBracket";
 import { DeckTokens } from "../components/DeckTokens";
 import { CardViewToggle, useCardView, useStackColumns } from "../cardView";
 import { ManaCurve } from "../components/ManaCurve";
@@ -48,6 +49,9 @@ interface Draft {
   cards: DeckCard[];
   /** The color a Rulebreaker commander like Tolabow lets this deck add. */
   extraColor?: string;
+  /** The Commander bracket the player gives the deck, and their reasons (src/brackets.ts). */
+  bracket?: number;
+  bracketTags?: string[];
 }
 
 /** Loads the deck (if editing one), then hands it to the editor once. */
@@ -62,7 +66,7 @@ export function Editor({ id }: { id?: string }) {
       </>
     );
   }
-  const initial: Draft = saved ? { id: saved._id, name: saved.name, format: saved.format, cards: saved.cards, extraColor: saved.extraColor } : { name: UNTITLED, format: "commander", cards: [] };
+  const initial: Draft = saved ? { id: saved._id, name: saved.name, format: saved.format, cards: saved.cards, extraColor: saved.extraColor, bracket: saved.bracket, bracketTags: saved.bracketTags } : { name: UNTITLED, format: "commander", cards: [] };
   return <DeckEditor initial={initial} />;
 }
 
@@ -321,7 +325,7 @@ function DeckEditor({ initial }: { initial: Draft }) {
     inFlight.current = true;
     setSaving(true);
     const savingVersion = version.current;
-    const body = { name: d.name, format: d.format, cards: d.cards, extraColor: d.extraColor };
+    const body = { name: d.name, format: d.format, cards: d.cards, extraColor: d.extraColor, bracket: d.bracket, bracketTags: d.bracketTags };
     try {
       if (idRef.current) await updateDeck({ id: idRef.current, ...body });
       else {
@@ -514,7 +518,17 @@ function DeckEditor({ initial }: { initial: Draft }) {
             <SearchPane hidden={tab !== "search"} addTo={addTo} onAddTo={setAddTo} onPick={(n) => void addByName(n)} onSubmit={setSearchQuery} autoFocus={!deck.cards.length && tab === "search"} />
             <ImportPane hidden={tab !== "import"} startReplacing={deck.cards.length === 0} onImport={applyImport} importFromUrl={(url) => importFromUrl({ url })} autoFocus={tab === "import"} />
           </aside>
-          <DeckView deck={deck} missing={missing} count={count} onQty={setQty} onMove={moveCard} onPrinting={setPrinting} onExtraColor={(c) => change((d) => ({ ...d, extraColor: c }))} />
+          <DeckView
+            deck={deck}
+            missing={missing}
+            count={count}
+            onQty={setQty}
+            onMove={moveCard}
+            onPrinting={setPrinting}
+            onExtraColor={(c) => change((d) => ({ ...d, extraColor: c }))}
+            onBracket={(b) => change((d) => ({ ...d, bracket: b }))}
+            onBracketTags={(t) => change((d) => ({ ...d, bracketTags: t.length ? t : undefined }))}
+          />
         </div>
       )}
     </div>
@@ -625,8 +639,13 @@ function DeckView(props: {
   onMove: (c: DeckCard, b: Board) => void;
   onPrinting: (c: DeckCard, p: scry.ScryCard) => void;
   onExtraColor: (color: string | undefined) => void;
+  onBracket: (b: number | undefined) => void;
+  onBracketTags: (tags: string[]) => void;
 }) {
   const { deck, missing, count } = props;
+  /** "GC" on Game Changers in Commander decks (Commander Brackets). */
+  const gameChanger = (s: scry.ScryCard | undefined, className: string) =>
+    deck.format === "commander" && s?.game_changer ? <span className={className} title="Game Changer: Exhibition and Core decks allow none, Upgraded up to 3">GC</span> : null;
   const preview = useCardPreview();
   const [printingsFor, setPrintingsFor] = useState<DeckCard | null>(null);
   const [view, setView] = useCardView();
@@ -708,6 +727,7 @@ function DeckView(props: {
         {qty(c)}
         {s ? <button className="cname" title="Card details" onClick={() => openDetails(c, s)}>{c.name}</button> : <span className="cname">{c.name}</span>}
         {notWorking(c, s, "nw-badge")}
+        {gameChanger(s, "gc-badge")}
         {s ? <ManaCost cost={s.mana_cost ?? s.card_faces?.map((f) => f.mana_cost).filter(Boolean).join(" // ")} /> : <span className="muted small">{missing.includes(c.name) ? "not found" : ""}</span>}
         {cardMenu(c, s)}
       </li>
@@ -731,6 +751,7 @@ function DeckView(props: {
         {/* The name as invisible text over the printed one, so the browser's find (Ctrl+F) finds and highlights cards. */}
         {img && <span className="tile-name" aria-hidden="true">{c.name}</span>}
         {notWorking(c, s, "nw-badge tile-nw")}
+        {gameChanger(s, "gc-badge tile-gc")}
         {c.quantity > 1 && <span className="tile-qty" aria-label={`${c.quantity} copies`}>×{c.quantity}</span>}
         {cardMenu(c, s, "tile-menu")}
       </div>
@@ -837,6 +858,14 @@ function DeckView(props: {
         });
       })()}
       <Stats deck={deck} count={count} onExtraColor={props.onExtraColor} />
+      <DeckBracket
+        cards={deck.cards}
+        commander={deck.format === "commander"}
+        bracket={deck.bracket}
+        tags={deck.bracketTags ?? []}
+        onBracket={props.onBracket}
+        onTags={props.onBracketTags}
+      />
       <DeckTokens deckId={deck.id} cards={deck.cards} />
       {preview.element}
       {printingsFor && <Printings card={printingsFor} onPick={(p) => props.onPrinting(printingsFor, p)} onClose={() => setPrintingsFor(null)} />}
