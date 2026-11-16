@@ -340,6 +340,9 @@ dialog.card-inspect::backdrop, dialog.counter-dialog::backdrop { background: rgb
 .card-inspect .dialog-close { z-index: 2; }
 .ci-grid { display: grid; grid-template-columns: minmax(240px, 400px) 1fr; align-items: stretch; }
 .ci-image { padding: 14px; background: #0c0a07; display: grid; place-items: center; }
+dialog.card-inspect.two-faces { width: min(1200px, calc(100vw - 32px)); }
+.ci-grid.two-faces { grid-template-columns: minmax(400px, 680px) 1fr; }
+.ci-grid.two-faces .ci-image { grid-template-columns: 1fr 1fr; gap: 10px; }
 .ci-image img, .ci-image .card-back { display: block; width: 100%; border-radius: 4.75% / 3.5%; }
 .ci-image .card-back { --cw: 380px; }
 .ci-text { padding: 20px 22px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
@@ -356,7 +359,8 @@ dialog.card-inspect::backdrop, dialog.counter-dialog::backdrop { background: rgb
 .ci-sec h3 { margin: 0; font-size: .82rem; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; color: #8a826e; }
 .ci-kv { display: flex; justify-content: space-between; font-family: ui-monospace, Menlo, monospace; color: #ece6d8; }
 .ci-owner { margin: auto 0 0; padding-top: 10px; border-top: 1px solid #2e271b; font-size: .8rem; color: #8a826e; }
-@media (max-width: 680px) { .ci-grid { grid-template-columns: 1fr; } }
+@media (max-width: 680px) { .ci-grid, dialog.card-inspect.two-faces { width: min(1200px, calc(100vw - 32px)); }
+.ci-grid.two-faces { grid-template-columns: 1fr; } }
 
 /* Menu rows with + / − buttons, and submenus */
 .cm-steps { display: flex; align-items: center; gap: 4px; }

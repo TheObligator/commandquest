@@ -5,7 +5,7 @@
 //   Scryfall oracle text next to it (every face), plus what's on it in this game.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { manaCost, rulesText } from "../dom";
-import { cached, imageUrl, type CardFace } from "../scryfall";
+import { cached, hasBackImage, imageUrl, type CardFace } from "../scryfall";
 import { CardBack, tokenImage, type Preview } from "./cards";
 import type { CardDetails } from "./useLiveGame";
 import type { CardView } from "./view";
@@ -129,6 +129,8 @@ export function CardInspect({ card, loadDetails, ownerName, onClose }: {
   const sc = card.name && !card.token ? cached({ name: card.name, quantity: 1, board: "main" }) : undefined;
   const faces: CardFace[] = sc ? (sc.card_faces?.length ? sc.card_faces : [sc as CardFace]) : [];
   const src = bigImage(card);
+  // Double-faced cards show both faces side by side.
+  const backSrc = sc && !card.hidden && hasBackImage(sc) ? imageUrl(sc, "large", 1) : undefined;
   const counters = Object.entries(card.counters ?? {});
   const inPlay = card.zone === "battlefield";
   const isCreature = card.types?.includes("Creature");
@@ -145,14 +147,19 @@ export function CardInspect({ card, loadDetails, ownerName, onClose }: {
   return (
     <dialog
       ref={ref}
-      className="card-inspect"
+      className={`card-inspect${backSrc ? " two-faces" : ""}`}
       onClose={onClose}
       onClick={(e) => e.target === ref.current && ref.current?.close()}
       aria-label={card.name ?? "Card"}
     >
       <button className="dialog-close" aria-label="Close" onClick={() => ref.current?.close()}>×</button>
-      <div className="ci-grid">
-        <div className="ci-image">{src ? <img src={src} alt={card.name} /> : card.hidden ? <CardBack /> : <div className="hz-tile"><strong>{card.name}</strong></div>}</div>
+      <div className={`ci-grid${backSrc ? " two-faces" : ""}`}>
+        <div className="ci-image">{src && backSrc ? (
+          <>
+            <img src={imageUrl(sc!, "large", 0)} alt={faces[0]?.name} />
+            <img src={backSrc} alt={faces[1]?.name} />
+          </>
+        ) : src ? <img src={src} alt={card.name} /> : card.hidden ? <CardBack /> : <div className="hz-tile"><strong>{card.name}</strong></div>}</div>
         <div className="ci-text">
           <div className="ci-head">
             <h2>{card.hidden ? "Face-down card" : card.name}</h2>

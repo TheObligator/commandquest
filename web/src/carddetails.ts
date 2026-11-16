@@ -17,20 +17,18 @@ export interface CardDetailAction {
 }
 
 export function showCardDetails(card: ScryCard, actions: CardDetailAction[] = []) {
-  let face = 0;
-  const img = h("img", { class: "detail-img", alt: card.name });
-  const flip = hasBackImage(card)
-    ? h("button", { class: "btn ghost small flip", onclick: () => { face = 1 - face; img.src = imageUrl(card, "large", face) ?? ""; } }, "⟲ Flip")
-    : null;
-  img.src = imageUrl(card, "large") ?? "";
+  // Double-faced cards show both faces side by side.
+  const twoFaces = hasBackImage(card);
+  const imgs = (twoFaces ? [0, 1] : [0]).map((face) =>
+    h("img", { class: "detail-img", alt: card.card_faces?.[face]?.name ?? card.name, src: imageUrl(card, "large", face) ?? "" }));
 
   // Multi-face cards list each face's text; otherwise the card's own fields.
   const faces: CardFace[] = card.card_faces?.length ? card.card_faces : [card];
 
-  const dialog = h("dialog", { class: "card-detail", "aria-label": card.name },
+  const dialog = h("dialog", { class: `card-detail${twoFaces ? " two-faces" : ""}`, "aria-label": card.name },
     h("button", { class: "dialog-close", "aria-label": "Close", onclick: () => dialog.close() }, "×"),
-    h("div", { class: "detail-grid" },
-      h("div", { class: "detail-image" }, img, flip),
+    h("div", { class: `detail-grid${twoFaces ? " two-faces" : ""}` },
+      h("div", { class: "detail-image" }, ...imgs),
       h("div", { class: "detail-text" },
         ...faces.map((f) => h("section", { class: "face" },
           h("div", { class: "face-head" }, h("h2", null, f.name), manaCost(f.mana_cost)),

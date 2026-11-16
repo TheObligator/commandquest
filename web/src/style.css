@@ -297,6 +297,9 @@ dialog.card-detail { width: min(860px, calc(100vw - 32px)); max-height: 90vh; ba
 
 .detail-grid { display: grid; grid-template-columns: minmax(0, 320px) 1fr; gap: 24px; align-items: start; }
 .detail-image { display: grid; gap: 8px; justify-items: center; }
+dialog.card-detail.two-faces { width: min(1120px, calc(100vw - 32px)); }
+.detail-grid.two-faces { grid-template-columns: minmax(0, 580px) 1fr; }
+.detail-grid.two-faces .detail-image { grid-template-columns: 1fr 1fr; }
 .detail-img { width: 100%; aspect-ratio: 488 / 680; border-radius: 4.75% / 3.5%; background: var(--panel-2); display: block; }
 .face + .face { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; }
 .face-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
@@ -321,6 +324,7 @@ dialog.card-detail { width: min(860px, calc(100vw - 32px)); max-height: 90vh; ba
 @media (max-width: 640px) {
   .detail-grid { grid-template-columns: 1fr; }
   .detail-image { max-width: 280px; margin: 0 auto; }
+  .detail-grid.two-faces .detail-image { max-width: 100%; }
 }
 
 /* ---- Format legality ---- */
