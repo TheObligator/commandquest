@@ -591,6 +591,9 @@ button.text-link:hover { text-decoration: underline; }
 .printing-pref > span > .small { display: block; }
 .username-form { display: flex; gap: 8px; width: 100%; max-width: 420px; }
 .username-form input { flex: 1; }
+.additions-form { display: flex; gap: 8px; align-items: center; width: 100%; }
+.additions-form input { flex: 1; }
+.additions-form .btn { flex: none; }
 .username-prompt { margin: 0 0 16px; padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--bg-2); border-radius: 0 6px 6px 0; }
 table.hotkeys { width: 100%; border-collapse: collapse; }
 .hotkeys th, .hotkeys td { padding: 8px 6px; border-top: 1px solid var(--line); vertical-align: middle; }

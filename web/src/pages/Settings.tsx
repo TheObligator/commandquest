@@ -213,7 +213,7 @@ function SearchAdditionsSection() {
         <code>order:cmc</code> or <code>prefer:newest</code>. You can turn it off for one search from the results.
       </p>
       {isAuthenticated ? (
-        <form className="inline" onSubmit={(e) => void submit(e)}>
+        <form className="additions-form" onSubmit={(e) => void submit(e)}>
           <input
             type="text"
             aria-label="Search additions"
