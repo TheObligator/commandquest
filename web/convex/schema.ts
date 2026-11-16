@@ -95,5 +95,7 @@ export default defineSchema({
     hotkeys: v.record(v.string(), v.string()),
     /** Added to every deck search, e.g. "order:cmc game:paper" (src/searchquery.ts). */
     searchAdditions: v.optional(v.string()),
+    /** The printing cards get when you don't pick one (src/printings.ts); absent = Scryfall's default. */
+    printingPref: v.optional(v.string()),
   }).index("by_user", ["userId"]),
 });

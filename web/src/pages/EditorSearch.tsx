@@ -147,6 +147,9 @@ export function SearchBox(props: { onPick: (name: string) => void; onSubmit: (qu
 
 const normName = (n: string) => n.split(" // ")[0].replace(/[‘’]/g, "'").toLowerCase();
 
+/** Query terms that choose printings rather than cards. */
+const PRINTING_QUERY = /(^|[\s(])-?(unique:(prints|art)|prefer:|s:|set:|e:|edition:|cn:|number:|is:(promo|showcase|borderless|extendedart|fullart|etched|reprint|firstprint))/i;
+
 export function SearchResults(props: {
   query: string;
   format: string;
@@ -157,7 +160,8 @@ export function SearchResults(props: {
   extraColor?: string;
   defaultBoard: Board;
   onDefaultBoard: (b: Board) => void;
-  onAdd: (c: scry.ScryCard, b: Board) => void;
+  /** `exact`: the search shows specific printings, so add that one instead of the default printing. */
+  onAdd: (c: scry.ScryCard, b: Board, exact: boolean) => void;
   onQty: (entry: DeckCard, q: number) => void;
   onSearch: (q: string) => void;
   onPickName: (name: string) => void;
@@ -197,6 +201,8 @@ export function SearchResults(props: {
   // Display keywords (order:, unique:) go last and outside the parentheses.
   const fullQuery = [joinQuery(props.query, idClause, stripDisplay(added)), displayTerms(added)].filter(Boolean).join(" ");
   const queryWithout = joinQuery(props.query, idClause);
+  // A search for printings (unique:prints, set:, prefer:, ...) shows the printing you want; add that one.
+  const exact = PRINTING_QUERY.test(fullQuery);
   const additionsFilter = additionsOn && !!stripDisplay(additions).trim();
   // Conquest's hybrid rule has no Scryfall syntax: hybrid cards come back and are checked here.
   const offIds = (cs: scry.ScryCard[]) => new Set(offIdentity(cs.map((c) => ({ name: c.id, card: c })), props.commanders, fitsIdentity, extraColor).map((e) => e.name));
@@ -328,8 +334,8 @@ export function SearchResults(props: {
     const commander = canCommand(c, props.format);
     const details = () =>
       showCardDetails(c, [
-        { label: `+ Add to ${boardLabel(props.defaultBoard).toLowerCase()}`, run: () => props.onAdd(c, props.defaultBoard) },
-        ...(commander ? [{ label: "★ Set as commander", run: () => props.onAdd(c, "commander") }] : []),
+        { label: `+ Add to ${boardLabel(props.defaultBoard).toLowerCase()}`, run: () => props.onAdd(c, props.defaultBoard, exact) },
+        ...(commander ? [{ label: "★ Set as commander", run: () => props.onAdd(c, "commander", exact) }] : []),
       ]);
     return (
       <div key={c.id} className={`search-card${count ? " in-deck" : ""}${verdict.ok ? "" : " not-legal"}`}>
@@ -368,7 +374,7 @@ export function SearchResults(props: {
               ]}
             />
           )}
-          <button className="btn small add-btn" onClick={() => props.onAdd(c, props.defaultBoard)} title={`Add to ${boardLabel(props.defaultBoard).toLowerCase()}`}>
+          <button className="btn small add-btn" onClick={() => props.onAdd(c, props.defaultBoard, exact)} title={`Add to ${boardLabel(props.defaultBoard).toLowerCase()}`}>
             + Add
           </button>
           <CardMenu
@@ -381,7 +387,7 @@ export function SearchResults(props: {
                 items: BOARDS.filter((b) => b.id !== "commander" || commander).map((b) => ({
                   label: b.label,
                   keepOpen: true,
-                  onSelect: () => props.onAdd(c, b.id),
+                  onSelect: () => props.onAdd(c, b.id, exact),
                 })),
               },
             ]}

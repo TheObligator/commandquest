@@ -1,4 +1,4 @@
-// Settings (#/settings): your username, deck search additions and the game hotkeys. Changes apply right away, are kept in this browser, and
+// Settings (#/settings): your username, deck search additions, default printing and the game hotkeys. Changes apply right away, are kept in this browser, and
 // are saved to your account when you're signed in, so they follow you to other devices.
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
@@ -7,7 +7,9 @@ import { errorMessage } from "../app/errors";
 import { toast } from "../dom";
 import { bind, changedKeys, DEFAULT_HOTKEYS, HOTKEY_ACTIONS, keyLabel, keyName, MODIFIER_KEYS, RESERVED_KEYS, type HotkeyAction, type Hotkeys } from "../game/hotkeys";
 import { setHotkeys, useHotkeyMap } from "../game/useHotkeys";
+import { isPrintingPref, PRINTING_PREFS } from "../printings";
 import { MAX_ADDITIONS } from "../searchquery";
+import { setPrintingPref, usePrintingPref } from "../usePrintingPref";
 import { checkUsername, USERNAME_MAX } from "../username";
 
 export function Settings() {
@@ -72,6 +74,7 @@ export function Settings() {
       <h1>Settings</h1>
       <UsernameSection />
       <SearchAdditionsSection />
+      <PrintingSection />
       <section className="card settings-section">
         <h2>Game hotkeys</h2>
         <p className="muted small">
@@ -224,6 +227,46 @@ function SearchAdditionsSection() {
       ) : (
         <p className="muted small">Sign in to set search additions.</p>
       )}
+    </section>
+  );
+}
+
+/** Which printing cards get when you don't pick one. Kept in this browser, and on the account when signed in. */
+function PrintingSection() {
+  const { isAuthenticated } = useConvexAuth();
+  const pref = usePrintingPref();
+  const save = useMutation(api.settings.savePrintingPref);
+
+  async function choose(value: string) {
+    if (!isPrintingPref(value)) return;
+    setPrintingPref(value);
+    if (!isAuthenticated) return;
+    try {
+      await save({ pref: value });
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+  }
+
+  return (
+    <section className="card settings-section" id="default-printing">
+      <h2>Default printing</h2>
+      <p className="muted small">
+        The printing a card gets when you add it from search or import a list line that doesn't name a set. Printings you pick
+        yourself, and sets named in an import, are kept. To change a whole deck, use Printings in the deck editor.{" "}
+        {isAuthenticated ? "Saved to your account." : "Kept in this browser. Sign in to keep it on every device."}
+      </p>
+      <div className="printing-prefs" role="radiogroup" aria-label="Default printing">
+        {PRINTING_PREFS.map((p) => (
+          <label key={p.id} className="printing-pref">
+            <input type="radio" name="printing-pref" value={p.id} checked={pref === p.id} onChange={(e) => void choose(e.target.value)} />
+            <span>
+              {p.label}
+              <span className="muted small"> {p.hint}</span>
+            </span>
+          </label>
+        ))}
+      </div>
     </section>
   );
 }

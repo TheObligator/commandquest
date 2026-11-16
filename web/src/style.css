@@ -583,6 +583,9 @@ button.text-link:hover { text-decoration: underline; }
 .settings-section { display: grid; gap: 12px; justify-items: start; }
 .settings-section h2 { margin: 0; font-size: 1.1rem; }
 .settings-section > p { margin: 0; }
+.printing-prefs { display: grid; gap: 8px; }
+.printing-pref { display: flex; gap: 8px; align-items: baseline; cursor: pointer; }
+.printing-pref > span > .small { display: block; }
 .username-form { display: flex; gap: 8px; width: 100%; max-width: 420px; }
 .username-form input { flex: 1; }
 .username-prompt { margin: 0 0 16px; padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--bg-2); border-radius: 0 6px 6px 0; }

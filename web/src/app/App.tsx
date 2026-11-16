@@ -9,6 +9,7 @@ import { Play } from "../pages/Play";
 import { Precons } from "../pages/Precons";
 import { Settings } from "../pages/Settings";
 import { HotkeysSync } from "../game/useHotkeys";
+import { PrintingPrefSync } from "../usePrintingPref";
 import { SignIn, takeNextPath } from "../pages/SignIn";
 import { LiveGame } from "../pages/LiveGame";
 import { Replays } from "../pages/Replays";
@@ -72,6 +73,7 @@ export function App() {
   return (
     <Layout full={route.path === "/table" || route.path === "/game" || route.path === "/replay"}>
       <HotkeysSync />
+      <PrintingPrefSync />
       {page}
     </Layout>
   );

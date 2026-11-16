@@ -18,9 +18,11 @@ import { ManaCost } from "../components/ManaCost";
 import { Loading } from "../components/Spinner";
 import { CONQUEST, fitsIdentity, validateConquest, type OffIdentity } from "../formats/conquest";
 import { bestExtraColor, extraColorChoice, noMaxDeckSize, offIdentity } from "../formats/rulebreakers";
+import { PRINTING_PREFS, prefLabel, type PrintingPref } from "../printings";
 import * as scry from "../scryfall";
 import { tokenPicks } from "../tokens";
 import { useCardPreview } from "../useCardPreview";
+import { printingPref, usePrintingPref } from "../usePrintingPref";
 import { BOARDS, TYPE_ORDER } from "./boards";
 import { SearchBox, SearchResults } from "./EditorSearch";
 import { capitalize } from "./DeckList";
@@ -34,6 +36,8 @@ const identityTest = (format: string) =>
 
 const COLORS: Record<string, string> = { W: "White", U: "Blue", B: "Black", R: "Red", G: "Green" };
 const UNTITLED = "Untitled deck";
+/** A card name compared without case or its back face ("Delver of Secrets // Insectile Aberration"). */
+const front = (name: string) => name.split(" // ")[0].toLowerCase();
 
 type TokenPick = { identity: string; scryfallId: string };
 
@@ -77,6 +81,8 @@ function DeckEditor({ initial }: { initial: Draft }) {
   const [tab, setTab] = useState<"search" | "import">(query.has("import") ? "import" : "search");
   const [searchQuery, setSearchQuery] = useState<string | null>(null);
   const [addTo, setAddTo] = useState<Board>("main");
+  const pref = usePrintingPref();
+  const [repicking, setRepicking] = useState(false);
 
   const createDeck = useMutation(api.decks.create);
   const updateDeck = useMutation(api.decks.update);
@@ -148,20 +154,73 @@ function DeckEditor({ initial }: { initial: Draft }) {
   }, []);
 
   // ---- Deck changes ----
-  function addCard(c: scry.ScryCard, board: Board) {
+  /** Adds one copy. A new card gets your default printing unless `exact` (you picked this printing). */
+  async function addCard(c: scry.ScryCard, board: Board, exact = false) {
     const name = scry.deckName(c);
+    const p = printingPref();
+    const inBoard = deckRef.current.cards.some((x) => x.board === board && x.name.toLowerCase() === name.toLowerCase());
+    let print = c;
+    if (!exact && !inBoard && p !== "default") {
+      try {
+        print = (await scry.preferredPrintings([name], p)).get(name.toLowerCase()) ?? c;
+      } catch {
+        // Scryfall busy: add the printing that was shown.
+      }
+    }
     change((d) => {
       const existing = d.cards.find((x) => x.board === board && x.name.toLowerCase() === name.toLowerCase());
       if (existing) existing.quantity++;
-      else d.cards.push({ name, quantity: 1, board, scryfallId: c.id, set: c.set, collectorNumber: c.collector_number });
+      else d.cards.push({ name, quantity: 1, board, scryfallId: print.id, set: print.set, collectorNumber: print.collector_number });
       return d;
     });
     toast(`Added ${name}${board === "main" ? "" : " to " + BOARDS.find((b) => b.id === board)!.label.toLowerCase()}`);
   }
 
+  /**
+   * Gives the deck entries `match` picks the printing `p` chooses. Returns how many changed, or
+   * null when Scryfall couldn't be reached.
+   */
+  async function repick(match: (c: DeckCard) => boolean, p: PrintingPref): Promise<number | null> {
+    const names = [...new Set(deckRef.current.cards.filter(match).map((c) => c.name))];
+    if (!names.length) return 0;
+    let picks: Map<string, scry.ScryCard>;
+    try {
+      picks = await scry.preferredPrintings(names, p);
+    } catch (e) {
+      toast(`Couldn't look up printings on Scryfall: ${errorMessage(e)}`, "error");
+      return null;
+    }
+    const pickFor = (c: DeckCard) => picks.get(c.name.toLowerCase()) ?? picks.get(front(c.name));
+    const changed = deckRef.current.cards.filter((c) => match(c) && pickFor(c) && pickFor(c)!.id !== c.scryfallId).length;
+    if (!changed) return 0;
+    change((d) => {
+      for (const c of d.cards) {
+        const pick = match(c) ? pickFor(c) : undefined;
+        if (pick) Object.assign(c, { scryfallId: pick.id, set: pick.set, collectorNumber: pick.collector_number });
+      }
+      return { ...d, cards: mergeDuplicates(d.cards) };
+    });
+    setCardData((n) => n + 1);
+    return changed;
+  }
+
+  /** Deck menu: every card to the printing `p` chooses. */
+  async function setAllPrintings(p: PrintingPref) {
+    const label = prefLabel(p);
+    if (!confirm(`Change every card in "${deck.name}" to: ${label}?\n\nPrintings you picked yourself are replaced.`)) return;
+    setRepicking(true);
+    toast(`Finding printings (${label.toLowerCase()})…`);
+    try {
+      const n = await repick(() => true, p);
+      if (n !== null) toast(n ? `Changed ${n} printing${n === 1 ? "" : "s"} to: ${label}` : `Every card already has that printing`);
+    } finally {
+      setRepicking(false);
+    }
+  }
+
   async function addByName(name: string) {
     try {
-      addCard(await scry.named(name), addTo);
+      await addCard(await scry.named(name), addTo);
     } catch (e) {
       toast(`Couldn't find ${name}: ${errorMessage(e)}`, "error");
     }
@@ -204,6 +263,12 @@ function DeckEditor({ initial }: { initial: Draft }) {
     toast(`Imported ${cards.reduce((n, c) => n + c.quantity, 0)} cards`);
     await Promise.all([resolveCards(merged), importTokenArt(tokens)]);
     pickExtraColor(merged, replace);
+    // Lines that didn't name a printing get your default one; cards already in the deck keep theirs.
+    const p = printingPref();
+    const unpicked = new Set(cards.filter((c) => !c.scryfallId && !c.set).map((c) => front(c.name)));
+    if (p === "default" || !unpicked.size) return;
+    const before = new Set(replace ? [] : deck.cards.map((c) => `${c.board}|${front(c.name)}`));
+    await repick((c) => unpicked.has(front(c.name)) && !before.has(`${c.board}|${front(c.name)}`), p);
   }
 
   /**
@@ -410,6 +475,16 @@ function DeckEditor({ initial }: { initial: Draft }) {
           <div className="menu-list" onClick={(e) => (e.currentTarget.parentElement as HTMLDetailsElement).removeAttribute("open")}>
             <button onClick={() => void copyList()}>Copy decklist</button>
             <button onClick={downloadList}>Download .txt</button>
+          </div>
+        </details>
+        <details className="menu">
+          <summary className="btn ghost" title="Change the printing of every card in the deck">{repicking ? "Printings…" : "Printings"}</summary>
+          <div className="menu-list" onClick={(e) => (e.currentTarget.parentElement as HTMLDetailsElement).removeAttribute("open")}>
+            {[pref, ...PRINTING_PREFS.map((x) => x.id).filter((x) => x !== pref)].map((x) => (
+              <button key={x} disabled={repicking || !deck.cards.length} title={PRINTING_PREFS.find((y) => y.id === x)!.hint} onClick={() => void setAllPrintings(x)}>
+                All cards: {prefLabel(x)}{x === pref ? " (your default)" : ""}
+              </button>
+            ))}
           </div>
         </details>
         <button className="btn ghost danger" onClick={() => void remove()} title="Delete deck">Delete</button>

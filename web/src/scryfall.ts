@@ -10,6 +10,8 @@
 //  - Card data is cached in localStorage for 7 days (Scryfall asks for at least 24h).
 
 import type { DeckCard } from "../convex/model/deckRules";
+import { choosePrinting, type Print, type PrintingPref } from "./printings";
+import { restrictToNames } from "./searchquery";
 
 const API = "https://api.scryfall.com";
 const SLOW = /^\/cards\/(search|named|random|collection)\b/;
@@ -309,6 +311,54 @@ export function rulings(name: string): Promise<Ruling[]> {
 export async function printings(name: string): Promise<ScryCard[]> {
   const res = await search(`!"${name.replace(/"/g, "")}"`, "prints");
   return res.cards;
+}
+
+/**
+ * The printing `pref` picks for each of these card names (Forge names), keyed by lowercased name.
+ * Names Scryfall doesn't know are left out. "default" is Scryfall's own pick for the name.
+ * Only the chosen printings are cached; a batch of names costs one search per ~40 names (more for
+ * cards with many printings).
+ */
+export async function preferredPrintings(names: string[], pref: PrintingPref, onProgress?: (done: number, total: number) => void): Promise<Map<string, ScryCard>> {
+  const want = [...new Set(names.map((n) => n.toLowerCase()))];
+  const out = new Map<string, ScryCard>();
+  if (!want.length) return out;
+  const wanted = new Set(want);
+  const keys = (c: ScryCard) => [c.name, deckName(c), c.name.split(" // ")[0]].map((n) => n.toLowerCase()).filter((n) => wanted.has(n));
+  if (pref === "default") {
+    for (let i = 0; i < want.length; i += 75) {
+      onProgress?.(i, want.length);
+      const data = await getJson<{ data: ScryCard[] }>(`${API}/cards/collection`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifiers: want.slice(i, i + 75).map((name) => ({ name })) }),
+      });
+      for (const c of data.data) for (const k of keys(c)) out.set(k, remember(c));
+    }
+    return out;
+  }
+  const prints = new Map<string, (ScryCard & Print)[]>();
+  const queries = restrictToNames("game:paper", want);
+  for (let i = 0; i < queries.length; i++) {
+    onProgress?.(i, queries.length);
+    let url: string | undefined = `${API}/cards/search?${new URLSearchParams({ q: queries[i], unique: "prints", order: "released" })}`;
+    while (url) {
+      let data: { data: (ScryCard & Print)[]; has_more: boolean; next_page?: string };
+      try {
+        data = await getJson(url);
+      } catch (e) {
+        if (e instanceof ScryfallError && e.status === 404) break; // none of these names
+        throw e;
+      }
+      for (const c of data.data) for (const k of keys(c)) prints.set(k, [...(prints.get(k) ?? []), c]);
+      url = data.has_more ? data.next_page : undefined;
+    }
+  }
+  for (const [k, ps] of prints) {
+    const pick = choosePrinting(ps, pref);
+    if (pick) out.set(k, remember(pick));
+  }
+  return out;
 }
 
 type Identifier = { id: string } | { set: string; collector_number: string } | { name: string; set?: string };
