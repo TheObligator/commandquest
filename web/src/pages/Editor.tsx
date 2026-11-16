@@ -11,6 +11,7 @@ import { mergeDuplicates, parseDecklist, writeDecklist, type ParsedToken } from 
 import { toast } from "../dom";
 import { CardMenu } from "../components/CardMenu";
 import { DeckTokens } from "../components/DeckTokens";
+import { CardViewToggle, useCardView } from "../cardView";
 import { ManaCost } from "../components/ManaCost";
 import { Loading } from "../components/Spinner";
 import { CONQUEST, validateConquest } from "../formats/conquest";
@@ -519,7 +520,8 @@ function DeckView(props: {
   const { deck, missing, count } = props;
   const preview = useCardPreview();
   const [printingsFor, setPrintingsFor] = useState<DeckCard | null>(null);
-  const [view, setView] = useDeckViewMode();
+  const [view, setView] = useCardView();
+  const stacked = view === "stacked" || view === "spread";
   const support = useCardSupport();
   const warnings = useMemo(() => deckWarnings(deck, missing, count, support), [deck, missing, count, support]);
   /** "Not playable" on cards that won't work in a game (src/cardsupport.ts). */
@@ -603,16 +605,17 @@ function DeckView(props: {
   };
 
   /**
-   * A whole card image. Nothing ever covers the bottom of the card, where the artist and
-   * copyright line is (Scryfall's image rules). The options button appears over the top-right
-   * corner on hover, and the quantity sits over the top-left when there's more than one.
+   * A card image. In the grid nothing ever covers the bottom of the card, where the artist and
+   * copyright line is (Scryfall's image rules); in the overlapping views only the top of each card
+   * shows (the last one shows whole) and hovering previews the whole card. The options button
+   * appears over the top-right corner on hover, the quantity over the top when there's more than one.
    */
   const tile = (c: DeckCard, i: number) => {
     const s = scry.cached(c);
     const img = s && scry.imageUrl(s, "normal");
     return (
-      <div key={key(c, i)} className={s ? "card-tile" : "card-tile unresolved"}>
-        <button className="tile-img" title={s ? `${c.name}: card details` : c.name} disabled={!s} onClick={() => s && openDetails(c, s)}>
+      <div key={key(c, i)} className={s ? "card-tile" : "card-tile unresolved"} {...(stacked ? preview.handlers(s) : {})}>
+        <button className="tile-img" title={stacked ? undefined : s ? `${c.name}: card details` : c.name} aria-label={`${c.quantity} × ${c.name}: card details`} disabled={!s} onClick={() => s && openDetails(c, s)}>
           {img ? <img src={img} alt={c.name} loading="lazy" /> : <span className="noimg">{c.name}{missing.includes(c.name) ? " (not found)" : ""}</span>}
         </button>
         {/* The name as invisible text over the printed one, so the browser's find (Ctrl+F) finds and highlights cards. */}
@@ -624,8 +627,21 @@ function DeckView(props: {
     );
   };
 
-  const asImages = view === "images";
-  const items = (cards: DeckCard[]) => (asImages ? <div className="card-tiles">{cards.map(tile)}</div> : <ul>{cards.map(row)}</ul>);
+  /** A column of overlapping cards (Stacked, Spread). */
+  const stack = (cards: DeckCard[], k: string, head?: React.ReactNode) => (
+    <div key={k} className="stack-col">
+      {head}
+      <div className={`stack ${view}`}>{cards.map(tile)}</div>
+    </div>
+  );
+  /** Cards that aren't split by type (commander, considering): rows, a grid, or columns of up to 10. */
+  const plain = (cards: DeckCard[]) => {
+    if (view === "list") return <ul className="flat">{cards.map(row)}</ul>;
+    if (view === "grid") return <div className="card-tiles">{cards.map(tile)}</div>;
+    const cols: DeckCard[][] = [];
+    for (let i = 0; i < cards.length; i += 10) cols.push(cards.slice(i, i + 10));
+    return <div className="stack-groups">{cols.map((g, i) => stack(g, String(i)))}</div>;
+  };
 
   return (
     <section className="panel deck-view">
@@ -638,10 +654,7 @@ function DeckView(props: {
           <a href={CONQUEST.rulesUrl} target="_blank" rel="noopener">Full rules ↗</a>
         </p>
       )}
-      <div className="view-toggle" role="group" aria-label="Show the deck as">
-        <button aria-pressed={view === "list"} onClick={() => setView("list")}>☰ List</button>
-        <button aria-pressed={view === "images"} onClick={() => setView("images")}>▦ Cards</button>
-      </div>
+      <CardViewToggle view={view} onChange={setView} />
       <Stats deck={deck} count={count} />
       {(() => {
         // A few main-deck planeswalkers sit beside the commander(s) instead of further down.
@@ -663,25 +676,30 @@ function DeckView(props: {
               if (b.id === "main" && t === "Planeswalker" && besideCommander) continue;
               groups.set(t, [...(groups.get(t) ?? []), c]);
             }
-            body = (
-              <div className={asImages ? "image-groups" : "type-groups"}>
-                {TYPE_ORDER.filter((t) => groups.has(t)).map((t) => {
-                  const g = sortByCmc(groups.get(t)!);
-                  return (
-                    <div key={t} className="type-group">
-                      <h4>
-                        {t === "Other" && !g.some((c) => scry.cached(c)) ? "Loading…" : t}
-                        <span className="muted"> {sum(g)}</span>
-                      </h4>
-                      {items(g)}
-                    </div>
-                  );
-                })}
+            const types = TYPE_ORDER.filter((t) => groups.has(t)).map((t) => {
+              const g = sortByCmc(groups.get(t)!);
+              const head = (
+                <h4>
+                  {t === "Other" && !g.some((c) => scry.cached(c)) ? "Loading…" : t}
+                  <span className="muted"> {sum(g)}</span>
+                </h4>
+              );
+              return { t, g, head };
+            });
+            body = stacked ? (
+              <div className="stack-groups">{types.map(({ t, g, head }) => stack(g, t, head))}</div>
+            ) : (
+              <div className={view === "grid" ? "image-groups" : "type-groups"}>
+                {types.map(({ t, g, head }) => (
+                  <div key={t} className="type-group">
+                    {head}
+                    {view === "grid" ? <div className="card-tiles">{g.map(tile)}</div> : <ul>{g.map(row)}</ul>}
+                  </div>
+                ))}
               </div>
             );
           } else {
-            const sorted = [...cards].sort((a, z) => a.name.localeCompare(z.name));
-            body = asImages ? <div className="card-tiles">{sorted.map(tile)}</div> : <ul className="flat">{sorted.map(row)}</ul>;
+            body = plain([...cards].sort((a, z) => a.name.localeCompare(z.name)));
           }
           return (
             <section key={b.id} className="board">
@@ -698,7 +716,7 @@ function DeckView(props: {
               {board(b)}
               <section className="board walkers">
                 <h2>Planeswalkers<span className="muted"> {sum(walkers)} · main deck</span></h2>
-                {asImages ? <div className="card-tiles">{sortByCmc(walkers).map(tile)}</div> : <ul className="flat">{sortByCmc(walkers).map(row)}</ul>}
+                {plain(sortByCmc(walkers))}
               </section>
             </div>
           );
@@ -709,28 +727,6 @@ function DeckView(props: {
       {printingsFor && <Printings card={printingsFor} onPick={(p) => props.onPrinting(printingsFor, p)} onClose={() => setPrintingsFor(null)} />}
     </section>
   );
-}
-
-const VIEW_KEY = "cq.deckView";
-
-/** List or card images; remembered per browser (a viewer preference, not deck data). */
-function useDeckViewMode(): ["list" | "images", (v: "list" | "images") => void] {
-  const [view, setView] = useState<"list" | "images">(() => {
-    try {
-      return localStorage.getItem(VIEW_KEY) === "images" ? "images" : "list";
-    } catch {
-      return "list";
-    }
-  });
-  const set = (v: "list" | "images") => {
-    setView(v);
-    try {
-      localStorage.setItem(VIEW_KEY, v);
-    } catch {
-      // Storage blocked: the choice lasts until the page reloads.
-    }
-  };
-  return [view, set];
 }
 
 function deckWarnings(deck: Draft, missing: string[], count: (b?: Board) => number, support?: CardSupport): string[] {
@@ -860,4 +856,5 @@ function Printings({ card, onPick, onClose }: { card: DeckCard; onPick: (p: scry
     </dialog>
   );
 }
+
 

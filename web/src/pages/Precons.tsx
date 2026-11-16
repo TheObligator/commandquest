@@ -4,6 +4,7 @@ import { api } from "../../convex/_generated/api";
 import type { DeckCard } from "../../convex/model/deckRules";
 import { errorMessage } from "../app/errors";
 import { closeOnBackdrop, showCardDetails } from "../carddetails";
+import { CardViewToggle, useCardView } from "../cardView";
 import { mergeDuplicates } from "../decklist";
 import { toast } from "../dom";
 import { ManaCost } from "../components/ManaCost";
@@ -161,37 +162,6 @@ export function Precons() {
   );
 }
 
-/** How much stacked cards overlap, or a grid of whole cards, or a text list. */
-type View = "stacked" | "spread" | "grid" | "list";
-const VIEWS: { id: View; label: string; title: string }[] = [
-  { id: "stacked", label: "Stacked", title: "Cards overlap so only their names show" },
-  { id: "spread", label: "Spread", title: "Cards overlap so their names and art show" },
-  { id: "grid", label: "Grid", title: "Whole cards, no overlap" },
-  { id: "list", label: "List", title: "Card names only" },
-];
-const VIEW_KEY = "cq.preconView";
-
-/** Remembered per browser. Spread is the default (and replaces the old "stacks" setting). */
-function usePreconView(): [View, (v: View) => void] {
-  const [view, setView] = useState<View>(() => {
-    try {
-      const saved = localStorage.getItem(VIEW_KEY);
-      return VIEWS.some((v) => v.id === saved) ? (saved as View) : "spread";
-    } catch {
-      return "spread";
-    }
-  });
-  const set = (v: View) => {
-    setView(v);
-    try {
-      localStorage.setItem(VIEW_KEY, v);
-    } catch {
-      // Storage blocked: the choice lasts until the page reloads.
-    }
-  };
-  return [view, set];
-}
-
 interface Group {
   key: string;
   label: string;
@@ -244,7 +214,7 @@ function groupsOf(p: Precon, lookup: Lookup, resolved: boolean): { deck: Group[]
 
 function PreconList({ precon, addButton, onClose }: { precon: Precon; addButton: React.ReactNode; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
-  const [view, setView] = usePreconView();
+  const [view, setView] = useCardView();
   // undefined while the cards load; false if they couldn't (names only).
   const [resolved, setResolved] = useState<boolean | undefined>(undefined);
   const [baked, setBaked] = useState<Map<string, scry.ScryCard> | null>(null);
@@ -346,11 +316,7 @@ function PreconList({ precon, addButton, onClose }: { precon: Precon; addButton:
           <p className="muted small">{precon.setName} · {releaseLabel(precon.date) || "Undated"} · {cardCount(precon)} cards</p>
         </div>
         <div className="actions">
-          <div className="view-toggle" role="group" aria-label="Show the deck as">
-            {VIEWS.map((v) => (
-              <button key={v.id} aria-pressed={view === v.id} title={v.title} onClick={() => setView(v.id)}>{v.label}</button>
-            ))}
-          </div>
+          <CardViewToggle view={view} onChange={setView} />
           {addButton}
         </div>
       </div>

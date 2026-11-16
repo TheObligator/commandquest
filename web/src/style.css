@@ -201,8 +201,8 @@ label.inline select { width: auto; padding: 5px 8px; }
 .grid-group { margin-bottom: 16px; }
 .grid-group h4 { font-size: .85rem; text-transform: uppercase; letter-spacing: .06em; color: var(--accent-2); margin: 6px 0 8px; }
 .stack-card { position: relative; display: block; width: 100%; padding: 0; border: 0; background: none; cursor: pointer; border-radius: 4.75% / 3.5%; container-type: inline-size; }
-.stack.stacked .stack-card + .stack-card { margin-top: -124.3%; } /* 15% of the width shows */
-.stack.spread .stack-card + .stack-card { margin-top: -84.3%; }   /* 55%: name bar and most of the art */
+.stack.stacked > * + * { margin-top: -124.3%; } /* 15% of the width shows */
+.stack.spread > * + * { margin-top: -84.3%; }   /* 55%: name bar and most of the art */
 .stack-card:disabled { cursor: default; }
 .stack-card img { width: 100%; aspect-ratio: 488 / 680; display: block; border-radius: 4.75% / 3.5%; background: var(--panel-2); box-shadow: 0 -2px 6px rgb(0 0 0 / 35%); }
 .stack-card:hover:not(:disabled) img, .stack-card:focus-visible img { outline: 2px solid var(--accent-2); outline-offset: -1px; }
@@ -275,7 +275,11 @@ label.inline select { width: auto; padding: 5px 8px; }
 .board { margin-top: 18px; }
 .board h2 { font-size: 1.1rem; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
 .type-groups { columns: 280px; column-gap: 24px; }
-.type-group { break-inside: avoid; margin-bottom: 14px; }
+/* List: the types flow down one column and on into the next, and a long type (37 lands) carries
+   on in the next column too, so the columns come out even instead of one long one. */
+.type-group { margin-bottom: 14px; }
+.type-group h4 { break-after: avoid; }
+.type-groups .type-group ul.flat { columns: auto; }
 .type-group h4 { font-size: .85rem; text-transform: uppercase; letter-spacing: .06em; color: var(--accent-2); margin: 6px 0; }
 .board ul { list-style: none; margin: 0; padding: 0; }
 .board ul.flat { columns: 280px; column-gap: 24px; }
@@ -422,6 +426,19 @@ dialog.card-detail { width: min(860px, calc(100vw - 32px)); max-height: 90vh; ba
 .card-tile.unresolved .noimg { color: var(--danger); }
 .card-tile { position: relative; }
 .tile-qty { position: absolute; top: 6%; left: 6px; padding: 2px 8px; border-radius: 99px; font-size: .8rem; font-weight: 800; font-variant-numeric: tabular-nums; background: rgb(14 16 22 / 88%); color: var(--accent-2); border: 1px solid var(--accent); pointer-events: none; }
+
+/* The editor's cards in the overlapping views: only each card's top strip shows, so the quantity
+   and "not playable" mark sit on its right (like the precon stacks) and give way to the options
+   button on hover. A hovered card is outlined, not lifted. */
+.stack .card-tile .tile-img img { box-shadow: 0 -2px 6px rgb(0 0 0 / 35%); transition: none; }
+.stack .card-tile .tile-img:hover:not(:disabled) img { transform: none; box-shadow: 0 -2px 6px rgb(0 0 0 / 35%); outline: 2px solid var(--accent-2); outline-offset: -1px; }
+.stack .card-tile .noimg { display: flex; align-items: flex-start; width: 100%; aspect-ratio: 488 / 680; padding: 6% 7%; border: 1px solid var(--line); border-radius: 4.75% / 3.5%; background: var(--panel-2); font-size: .8rem; text-align: left; }
+.stack .tile-qty { top: 3.5cqw; left: auto; right: 4cqw; padding: 0 6px; font-size: max(.7rem, 7cqw); line-height: 1.5; }
+.stack .tile-nw { top: 3.5cqw; left: auto; right: 4cqw; font-size: max(.6rem, 6cqw); padding: 0 5px; line-height: 1.6; }
+.stack .card-tile:has(.tile-qty) .tile-nw { right: calc(4cqw + 3.4em); }
+.stack .card-tile:has(.tile-nw) .tile-qty { top: 3.5cqw; }
+.stack .tile-menu { top: 3cqw; right: 3cqw; }
+.stack .card-tile:hover .tile-qty, .stack .card-tile:hover .tile-nw, .stack .card-tile:has(.tile-menu.open) .tile-qty, .stack .card-tile:has(.tile-menu.open) .tile-nw { opacity: 0; }
 
 /* Card options: "⋯" button + dark popup menu (replaces the native <select>) */
 .menu-btn { width: 28px; height: 24px; padding: 0; border-radius: 6px; border: 1px solid transparent; background: none; color: var(--muted); cursor: pointer; font-size: 1.1rem; line-height: 1; opacity: 0; transition: opacity .1s; }
