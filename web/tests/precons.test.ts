@@ -1,8 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
-import { OUT_FILE, RES_DIR, buildPrecons, byNewest, parseDck, parseEdition, render, splitTitle, toPrecon, type Edition } from "../scripts/precons.ts";
-import { cardCount, deckCards, matches, releaseLabel, type Precon } from "../src/precons.ts";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { CARDS_DIR, OUT_FILE, RES_DIR, buildPrecons, byNewest, parseDck, parseEdition, render, splitTitle, toPrecon, type Edition } from "../scripts/precons.ts";
+import { cardCount, cardImage, deckCards, deckKeys, matches, releaseLabel, type Precon, type PreconCardsFile } from "../src/precons.ts";
+import { answers, identifierFor, toData } from "../scripts/precon-cards.ts";
 
 const editions = new Map<string, Edition>([
   ["C18", { code: "C18", scryfallCode: "c18", name: "Commander 2018", date: "2018-08-10" }],
@@ -74,4 +76,29 @@ test("public/precons.json is newest first and every deck has cards", () => {
     assert.ok(d.commander.length, `${d.name} has no commander`);
   }
   assert.equal(new Set(decks.map((d) => d.id)).size, decks.length, "ids are unique");
+});
+
+test("precon card data: lookups by set and number, name and set, or name, and what we keep", () => {
+  assert.deepEqual(identifierFor("Sol Ring|c18|222"), { set: "c18", collector_number: "222" });
+  assert.deepEqual(identifierFor("Fire // Ice|mh2|"), { name: "Fire", set: "mh2" });
+  assert.deepEqual(identifierFor("Fire // Ice|mh2|", true), { name: "Fire" });
+  const dfc = { id: "abc", name: "Delver of Secrets // Insectile Aberration", set: "isd", collector_number: "51", cmc: 1, type_line: "Creature — Human Wizard // Creature — Human Insect", card_faces: [{ name: "Delver of Secrets", mana_cost: "{U}", image_uris: {} }, { name: "Insectile Aberration", mana_cost: "", image_uris: {} }] };
+  assert.ok(answers(dfc, { name: "Delver of Secrets", set: "isd" }) && answers(dfc, { set: "isd", collector_number: "51" }));
+  assert.ok(!answers(dfc, { name: "Delver of Secrets", set: "m21" }));
+  assert.deepEqual(toData(dfc), ["abc", "isd", "51", 1, "Creature — Human Wizard // Creature — Human Insect", "{U}", 1]);
+  assert.equal(cardImage("fc817e07-c1f3", "normal"), "https://cards.scryfall.io/normal/front/f/c/fc817e07-c1f3.jpg");
+});
+
+test("public/precon-cards has one file per deck at most, each covering exactly that deck's cards", () => {
+  const decks = JSON.parse(readFileSync(OUT_FILE, "utf8")) as Precon[];
+  const byId = new Map(decks.map((d) => [d.id, d]));
+  const files = readdirSync(CARDS_DIR).filter((f) => f.endsWith(".json"));
+  for (const f of files) {
+    const deck = byId.get(f.slice(0, -5));
+    assert.ok(deck, `${f} has no deck in precons.json (run \`npm run precons\`)`);
+    const { cards } = JSON.parse(readFileSync(join(CARDS_DIR, f), "utf8")) as PreconCardsFile;
+    assert.deepEqual(Object.keys(cards).sort(), deckKeys(deck).sort(), `${f} is stale (run \`npm run precons\`)`);
+  }
+  // Decks Scryfall couldn't be reached for fall back to lookups in the browser; most should have data.
+  assert.ok(files.length >= decks.length * 0.9, `only ${files.length} of ${decks.length} decks have card data (run \`npm run precons\`)`);
 });

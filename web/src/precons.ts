@@ -70,3 +70,43 @@ export function matches(p: Precon, query: string): boolean {
   if (!q) return true;
   return [p.name, p.setName, p.set, ...p.commander.map((c) => c[1])].some((s) => s.toLowerCase().includes(q));
 }
+
+// ---- Baked card data ------------------------------------------------------------------
+// `npm run precons` also writes public/precon-cards/<deck id>.json: what the deck view needs for
+// each card, looked up on Scryfall ahead of time. Opening a deck is then one small fetch from our
+// own site instead of rate-limited Scryfall lookups. Card details still come from Scryfall.
+
+/** [Scryfall id, set, collector number, mana value, type line, mana cost, 1 if it has a back image]. */
+export type PreconCardData = [string, string, string, number, string, string, 0 | 1];
+
+/** One file per deck: card key (see `cardKey`) → data, or null when Scryfall doesn't know the card. */
+export interface PreconCardsFile {
+  cards: Record<string, PreconCardData | null>;
+}
+
+/** The key of a deck entry in a PreconCardsFile. */
+export const cardKey = (name: string, set = "", collectorNumber = "") => `${name}|${set}|${collectorNumber}`;
+
+/** Every card key a deck needs. */
+export const deckKeys = (p: Precon): string[] => [...new Set([...p.commander, ...p.main, ...p.side].map((c) => cardKey(c[1], c[2], c[3])))];
+
+/** Scryfall's image URL for a card id (their CDN serves the same path without the cache-busting query). */
+export function cardImage(id: string, size: "small" | "normal" | "large" | "art_crop", back = false): string {
+  return `https://cards.scryfall.io/${size}/${back ? "back" : "front"}/${id[0]}/${id[1]}/${id}.jpg`;
+}
+
+const cardFiles = new Map<string, Promise<PreconCardsFile>>();
+
+/** The deck's baked card data. Fetched once per visit; the browser caches the file too. */
+export function loadPreconCards(p: Precon): Promise<PreconCardsFile> {
+  let hit = cardFiles.get(p.id);
+  if (!hit) {
+    hit = fetch(`${import.meta.env.BASE_URL}precon-cards/${p.id}.json`).then((res) => {
+      if (!res.ok) throw new Error(`No card data for ${p.name} (${res.status})`);
+      return res.json() as Promise<PreconCardsFile>;
+    });
+    hit.catch(() => cardFiles.delete(p.id)); // try again next time
+    cardFiles.set(p.id, hit);
+  }
+  return hit;
+}

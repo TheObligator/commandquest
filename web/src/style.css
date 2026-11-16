@@ -178,6 +178,7 @@ label.inline select { width: auto; padding: 5px 8px; }
 .precon-dialog .dialog-head p { margin: 2px 0 0; }
 .precon-list { overflow-y: auto; min-height: 0; flex: 1; padding-right: 6px; }
 .precon-list .board:first-of-type { margin-top: 0; }
+.precon-dialog.opening, .precon-dialog.opening button { cursor: progress; }
 .precon-dialog .dialog-head .actions { align-items: center; }
 .precon-dialog .view-toggle { float: none; margin: 0; }
 

@@ -4,6 +4,8 @@
 //   forge-gui/res/quest/commanderprecons/*.dck   Commander precons (Secret Lair ones get their own tab)
 //   forge-gui/res/editions/*.txt                 Release dates, and Forge → Scryfall set codes
 //
+// It then writes public/precon-cards/ from Scryfall (scripts/precon-cards.ts).
+//
 // The JSON is committed, because CI checks out only web/. After merging upstream Forge, run
 // `npm run precons` and `npm run cardsupport`, and commit the results (and see what `npm run broken:check` says); tests/precons.test.ts fails while it's out of date.
 //
@@ -12,6 +14,7 @@ import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Precon, PreconCard } from "../src/precons.ts";
+import { writePreconCards } from "./precon-cards.ts";
 
 export interface Edition {
   code: string;
@@ -145,6 +148,7 @@ export function buildPrecons(resDir: string): Precon[] {
 const here = dirname(fileURLToPath(import.meta.url));
 export const RES_DIR = join(here, "../../forge-gui/res");
 export const OUT_FILE = join(here, "../public/precons.json");
+export const CARDS_DIR = join(here, "../public/precon-cards");
 
 /** The file contents: one deck per line, so diffs after an upstream merge stay readable. */
 export function render(decks: Precon[]): string {
@@ -155,4 +159,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const decks = buildPrecons(RES_DIR);
   writeFileSync(OUT_FILE, render(decks));
   console.log(`Wrote ${decks.length} precons to ${OUT_FILE}`);
+  const { written, missing } = await writePreconCards(decks, CARDS_DIR);
+  console.log(`Card data for ${written} decks in ${CARDS_DIR}`);
+  if (missing) console.warn(`No card data for ${missing} decks (Scryfall unreachable?): the site looks those up in the browser. Run again later.`);
 }

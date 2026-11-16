@@ -60,10 +60,13 @@ parsing and export live in `src/decklist.ts`, and format rules in `src/formats/`
 no React or DOM imports, so `npm test` covers them directly.
 
 The precon decks players can copy into their account (`#/decks/precons`) come from Forge's
-`forge-gui/res/quest/commanderprecons/` and `quest/precons/` deck files, dated by
-`forge-gui/res/editions/`. `npm run precons` turns them into `web/public/precons.json`, which is
-committed because CI checks out only `web/`. After merging upstream Forge, run it and commit the
-result; `npm test` fails locally while the file is out of date.
+`forge-gui/res/quest/commanderprecons/` deck files (Commander only; Secret Lair decks get their own
+tab), dated by `forge-gui/res/editions/`. `npm run precons` turns them into `web/public/precons.json`,
+which is committed because CI checks out only `web/`. It also writes `web/public/precon-cards/`, one
+small file per deck with the Scryfall data the deck view needs (card ids, types, mana costs), so
+opening a deck doesn't wait on Scryfall. Only cards it hasn't seen before go to Scryfall, so reruns
+are quick; the first full run takes about four minutes. After merging upstream Forge, run it and
+commit the results (the nightly Forge sync does this); `npm test` fails locally while they're out of date.
 
 ### Cards that don't work in games
 
