@@ -12,7 +12,7 @@ import { toast } from "../dom";
 import { CardMenu } from "../components/CardMenu";
 import { DeckTokens } from "../components/DeckTokens";
 import { CardViewToggle, useCardView, useStackColumns } from "../cardView";
-import { columnsOf, doubledGroups } from "../stackLayout";
+import { columnSpans, columnsOf, stackColClass } from "../stackLayout";
 import { ManaCost } from "../components/ManaCost";
 import { Loading } from "../components/Spinner";
 import { CONQUEST, validateConquest } from "../formats/conquest";
@@ -629,12 +629,12 @@ function DeckView(props: {
     );
   };
 
-  /** A column of overlapping cards (Stacked, Spread), or two side by side for a big type. */
-  const stack = (cards: DeckCard[], k: string, head?: React.ReactNode, double = false) => (
-    <div key={k} className={double ? "stack-col double" : "stack-col"}>
+  /** A column of overlapping cards (Stacked, Spread), or two or three side by side for a big type. */
+  const stack = (cards: DeckCard[], k: string, head?: React.ReactNode, span = 1) => (
+    <div key={k} className={stackColClass(span)}>
       {head}
       <div className="stack-pair">
-        {columnsOf(cards, double).map((g, i) => <div key={i} className={`stack ${view}`}>{g.map(tile)}</div>)}
+        {columnsOf(cards, span).map((g, i) => <div key={i} className={`stack ${view}`}>{g.map(tile)}</div>)}
       </div>
     </div>
   );
@@ -692,8 +692,8 @@ function DeckView(props: {
             });
             body = stacked ? (
               (() => {
-                const double = doubledGroups(types.map(({ g }) => g.length), stackCols);
-                return <div className="stack-groups" ref={measure}>{types.map(({ t, g, head }, i) => stack(g, t, head, double.has(i)))}</div>;
+                const spans = columnSpans(types.map(({ g }) => g.length), stackCols);
+                return <div className="stack-groups" ref={measure}>{types.map(({ t, g, head }, i) => stack(g, t, head, spans[i]))}</div>;
               })()
             ) : (
               <div className={view === "grid" ? "image-groups" : "type-groups"}>

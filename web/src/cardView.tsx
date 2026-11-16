@@ -54,7 +54,7 @@ export function CardViewToggle({ view, onChange }: { view: CardView; onChange: (
   );
 }
 
-// ---- Overlapping views: a big type takes two columns when the row has room ----
+// ---- Overlapping views: a big type takes two or three columns when the row has room ----
 
 /** A stack column's width and the gap between columns (`.stack-col`, `.stack-groups` in style.css). */
 const COL = 150;

@@ -5,7 +5,7 @@ import type { DeckCard } from "../../convex/model/deckRules";
 import { errorMessage } from "../app/errors";
 import { closeOnBackdrop, showCardDetails } from "../carddetails";
 import { CardViewToggle, useCardView, useStackColumns } from "../cardView";
-import { columnsOf, doubledGroups } from "../stackLayout";
+import { columnSpans, columnsOf, stackColClass } from "../stackLayout";
 import { mergeDuplicates } from "../decklist";
 import { toast } from "../dom";
 import { ManaCost } from "../components/ManaCost";
@@ -263,12 +263,12 @@ function PreconList({ precon, addButton, onClose }: { precon: Precon; addButton:
     else toast(`Couldn't load ${c.name} from Scryfall`, "error");
   };
 
-  /** A column of overlapping cards (two for a big type when there's room; in the grid, whole cards). Hover shows a card, click opens details. */
-  const stack = (g: Group, double = false) => (
-    <div key={g.key} className={view === "grid" ? "grid-group" : double ? "stack-col double" : "stack-col"}>
+  /** A column of overlapping cards (two or three for a big type when there's room; in the grid, whole cards). Hover shows a card, click opens details. */
+  const stack = (g: Group, span = 1) => (
+    <div key={g.key} className={view === "grid" ? "grid-group" : stackColClass(span)}>
       <h4>{g.label}<span className="muted"> {total(g.cards)}</span></h4>
       <div className="stack-pair">
-        {columnsOf(g.cards, double).map((cards, i) => (
+        {columnsOf(g.cards, span).map((cards, i) => (
           <div key={i} className={`stack ${view}`}>
             {cards.map((c) => {
               const s = lookup(c);
@@ -315,8 +315,8 @@ function PreconList({ precon, addButton, onClose }: { precon: Precon; addButton:
           <div className="grid-groups">{groups.map((g) => stack(g))}</div>
         ) : (
           (() => {
-            const double = doubledGroups(groups.map((g) => g.cards.length), stackCols);
-            return <div className="stack-groups" ref={measure}>{groups.map((g, i) => stack(g, double.has(i)))}</div>;
+            const spans = columnSpans(groups.map((g) => g.cards.length), stackCols);
+            return <div className="stack-groups" ref={measure}>{groups.map((g, i) => stack(g, spans[i]))}</div>;
           })()
         )}
       </section>

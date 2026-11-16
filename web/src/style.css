@@ -197,10 +197,11 @@ label.inline select { width: auto; padding: 5px 8px; }
 .stack-col { width: 150px; }
 .stack-col h4 { font-size: .85rem; text-transform: uppercase; letter-spacing: .06em; color: var(--accent-2); margin: 6px 0; white-space: nowrap; }
 .stack { display: flex; flex-direction: column; }
-/* A big type, when the row has room, takes two columns side by side under one heading. */
+/* A big type, when the row has room, takes two or three columns side by side under one heading. */
 .stack-pair { display: flex; gap: 14px; align-items: flex-start; }
 .stack-pair > .stack { flex: 1 1 0; min-width: 0; }
-.stack-col.double { width: 314px; }
+.stack-col.span-2 { width: 314px; }
+.stack-col.span-3 { width: 478px; }
 .stack.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
 .grid-group { margin-bottom: 16px; }
 .grid-group h4 { font-size: .85rem; text-transform: uppercase; letter-spacing: .06em; color: var(--accent-2); margin: 6px 0 8px; }
@@ -214,7 +215,7 @@ label.inline select { width: auto; padding: 5px 8px; }
 .stack-qty { position: absolute; top: 3.5cqw; right: 4cqw; padding: 0 6px; border-radius: 99px; font-size: max(.7rem, 7cqw); font-weight: 800; line-height: 1.5; font-variant-numeric: tabular-nums; background: rgb(14 16 22 / 88%); color: var(--accent-2); border: 1px solid var(--accent); pointer-events: none; }
 @media (max-width: 600px) {
   .stack-col { width: calc(50% - 7px); }
-  .stack-col.double { width: 100%; }
+  .stack-col.span-2, .stack-col.span-3 { width: 100%; }
 }
 
 /* ---- Editor ---- */
