@@ -4,7 +4,7 @@
 export type PrintingPref = "default" | "newest" | "cheapest" | "oldest";
 
 export const PRINTING_PREFS: { id: PrintingPref; label: string; hint: string }[] = [
-  { id: "newest", label: "Newest regular printing", hint: "The latest normal English printing: no promos, The List, Secret Lair, Masterpieces, Universes Beyond, or borderless, white-bordered, showcase, extended-art, retro-frame and alternate-art versions." },
+  { id: "newest", label: "Newest regular printing", hint: "The latest normal English printing: no promos, The List, Secret Lair, Masterpieces, Universes Beyond, or borderless, white-bordered, showcase, extended-art, retro-frame, future-frame and alternate-art versions." },
   { id: "cheapest", label: "Cheapest printing", hint: "The lowest Scryfall USD price when you add the card." },
   { id: "oldest", label: "Original printing", hint: "The card's first normal printing." },
   { id: "default", label: "Scryfall's default", hint: "Whatever Scryfall shows for the name, sometimes a promo." },
@@ -62,6 +62,8 @@ export const isPlainFrame = (p: Print, allowUniversesBeyond = false) =>
   !p.frame_effects?.some((f) => ODD_FRAMES.includes(f)) &&
   (!p.full_art || /\bBasic\b/.test(p.type_line ?? "")) &&
   !(p.frame && p.frame !== "2015" && p.frame !== "future" && date(p) >= MODERN_FRAME_FROM) &&
+  // The futureshifted frame belongs to Future Sight; reprints in it (Mystery Booster 2, ...) are variants.
+  !(p.frame === "future" && p.set !== "fut") &&
   // Scryfall tags special treatments (Japanese walkers, galaxy foils, Universes Beyond, ...).
   !p.promo_types?.some((t) => !(allowUniversesBeyond && t === "universesbeyond")) &&
   !/[^\d]/.test(p.collector_number);

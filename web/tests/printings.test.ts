@@ -92,3 +92,10 @@ test("newest skips Japanese alternate art, Masterpieces and white borders; Unive
   ];
   assert.equal(choosePrinting(ring, "newest", "2026-11-16")?.id, "ltr");
 });
+
+test("the futureshifted frame counts only on Future Sight itself", () => {
+  const counterspell = [p("mb2", "2024-08-02", { frame: "future" }), p("dmr", "2023-01-13", { frame: "2015" })];
+  assert.equal(choosePrinting(counterspell, "newest", "2026-11-16")?.id, "dmr");
+  const tarmogoyf = [p("fut", "2007-05-04", { frame: "future" }), p("mb2-goyf", "2024-08-02", { set: "mb2", frame: "future" })];
+  assert.equal(choosePrinting(tarmogoyf, "oldest", "2026-11-16")?.id, "fut");
+});
