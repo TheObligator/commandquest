@@ -90,14 +90,16 @@ function TokenPrintings({ token, onPick, onClose }: { token: DeckToken; onPick: 
     scry
       .search(q, "prints")
       .then((page) => {
-        const own = token.sources.map((s) => scry.cachedById(s.tokenId)).filter((c): c is scry.ScryCard => !!c);
+        // Several of the deck's cards often make the same printing (Lathril's elves): list it once.
+        const own = [...new Set(token.sources.map((s) => s.tokenId))].map((id) => scry.cachedById(id)).filter((c): c is scry.ScryCard => !!c);
         const seen = new Set(own.map((c) => c.id));
         setPrints([...own, ...page.cards.filter((c) => !seen.has(c.id))]);
       })
       .catch((e) => setError(errorMessage(e)));
   }, [token.identity]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fromCard = (id: string) => token.sources.find((s) => s.tokenId === id)?.card;
+  /** The deck's cards that make this printing, e.g. "Lathril, Blade of the Elves, Elvish Warmaster". */
+  const fromCards = (id: string) => [...new Set(token.sources.filter((s) => s.tokenId === id).map((s) => s.card))].join(", ");
   return (
     <dialog ref={ref} className="printings" onClose={onClose} onClick={(e) => closeOnBackdrop(e.nativeEvent, ref.current)}>
       <button className="dialog-close" aria-label="Close" onClick={() => ref.current?.close()}>×</button>
@@ -121,7 +123,7 @@ function TokenPrintings({ token, onPick, onClose }: { token: DeckToken; onPick: 
                 {p.set.toUpperCase()} #{p.collector_number}
                 {p.id === token.defaultId && " · default"}
               </span>
-              {fromCard(p.id) && <span className="small muted">from {fromCard(p.id)}</span>}
+              {fromCards(p.id) && <span className="small muted">from {fromCards(p.id)}</span>}
               {scry.artistOf(p) && <span className="small muted">{scry.artistOf(p)}</span>}
             </button>
           ))}
