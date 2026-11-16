@@ -5,7 +5,8 @@ import { errorMessage } from "../app/errors";
 import { showCardDetails } from "../carddetails";
 import { useCardSupport } from "../cardsupport";
 import { CardMenu } from "../components/CardMenu";
-import { cardLegality, isCommanderEligible } from "../formats/conquest";
+import { cardLegality, fitsIdentity, isCommanderEligible } from "../formats/conquest";
+import { bestExtraColor, identityQuery, mentionsIdentity, offIdentity } from "../formats/rulebreakers";
 import * as scry from "../scryfall";
 import { BOARDS, boardLabel } from "./boards";
 
@@ -143,6 +144,10 @@ export function SearchResults(props: {
   query: string;
   format: string;
   deck: DeckCard[];
+  /** The deck's commanders (Scryfall data), to limit results to cards the deck can use. */
+  commanders: scry.ScryCard[];
+  /** The deck's pick for a commander like Tolabow. */
+  extraColor?: string;
   defaultBoard: Board;
   onDefaultBoard: (b: Board) => void;
   onAdd: (c: scry.ScryCard, b: Board) => void;
@@ -157,20 +162,36 @@ export function SearchResults(props: {
   const [next, setNext] = useState<string>();
   const [loadingMore, setLoadingMore] = useState(false);
   const support = useCardSupport();
+  const [allColors, setAllColors] = useState(false);
+
+  // In a Commander or Conquest deck, only cards the commanders allow, Rulebreakers included,
+  // unless the query already filters by color identity or the player asks for every color.
+  const conquest = props.format === "conquest";
+  const canFilter = (props.format === "commander" || conquest) && props.commanders.length > 0 && !mentionsIdentity(props.query);
+  const filtered = canFilter && !allColors;
+  const fits = conquest ? fitsIdentity : (card: { color_identity: string[] }, id: Set<string>) => card.color_identity.every((x) => id.has(x));
+  const extraColor =
+    props.extraColor ??
+    bestExtraColor(props.deck.flatMap((d) => { const card = d.board === "main" ? scry.cached(d) : undefined; return card ? [{ card, quantity: d.quantity }] : []; }), props.commanders, fits);
+  const idClause = filtered ? identityQuery(props.commanders, extraColor, conquest) : "";
+  const fullQuery = idClause ? `(${props.query}) ${idClause}` : props.query;
+  // Conquest's hybrid rule has no Scryfall syntax: hybrid cards come back and are checked here.
+  const off = filtered && conquest ? new Set(offIdentity(cards.map((c) => ({ name: c.id, card: c })), props.commanders, fitsIdentity, extraColor).map((e) => e.name)) : null;
+  const shown = off ? cards.filter((c) => !off.has(c.id)) : cards;
 
   useEffect(() => {
     let live = true;
     setCards([]);
     setTotal(null);
     setError("");
-    scry.search(props.query).then(
+    scry.search(fullQuery).then(
       (p) => live && (setCards(p.cards), setTotal(p.total), setNext(p.nextPage)),
       (e) => live && setError(errorMessage(e)),
     );
     return () => {
       live = false;
     };
-  }, [props.query]);
+  }, [fullQuery]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -216,9 +237,15 @@ export function SearchResults(props: {
       </div>
       <p className="muted small">
         {error ? <span className="form-error">{error}</span> : total === null ? "Searching…" : total ? `${total.toLocaleString()} cards for “${props.query}”` : `No cards found for “${props.query}”.`}
+        {canFilter && (
+          <label className="inline">
+            {" "}
+            <input type="checkbox" checked={!allColors} onChange={(e) => setAllColors(!e.target.checked)} /> Only cards your commander allows
+          </label>
+        )}
       </p>
       <div className="search-grid">
-        {cards.map((c) => {
+        {shown.map((c) => {
           const inDeck = entries(c);
           const count = inDeck.reduce((n, e) => n + e.quantity, 0);
           const verdict = props.format === "conquest" ? cardLegality(c) : { ok: true, reason: undefined };

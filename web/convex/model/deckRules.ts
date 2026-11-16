@@ -17,6 +17,8 @@ export interface DeckInput {
   name: string;
   format?: string;
   cards: DeckCard[];
+  /** The color a Rulebreaker commander like Tolabow lets this deck add (web/src/formats/rulebreakers.ts). */
+  extraColor?: string;
 }
 
 export const MAX_NAME = 100;
@@ -35,16 +37,20 @@ const clip = (s: string | undefined, max: number) => {
 };
 
 /** Checks and normalizes a deck. Throws DeckError with a user-facing message. */
-export function validateDeck(input: DeckInput): Required<Pick<DeckInput, "name" | "format">> & { cards: DeckCard[] } {
+export function validateDeck(input: DeckInput): Required<Pick<DeckInput, "name" | "format">> & { cards: DeckCard[]; extraColor: string | undefined } {
   const name = (input.name ?? "").trim();
   if (!name || name.length > MAX_NAME) throw new DeckError(`Deck names are 1-${MAX_NAME} characters.`);
   const format = (input.format ?? "").trim().toLowerCase() || "commander";
   if (!FORMAT.test(format)) throw new DeckError("Unknown format.");
   const cards = input.cards ?? [];
   if (cards.length > MAX_CARDS) throw new DeckError(`A deck can have at most ${MAX_CARDS} different entries.`);
+  const extraColor = input.extraColor || undefined;
+  if (extraColor !== undefined && !/^[WUBRG]$/.test(extraColor)) throw new DeckError("Unknown color.");
   return {
     name,
     format,
+    // Always present, so an update that drops the pick clears it (a patch with undefined removes a field).
+    extraColor,
     cards: cards.map((c) => {
       const cardName = (c.name ?? "").trim();
       if (!cardName || cardName.length > 200) throw new DeckError("Every card needs a name.");

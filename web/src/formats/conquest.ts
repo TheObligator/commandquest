@@ -184,8 +184,18 @@ export interface DeckEntry {
   card?: RulesCard;
 }
 
-/** Every Conquest deck-construction problem, as user-facing sentences. */
-export function validateConquest(entries: DeckEntry[]): string[] {
+/** Main-deck cards (with Scryfall data) outside the commanders' identity: the plain hybrid rule. */
+export type OffIdentity = (main: { name: string; card: RulesCard }[], cmdrs: RulesCard[]) => { name: string }[];
+const plainOffIdentity: OffIdentity = (main, cmdrs) => {
+  const identity = new Set(cmdrs.flatMap((c) => c.color_identity));
+  return main.filter((e) => !fitsIdentity(e.card, identity));
+};
+
+/**
+ * Every Conquest deck-construction problem, as user-facing sentences. `offIdentity` replaces the
+ * color identity check (the editor passes one that knows Rulebreaker commanders).
+ */
+export function validateConquest(entries: DeckEntry[], offIdentity: OffIdentity = plainOffIdentity): string[] {
   const out: string[] = [];
   const list = (names: string[]) => names.slice(0, 6).join(", ") + (names.length > 6 ? "…" : "");
 
@@ -222,8 +232,8 @@ export function validateConquest(entries: DeckEntry[]): string[] {
 
   // Color identity with the hybrid rule. Commanders use their full (Scryfall) color identity.
   if (cmdrs.length) {
-    const identity = new Set(cmdrs.flatMap((c) => c.color_identity));
-    const off = entries.filter((e) => e.board === "main" && e.card && !fitsIdentity(e.card, identity)).map((e) => e.name);
+    const main = entries.flatMap((e) => (e.board === "main" && e.card ? [{ name: e.name, card: e.card }] : []));
+    const off = offIdentity(main, cmdrs).map((e) => e.name);
     if (off.length) out.push(`Outside your commander's colors: ${list(off)}.`);
   }
   return out;

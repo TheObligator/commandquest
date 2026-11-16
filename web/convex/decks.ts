@@ -22,7 +22,7 @@ function checked(input: DeckInput) {
   }
 }
 
-const deckArgs = { name: v.string(), format: v.optional(v.string()), cards: v.array(deckCard) };
+const deckArgs = { name: v.string(), format: v.optional(v.string()), cards: v.array(deckCard), extraColor: v.optional(v.string()) };
 
 export const list = query({
   args: {},

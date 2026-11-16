@@ -21,6 +21,13 @@ test("validateDeck rejects bad input with user-facing messages", () => {
   bad({ name: "x", cards: [{ name: "Sol Ring", quantity: 1.5, board: "main" }] }, /Bad quantity/);
   bad({ name: "x", cards: [{ name: "Sol Ring", quantity: 1, board: "graveyard" as never }] }, /Unknown board/);
   bad({ name: "x", cards: [{ name: "Sol Ring", quantity: 1, board: "main", scryfallId: "nope" }] }, /Bad Scryfall id/);
+  bad({ name: "x", cards: [], extraColor: "purple" }, /Unknown color/);
+});
+
+test("validateDeck keeps a deck's extra color, and clears it when it's dropped", () => {
+  assert.equal(validateDeck({ name: "x", cards: [], extraColor: "G" }).extraColor, "G");
+  const d = validateDeck({ name: "x", cards: [] });
+  assert.ok("extraColor" in d && d.extraColor === undefined);
 });
 
 test("summarize counts main + commander and picks the commander's art", () => {

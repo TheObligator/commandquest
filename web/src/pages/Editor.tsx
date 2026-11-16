@@ -16,7 +16,8 @@ import { ManaCurve } from "../components/ManaCurve";
 import { columnSpans, columnsOf, stackColClass } from "../stackLayout";
 import { ManaCost } from "../components/ManaCost";
 import { Loading } from "../components/Spinner";
-import { CONQUEST, validateConquest } from "../formats/conquest";
+import { CONQUEST, fitsIdentity, validateConquest, type OffIdentity } from "../formats/conquest";
+import { bestExtraColor, extraColorChoice, noMaxDeckSize, offIdentity } from "../formats/rulebreakers";
 import * as scry from "../scryfall";
 import { tokenPicks } from "../tokens";
 import { useCardPreview } from "../useCardPreview";
@@ -27,6 +28,10 @@ import { capitalize } from "./DeckList";
 const FORMATS = ["commander", "conquest", "standard", "pioneer", "modern", "legacy", "vintage", "pauper", "other"];
 /** Up to this many main-deck planeswalkers are shown beside the commander(s). */
 const MAX_WALKERS_BESIDE_COMMANDER = 3;
+/** The format's color identity test: Conquest relaxes hybrid symbols, Commander doesn't. */
+const identityTest = (format: string) =>
+  format === "conquest" ? fitsIdentity : (card: { color_identity: string[] }, identity: Set<string>) => card.color_identity.every((x) => identity.has(x));
+
 const COLORS: Record<string, string> = { W: "White", U: "Blue", B: "Black", R: "Red", G: "Green" };
 const UNTITLED = "Untitled deck";
 
@@ -37,6 +42,8 @@ interface Draft {
   name: string;
   format: string;
   cards: DeckCard[];
+  /** The color a Rulebreaker commander like Tolabow lets this deck add. */
+  extraColor?: string;
 }
 
 /** Loads the deck (if editing one), then hands it to the editor once. */
@@ -51,7 +58,7 @@ export function Editor({ id }: { id?: string }) {
       </>
     );
   }
-  const initial: Draft = saved ? { id: saved._id, name: saved.name, format: saved.format, cards: saved.cards } : { name: UNTITLED, format: "commander", cards: [] };
+  const initial: Draft = saved ? { id: saved._id, name: saved.name, format: saved.format, cards: saved.cards, extraColor: saved.extraColor } : { name: UNTITLED, format: "commander", cards: [] };
   return <DeckEditor initial={initial} />;
 }
 
@@ -196,6 +203,25 @@ function DeckEditor({ initial }: { initial: Draft }) {
     setTab("search");
     toast(`Imported ${cards.reduce((n, c) => n + c.quantity, 0)} cards`);
     await Promise.all([resolveCards(merged), importTokenArt(tokens)]);
+    pickExtraColor(merged, replace);
+  }
+
+  /**
+   * After an import, a commander like Tolabow gets the extra color that lets in the most of the
+   * deck's cards, unless the deck already had a pick (a replacing import picks again).
+   */
+  function pickExtraColor(cards: DeckCard[], replace: boolean) {
+    const d = deckRef.current;
+    if (d.extraColor && !replace) return;
+    const commanders = cards.filter((c) => c.board === "commander").flatMap((c) => scry.cached(c) ?? []);
+    const main = cards.flatMap((c) => {
+      const card = c.board === "main" ? scry.cached(c) : undefined;
+      return card ? [{ card, quantity: c.quantity }] : [];
+    });
+    const color = bestExtraColor(main, commanders, identityTest(d.format));
+    if (color === d.extraColor || (!color && !replace)) return;
+    change((x) => ({ ...x, extraColor: color }));
+    if (color) toast(`Extra color for ${extraColorChoice(commanders)}: ${COLORS[color]}. Change it under Stats.`);
   }
 
   /** The token printings an imported list names become this deck's token art. */
@@ -230,7 +256,7 @@ function DeckEditor({ initial }: { initial: Draft }) {
     inFlight.current = true;
     setSaving(true);
     const savingVersion = version.current;
-    const body = { name: d.name, format: d.format, cards: d.cards };
+    const body = { name: d.name, format: d.format, cards: d.cards, extraColor: d.extraColor };
     try {
       if (idRef.current) await updateDeck({ id: idRef.current, ...body });
       else {
@@ -341,8 +367,11 @@ function DeckEditor({ initial }: { initial: Draft }) {
   const count = (board?: Board) =>
     deck.cards.filter((c) => (board ? c.board === board : c.board === "main" || c.board === "commander")).reduce((n, c) => n + c.quantity, 0);
   const total = count();
-  const badge = deck.format === "commander" ? `${total}/100` : deck.format === "conquest" ? `${total}/${CONQUEST.minDeckSize}+` : `${total} cards`;
-  const badgeOk = deck.format === "commander" ? total === 100 : deck.format === "conquest" ? total >= CONQUEST.minDeckSize : true;
+  const commanders = deck.cards.filter((c) => c.board === "commander").flatMap((c) => scry.cached(c) ?? []);
+  const noMax = noMaxDeckSize(commanders);
+  const badge =
+    deck.format === "commander" ? `${total}/100${noMax ? "+" : ""}` : deck.format === "conquest" ? `${total}/${CONQUEST.minDeckSize}+` : `${total} cards`;
+  const badgeOk = deck.format === "commander" ? (noMax ? total >= 100 : total === 100) : deck.format === "conquest" ? total >= CONQUEST.minDeckSize : true;
   const saveState = saving
     ? "Saving…"
     : saveError
@@ -390,6 +419,8 @@ function DeckEditor({ initial }: { initial: Draft }) {
           query={searchQuery}
           format={deck.format}
           deck={deck.cards}
+          commanders={commanders}
+          extraColor={deck.extraColor}
           defaultBoard={addTo}
           onDefaultBoard={setAddTo}
           onAdd={addCard}
@@ -408,7 +439,7 @@ function DeckEditor({ initial }: { initial: Draft }) {
             <SearchPane hidden={tab !== "search"} addTo={addTo} onAddTo={setAddTo} onPick={(n) => void addByName(n)} onSubmit={setSearchQuery} autoFocus={!deck.cards.length && tab === "search"} />
             <ImportPane hidden={tab !== "import"} startReplacing={deck.cards.length === 0} onImport={applyImport} importFromUrl={(url) => importFromUrl({ url })} autoFocus={tab === "import"} />
           </aside>
-          <DeckView deck={deck} missing={missing} count={count} onQty={setQty} onMove={moveCard} onPrinting={setPrinting} />
+          <DeckView deck={deck} missing={missing} count={count} onQty={setQty} onMove={moveCard} onPrinting={setPrinting} onExtraColor={(c) => change((d) => ({ ...d, extraColor: c }))} />
         </div>
       )}
     </div>
@@ -518,6 +549,7 @@ function DeckView(props: {
   onQty: (c: DeckCard, q: number) => void;
   onMove: (c: DeckCard, b: Board) => void;
   onPrinting: (c: DeckCard, p: scry.ScryCard) => void;
+  onExtraColor: (color: string | undefined) => void;
 }) {
   const { deck, missing, count } = props;
   const preview = useCardPreview();
@@ -729,7 +761,7 @@ function DeckView(props: {
           );
         });
       })()}
-      <Stats deck={deck} count={count} />
+      <Stats deck={deck} count={count} onExtraColor={props.onExtraColor} />
       <DeckTokens deckId={deck.id} cards={deck.cards} />
       {preview.element}
       {printingsFor && <Printings card={printingsFor} onPick={(p) => props.onPrinting(printingsFor, p)} onClose={() => setPrintingsFor(null)} />}
@@ -750,21 +782,29 @@ function deckWarnings(deck: Draft, missing: string[], count: (b?: Board) => numb
     if (issues.length) w.push(`Known not to work right in games: ${list(issues)}.`);
   }
   const fmt = deck.format;
-  if (fmt === "conquest") return [...w, ...validateConquest(deck.cards.map((c) => ({ ...c, card: scry.cached(c) })))];
+  if (fmt === "conquest") {
+    const off: OffIdentity = (main, cmdrs) => offIdentity(main, cmdrs, fitsIdentity, deck.extraColor);
+    return [...w, ...validateConquest(deck.cards.map((c) => ({ ...c, card: scry.cached(c) })), off)];
+  }
   if (fmt === "commander") {
     const cmdrs = deck.cards.filter((c) => c.board === "commander");
+    const cmdrCards = cmdrs.flatMap((c) => scry.cached(c) ?? []);
     const total = count();
     if (!cmdrs.length) w.push("No commander yet. Use ★ on a search result or move a card to the Commander board.");
     if (cmdrs.reduce((n, c) => n + c.quantity, 0) > 2) w.push("A deck can have at most two commanders.");
-    if (total !== 100) w.push(`Commander decks have exactly 100 cards (you have ${total}).`);
-    const identity = new Set(cmdrs.flatMap((c) => scry.cached(c)?.color_identity ?? []));
-    const offColor: string[] = [];
+    if (noMaxDeckSize(cmdrCards)) {
+      if (total < 100) w.push(`Commander decks have at least 100 cards (you have ${total}). Your commander lifts the maximum.`);
+    } else if (total !== 100) w.push(`Commander decks have exactly 100 cards (you have ${total}).`);
+    const main = deck.cards.flatMap((c) => {
+      const card = c.board === "main" ? scry.cached(c) : undefined;
+      return card ? [{ name: c.name, card }] : [];
+    });
+    const offColor = cmdrs.length ? offIdentity(main, cmdrCards, identityTest("commander"), deck.extraColor).map((e) => e.name) : [];
     const dupes: string[] = [];
     for (const c of deck.cards) {
       if (c.board !== "main") continue;
       const s = scry.cached(c);
       if (!s) continue;
-      if (cmdrs.length && s.color_identity.some((x) => !identity.has(x))) offColor.push(c.name);
       const unlimited = /Basic/.test(s.type_line) || /any number of cards named/i.test(s.oracle_text ?? "");
       if (c.quantity > 1 && !unlimited) dupes.push(c.name);
     }
@@ -784,13 +824,15 @@ function deckWarnings(deck: Draft, missing: string[], count: (b?: Board) => numb
   return w;
 }
 
-function Stats({ deck, count }: { deck: Draft; count: (b?: Board) => number }) {
+function Stats({ deck, count, onExtraColor }: { deck: Draft; count: (b?: Board) => number; onExtraColor: (color: string | undefined) => void }) {
   const main = deck.cards.flatMap((c) => {
     const card = c.board === "main" ? scry.cached(c) : undefined;
     return card ? [{ name: c.name, quantity: c.quantity, card }] : [];
   });
   const lands = main.filter((e) => scry.primaryType(e.card) === "Land").reduce((n, e) => n + e.quantity, 0);
-  const identity = [...new Set(deck.cards.filter((c) => c.board === "commander").flatMap((c) => scry.cached(c)?.color_identity ?? []))];
+  const commanders = deck.cards.filter((c) => c.board === "commander").flatMap((c) => scry.cached(c) ?? []);
+  const identity = [...new Set(commanders.flatMap((c) => c.color_identity))];
+  const extraFor = deck.format === "commander" || deck.format === "conquest" ? extraColorChoice(commanders) : undefined;
   return (
     <section className="board stats">
       <h2>Stats</h2>
@@ -808,6 +850,19 @@ function Stats({ deck, count }: { deck: Draft; count: (b?: Board) => number }) {
               ) : (
                 <span>—</span>
               )}
+            </p>
+          )}
+          {extraFor && (
+            <p>
+              <label>
+                <span className="muted">Extra color for {extraFor} </span>
+                <select value={deck.extraColor ?? ""} onChange={(e) => onExtraColor(e.target.value || undefined)}>
+                  <option value="">Not chosen</option>
+                  {Object.entries(COLORS)
+                    .filter(([x]) => !identity.includes(x))
+                    .map(([x, name]) => <option key={x} value={x}>{name}</option>)}
+                </select>
+              </label>
             </p>
           )}
           <p><span className="muted">Lands </span>{lands}</p>

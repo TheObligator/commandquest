@@ -34,6 +34,8 @@ export default defineSchema({
     format: v.string(),
     cards: v.array(deckCard),
     /** Token printings you picked for this deck, by token identity (web/src/tokens.ts). Defaults aren't stored. */
+    /** The color a Rulebreaker commander like Tolabow lets this deck add: W, U, B, R or G. */
+    extraColor: v.optional(v.string()),
     tokenArt: v.optional(v.array(v.object({ identity: v.string(), scryfallId: v.string() }))),
     updatedAt: v.number(),
   }).index("by_user_updated", ["userId", "updatedAt"]),
