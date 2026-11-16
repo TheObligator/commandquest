@@ -12,6 +12,7 @@ import { toast } from "../dom";
 import { CardMenu } from "../components/CardMenu";
 import { DeckTokens } from "../components/DeckTokens";
 import { CardViewToggle, useCardView, useStackColumns } from "../cardView";
+import { ManaCurve } from "../components/ManaCurve";
 import { columnSpans, columnsOf, stackColClass } from "../stackLayout";
 import { ManaCost } from "../components/ManaCost";
 import { Loading } from "../components/Spinner";
@@ -659,7 +660,6 @@ function DeckView(props: {
         </p>
       )}
       <CardViewToggle view={view} onChange={setView} />
-      <Stats deck={deck} count={count} />
       {(() => {
         // A few main-deck planeswalkers sit beside the commander(s) instead of further down.
         const commanders = deck.cards.filter((c) => c.board === "commander");
@@ -729,6 +729,7 @@ function DeckView(props: {
           );
         });
       })()}
+      <Stats deck={deck} count={count} />
       <DeckTokens deckId={deck.id} cards={deck.cards} />
       {preview.element}
       {printingsFor && <Printings card={printingsFor} onPick={(p) => props.onPrinting(printingsFor, p)} onClose={() => setPrintingsFor(null)} />}
@@ -784,46 +785,36 @@ function deckWarnings(deck: Draft, missing: string[], count: (b?: Board) => numb
 }
 
 function Stats({ deck, count }: { deck: Draft; count: (b?: Board) => number }) {
-  const curve = new Array(8).fill(0);
-  let lands = 0;
-  for (const c of deck.cards) {
-    if (c.board !== "main") continue;
-    const s = scry.cached(c);
-    if (!s) continue;
-    if (scry.primaryType(s) === "Land") lands += c.quantity;
-    else curve[Math.min(7, Math.floor(s.cmc))] += c.quantity;
-  }
-  const max = Math.max(1, ...curve);
+  const main = deck.cards.flatMap((c) => {
+    const card = c.board === "main" ? scry.cached(c) : undefined;
+    return card ? [{ name: c.name, quantity: c.quantity, card }] : [];
+  });
+  const lands = main.filter((e) => scry.primaryType(e.card) === "Land").reduce((n, e) => n + e.quantity, 0);
   const identity = [...new Set(deck.cards.filter((c) => c.board === "commander").flatMap((c) => scry.cached(c)?.color_identity ?? []))];
   return (
-    <div className="stats">
-      <div className="curve" title="Mana curve (main deck, nonland)">
-        {curve.map((n, i) => (
-          <div key={i} className="bar-col">
-            <span className="bar-n">{n || ""}</span>
-            <div className="bar" style={{ height: `${(n / max) * 100}%` }} />
-            <span className="bar-label">{i === 7 ? "7+" : i}</span>
-          </div>
-        ))}
+    <section className="board stats">
+      <h2>Stats</h2>
+      <div className="stats-body">
+        <ManaCurve cards={main} />
+        <div className="stat-list">
+          {(deck.format === "commander" || deck.format === "conquest") && (
+            <p>
+              <span className="muted">Color identity </span>
+              {identity.length ? (
+                <>
+                  <ManaCost cost={identity.map((x) => `{${x}}`).join("")} />
+                  <span className="muted small"> {identity.map((x) => COLORS[x]).join(", ")}</span>
+                </>
+              ) : (
+                <span>—</span>
+              )}
+            </p>
+          )}
+          <p><span className="muted">Lands </span>{lands}</p>
+          <p><span className="muted">Sideboard / maybe </span>{count("side")} / {count("maybe")}</p>
+        </div>
       </div>
-      <div className="stat-list">
-        {(deck.format === "commander" || deck.format === "conquest") && (
-          <p>
-            <span className="muted">Color identity </span>
-            {identity.length ? (
-              <>
-                <ManaCost cost={identity.map((x) => `{${x}}`).join("")} />
-                <span className="muted small"> {identity.map((x) => COLORS[x]).join(", ")}</span>
-              </>
-            ) : (
-              <span>—</span>
-            )}
-          </p>
-        )}
-        <p><span className="muted">Lands </span>{lands}</p>
-        <p><span className="muted">Sideboard / maybe </span>{count("side")} / {count("maybe")}</p>
-      </div>
-    </div>
+    </section>
   );
 }
 

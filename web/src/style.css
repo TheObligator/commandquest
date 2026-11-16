@@ -13,6 +13,15 @@
   --ok: #6fcf97;
   --radius: 10px;
   --shadow: 0 10px 30px rgb(0 0 0 / 35%);
+  /* Card types in the mana curve */
+  --type-creature: #6fcf97;
+  --type-planeswalker: #c39bff;
+  --type-battle: #f09a72;
+  --type-instant: #5ea8f2;
+  --type-sorcery: #ef6b6b;
+  --type-artifact: #a9b2c3;
+  --type-enchantment: #e8c26a;
+  --type-other: #6d7486;
   font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color-scheme: dark;
   color: var(--text);
@@ -270,13 +279,38 @@ label.inline select { width: auto; padding: 5px 8px; }
 .warnings { list-style: none; margin: 0 0 16px; padding: 10px 14px; border-radius: 8px; background: rgb(224 168 79 / 8%); border: 1px solid rgb(224 168 79 / 30%); display: grid; gap: 4px; font-size: .9rem; }
 .warnings li::before { content: "⚠ "; color: var(--accent); }
 
-.stats { display: flex; gap: 28px; align-items: end; flex-wrap: wrap; padding-bottom: 16px; margin-bottom: 8px; border-bottom: 1px solid var(--line); }
-.curve { display: flex; gap: 6px; height: 100px; align-items: end; }
-.bar-col { display: flex; flex-direction: column; align-items: center; justify-content: end; height: 100%; width: 26px; gap: 3px; }
-.bar { width: 100%; min-height: 2px; background: linear-gradient(to top, var(--accent), var(--accent-2)); border-radius: 3px 3px 0 0; }
-.bar-n { font-size: .72rem; color: var(--muted); }
-.bar-label { font-size: .75rem; color: var(--muted); }
-.stat-list p { margin: 2px 0; display: flex; align-items: center; gap: 6px; }
+/* Stats under the deck: a mana curve split by card type (hover a bar for its cards), then a few counts. */
+.stats-body { display: flex; gap: 32px; align-items: flex-start; flex-wrap: wrap; }
+.stat-list { padding-top: 34px; }
+.stat-list p { margin: 4px 0; display: flex; align-items: center; gap: 6px; }
+.curve-chart { flex: 1 1 520px; max-width: 900px; margin: 0; }
+.curve-chart figcaption { font-weight: 600; margin-bottom: 12px; }
+.curve { display: flex; gap: clamp(8px, 2.5vw, 28px); height: 240px; align-items: end; padding: 0 4px; }
+.bar-col { position: relative; flex: 1 1 0; display: flex; flex-direction: column; align-items: center; justify-content: end; height: 100%; gap: 5px; outline: none; cursor: default; }
+.bar-col:focus-visible .bar { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+.bar { width: 100%; max-width: 64px; min-height: 2px; display: flex; flex-direction: column-reverse; border-radius: 5px 5px 0 0; overflow: hidden; background: var(--line); transition: filter .12s; }
+.bar-col.open .bar { filter: brightness(1.18); }
+.bar-seg { min-height: 2px; }
+.bar-seg + .bar-seg { border-bottom: 1px solid rgb(14 16 22 / 55%); }
+.bar-n { font-size: .85rem; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.bar-label { font-size: .85rem; color: var(--muted); padding-top: 4px; border-top: 1px solid var(--line); width: 100%; text-align: center; }
+.curve-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; list-style: none; padding: 0; margin: 14px 0 0; font-size: .85rem; color: var(--muted); }
+.curve-legend li, .curve-tip li { display: flex; align-items: baseline; gap: 6px; }
+.type-dot { flex: none; width: 10px; height: 10px; border-radius: 3px; align-self: center; }
+.curve-tip { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); z-index: 30; width: max-content; max-width: min(360px, 90vw); padding: 12px 14px; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); font-size: .85rem; pointer-events: none; }
+.curve-tip.start { left: 0; transform: none; }
+.curve-tip.end { left: auto; right: 0; transform: none; }
+.curve-tip-art { display: flex; gap: 6px; margin: 8px 0; }
+.curve-tip-art img { width: 72px; aspect-ratio: 488 / 680; border-radius: 4.75% / 3.5%; }
+.curve-tip ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 5px; }
+.curve-tip li { align-items: flex-start; }
+.curve-tip li .type-dot { margin-top: 4px; align-self: auto; }
+.curve-tip-type { flex: none; white-space: nowrap; }
+.curve-tip li .muted { line-height: 1.4; }
+@media (max-width: 600px) {
+  .curve { height: 180px; }
+  .curve-tip-art img { width: 56px; }
+}
 
 .board { margin-top: 18px; }
 .board h2 { font-size: 1.1rem; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
