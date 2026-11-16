@@ -20,6 +20,7 @@ import { columnSpans, columnsOf, stackColClass } from "../stackLayout";
 import { ManaCost } from "../components/ManaCost";
 import { Loading } from "../components/Spinner";
 import { CONQUEST, fitsIdentity, validateConquest, type OffIdentity } from "../formats/conquest";
+import { canPair, partnerQuery, partnerSlotLabel } from "../formats/partners";
 import { bestExtraColor, extraColorChoice, noMaxDeckSize, offIdentity } from "../formats/rulebreakers";
 import { PRINTING_PREFS, prefLabel, type PrintingPref } from "../printings";
 import * as scry from "../scryfall";
@@ -527,6 +528,7 @@ function DeckEditor({ initial }: { initial: Draft }) {
             onQty={setQty}
             onMove={moveCard}
             onPrinting={setPrinting}
+            onAddCommander={(c) => void addCard(c, "commander")}
             onExtraColor={(c) => change((d) => ({ ...d, extraColor: c }))}
             onBracket={(b) => change((d) => ({ ...d, bracket: b }))}
             onBracketTags={(t) => change((d) => ({ ...d, bracketTags: t.length ? t : undefined }))}
@@ -640,6 +642,7 @@ function DeckView(props: {
   onQty: (c: DeckCard, q: number) => void;
   onMove: (c: DeckCard, b: Board) => void;
   onPrinting: (c: DeckCard, p: scry.ScryCard) => void;
+  onAddCommander: (c: scry.ScryCard) => void;
   onExtraColor: (color: string | undefined) => void;
   onBracket: (b: number | undefined) => void;
   onBracketTags: (tags: string[]) => void;
@@ -650,6 +653,7 @@ function DeckView(props: {
     deck.format === "commander" && s?.game_changer ? <span className={className} title="Game Changer: Exhibition and Core decks allow none, Upgraded up to 3">GC</span> : null;
   const preview = useCardPreview();
   const [printingsFor, setPrintingsFor] = useState<DeckCard | null>(null);
+  const [pickingPartner, setPickingPartner] = useState(false);
   const [view, setView] = useCardView();
   const stacked = view === "stacked" || view === "spread";
   const [measure, stackCols] = useStackColumns();
@@ -772,13 +776,30 @@ function DeckView(props: {
     </div>
   );
   /** Cards that aren't split by type (commander, considering): rows, a grid, or columns of up to 10. */
-  const plain = (cards: DeckCard[]) => {
-    if (view === "list") return <ul className="flat">{cards.map(row)}</ul>;
-    if (view === "grid") return <div className="card-tiles">{cards.map(tile)}</div>;
+  const plain = (cards: DeckCard[], extra?: React.ReactNode) => {
+    if (view === "list") return <ul className="flat">{cards.map(row)}{extra && <li>{extra}</li>}</ul>;
+    if (view === "grid") return <div className="card-tiles">{cards.map(tile)}{extra}</div>;
     const cols: DeckCard[][] = [];
     for (let i = 0; i < cards.length; i += 10) cols.push(cards.slice(i, i + 10));
-    return <div className="stack-groups" ref={measure}>{cols.map((g, i) => stack(g, String(i)))}</div>;
+    return (
+      <div className="stack-groups" ref={measure}>
+        {cols.map((g, i) => stack(g, String(i)))}
+        {extra && <div className={stackColClass(1)}>{extra}</div>}
+      </div>
+    );
   };
+
+  // One commander that can have a second one (partner, Background, Doctor's companion, ...): an
+  // empty slot beside it that opens a picker of the cards it can pair with.
+  const soloCommander = deck.cards.filter((c) => c.board === "commander");
+  const leadCard = soloCommander.length === 1 && soloCommander[0].quantity === 1 ? scry.cached(soloCommander[0]) : undefined;
+  const slotLabel = (deck.format === "commander" || deck.format === "conquest") && leadCard ? partnerSlotLabel(leadCard) : undefined;
+  const partnerSlot = slotLabel ? (
+    <button className={`partner-slot ${view === "list" ? "row" : "tile"}`} onClick={() => setPickingPartner(true)} title={`Choose a second commander for ${leadCard!.name}`}>
+      <span className="partner-plus" aria-hidden="true">+</span>
+      <span>Add {slotLabel}</span>
+    </button>
+  ) : undefined;
 
   return (
     <section className="panel deck-view">
@@ -846,7 +867,7 @@ function DeckView(props: {
               </div>
             );
           } else {
-            body = plain([...cards].sort((a, z) => a.name.localeCompare(z.name)));
+            body = plain([...cards].sort((a, z) => a.name.localeCompare(z.name)), b.id === "commander" ? partnerSlot : undefined);
           }
           return (
             <section key={b.id} className="board">
@@ -877,6 +898,9 @@ function DeckView(props: {
       <DeckTokens deckId={deck.id} cards={deck.cards} />
       {preview.element}
       {printingsFor && <Printings card={printingsFor} onPick={(p) => props.onPrinting(printingsFor, p)} onClose={() => setPrintingsFor(null)} />}
+      {pickingPartner && leadCard && slotLabel && (
+        <PartnerPicker commander={leadCard} label={slotLabel} onPick={props.onAddCommander} onClose={() => setPickingPartner(false)} />
+      )}
     </section>
   );
 }
@@ -940,6 +964,9 @@ function deckWarnings(deck: Draft, missing: string[], count: (b?: Board) => numb
     const total = count();
     if (!cmdrs.length) w.push("No commander yet. Use ★ on a search result or move a card to the Commander board.");
     if (cmdrs.reduce((n, c) => n + c.quantity, 0) > 2) w.push("A deck can have at most two commanders.");
+    else if (cmdrs.length === 2 && cmdrCards.length === 2 && !canPair(cmdrCards[0], cmdrCards[1])) {
+      w.push(`${cmdrs[0].name} and ${cmdrs[1].name} can't be commanders together: two commanders need partner, partner with each other, a Background, or a Doctor and companion.`);
+    }
     if (noMaxDeckSize(cmdrCards)) {
       if (total < 100) w.push(`Commander decks have at least 100 cards (you have ${total}). Your commander lifts the maximum.`);
     } else if (total !== 100) w.push(`Commander decks have exactly 100 cards (you have ${total}).`);
@@ -1075,5 +1102,72 @@ function Printings({ card, onPick, onClose }: { card: DeckCard; onPick: (p: scry
   );
 }
 
-
-
+/** The cards that can be the second commander beside `commander`, from Scryfall. */
+function PartnerPicker({ commander, label, onPick, onClose }: { commander: scry.ScryCard; label: string; onPick: (c: scry.ScryCard) => void; onClose: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const [cards, setCards] = useState<scry.ScryCard[] | null>(null);
+  const [next, setNext] = useState<string>();
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState("");
+  const support = useCardSupport();
+  const fits = (cs: scry.ScryCard[]) => cs.filter((c) => canPair(commander, c));
+  useEffect(() => {
+    ref.current?.showModal();
+    const q = partnerQuery(commander);
+    if (!q) return setCards([]);
+    scry.search(q).then(
+      (p) => (setCards(fits(p.cards)), setNext(p.nextPage)),
+      (e) => setError(errorMessage(e)),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commander.id]);
+  async function more() {
+    if (!next) return;
+    setLoadingMore(true);
+    try {
+      const p = await scry.nextPage(next);
+      setCards((c) => [...(c ?? []), ...fits(p.cards)]);
+      setNext(p.nextPage);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+  return (
+    <dialog ref={ref} className="printings partner-picker" onClose={onClose} onClick={(e) => closeOnBackdrop(e.nativeEvent, ref.current)}>
+      <button className="dialog-close" aria-label="Close" onClick={() => ref.current?.close()}>×</button>
+      <div className="dialog-head">
+        <h3>Add {label}</h3>
+        <p className="muted small">Cards that can be your second commander beside {commander.name}.</p>
+      </div>
+      {error ? <p className="form-error">{error}</p> : !cards ? <p className="muted">Loading…</p> : !cards.length ? <p className="muted">Scryfall has no cards that pair with {commander.name}.</p> : (
+        <div className="results">
+          {cards.map((c) => {
+            const st = support?.status(c);
+            return (
+              <button
+                key={c.id}
+                className="result-img"
+                title={st && !st.works ? `${c.name}: ${st.reason}` : `Add ${c.name} as a commander`}
+                onClick={() => {
+                  onPick(c);
+                  ref.current?.close();
+                }}
+              >
+                {scry.imageUrl(c, "normal") ? <img src={scry.imageUrl(c, "normal")} alt={c.name} loading="lazy" /> : <span className="noimg">{c.name}</span>}
+                <span className="small">{c.name}</span>
+                {st && !st.works && <span className="small form-error">{st.missing ? "Not playable yet" : "Known issue"}</span>}
+              </button>
+            );
+          })}
+          {next && (
+            <button className="btn ghost wide partner-more" disabled={loadingMore} onClick={() => void more()}>
+              {loadingMore ? "Loading…" : "Load more"}
+            </button>
+          )}
+        </div>
+      )}
+    </dialog>
+  );
+}
