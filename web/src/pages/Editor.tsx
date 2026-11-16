@@ -10,6 +10,7 @@ import { useCardSupport, type CardSupport } from "../cardsupport";
 import { mergeDuplicates, parseDecklist, writeDecklist, type ParsedToken } from "../decklist";
 import { toast } from "../dom";
 import { CardMenu } from "../components/CardMenu";
+import { ColorStats } from "../components/ColorStats";
 import { DeckBracket } from "../components/DeckBracket";
 import { deckAverages } from "../deckstats";
 import { DeckTokens } from "../components/DeckTokens";
@@ -790,6 +791,14 @@ function DeckView(props: {
           <a href={CONQUEST.rulesUrl} target="_blank" rel="noopener">Full rules ↗</a>
         </p>
       )}
+      <DeckBracket
+        cards={deck.cards}
+        commander={deck.format === "commander"}
+        bracket={deck.bracket}
+        tags={deck.bracketTags ?? []}
+        onBracket={props.onBracket}
+        onTags={props.onBracketTags}
+      />
       <CardViewToggle view={view} onChange={setView} />
       {(() => {
         // A few main-deck planeswalkers sit beside the commander(s) instead of further down.
@@ -861,13 +870,9 @@ function DeckView(props: {
         });
       })()}
       <Stats deck={deck} count={count} onExtraColor={props.onExtraColor} />
-      <DeckBracket
+      <ColorStats
         cards={deck.cards}
-        commander={deck.format === "commander"}
-        bracket={deck.bracket}
-        tags={deck.bracketTags ?? []}
-        onBracket={props.onBracket}
-        onTags={props.onBracketTags}
+        identity={deck.format === "commander" || deck.format === "conquest" ? [...new Set(deck.cards.filter((c) => c.board === "commander").flatMap((c) => scry.cached(c)?.color_identity ?? []))] : undefined}
       />
       <DeckTokens deckId={deck.id} cards={deck.cards} />
       {preview.element}

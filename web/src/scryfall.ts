@@ -54,6 +54,8 @@ export interface ScryCard {
   id: string;
   /** On the Commander Game Changers list (Commander Brackets). */
   game_changer?: boolean;
+  /** Colors of mana the card can make (W, U, B, R, G, C). */
+  produced_mana?: string[];
   name: string;
   layout: string;
   mana_cost?: string;
@@ -134,7 +136,7 @@ async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
 // ---- Cache (memory + localStorage, 7 days) ---------------------------------------
 
 // Bump the version when `trim` keeps new fields, so old entries without them are dropped.
-const STORE_KEY = "cq.scryfall.cards.v4"; // v4 keeps game_changer
+const STORE_KEY = "cq.scryfall.cards.v5"; // v5 keeps game_changer and produced_mana
 // Card data rarely changes (a ban updates legality), and a deck opened again within the week then
 // needs no lookups. The size cap, not the age, is what keeps this within localStorage's ~5 MB.
 const TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -148,7 +150,7 @@ const storedAt = new Map<string, number>();
 function trim(c: ScryCard): ScryCard {
   const pick = <O extends object>(o: O, keys: (keyof O)[]) =>
     Object.fromEntries(keys.filter((k) => o[k] !== undefined).map((k) => [k, o[k]])) as O;
-  const card = pick(c, ["id", "game_changer", "name", "layout", "mana_cost", "cmc", "type_line", "oracle_text", "flavor_text", "power", "toughness", "loyalty", "defense", "color_identity", "color_indicator", "colors", "keywords", "reserved", "set", "set_name", "collector_number", "rarity", "artist", "released_at", "scryfall_uri", "legalities", "image_uris"]);
+  const card = pick(c, ["id", "game_changer", "produced_mana", "name", "layout", "mana_cost", "cmc", "type_line", "oracle_text", "flavor_text", "power", "toughness", "loyalty", "defense", "color_identity", "color_indicator", "colors", "keywords", "reserved", "set", "set_name", "collector_number", "rarity", "artist", "released_at", "scryfall_uri", "legalities", "image_uris"]);
   const tokens = c.all_parts?.filter((p) => p.component === "token" && p.id !== c.id);
   if (tokens?.length) card.all_parts = tokens.map((p) => ({ id: p.id, component: p.component, name: p.name, type_line: p.type_line }));
   else delete card.all_parts;
@@ -169,6 +171,7 @@ function loadStore() {
     localStorage.removeItem("cq.scryfall.cards.v1");
     localStorage.removeItem("cq.scryfall.cards.v2");
     localStorage.removeItem("cq.scryfall.cards.v3");
+    localStorage.removeItem("cq.scryfall.cards.v4");
     const raw = localStorage.getItem(STORE_KEY);
     if (!raw) return;
     const now = Date.now();

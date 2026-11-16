@@ -658,19 +658,36 @@ table.hotkeys { width: 100%; border-collapse: collapse; }
 .reason-tag:disabled { opacity: .4; cursor: default; }
 .reason-input { width: 150px; font-size: .78rem; padding: 3px 10px; border-radius: 99px; }
 .glance-head { margin: 4px 0 8px; }
-.glance-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
-.glance-tile { display: grid; justify-items: start; gap: 2px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg-2); color: var(--text); cursor: pointer; text-align: left; transition: border-color .12s; }
+/* Small enough that all 11 fit on one row on a laptop-width deck; they wrap below that. */
+.glance-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: 5px; }
+.glance-tile { display: grid; justify-items: center; gap: 1px; padding: 5px 4px 6px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg-2); color: var(--text); cursor: pointer; text-align: center; transition: border-color .12s; }
 .glance-tile:hover, .glance-tile.open { border-color: var(--accent); }
 .glance-tile.open { background: var(--panel-2); }
 .glance-tile.zero .glance-n { color: var(--muted); }
-.glance-n { font-size: 1.5rem; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--accent-2); }
+.glance-n { font-size: 1.15rem; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--accent-2); }
 .glance-tile.is-gameChanger:not(.zero) .glance-n { color: #d6bfff; }
 .glance-tile.is-massLandDenial:not(.zero) .glance-n { color: var(--danger); }
-.glance-label { font-size: .8rem; color: var(--muted); }
+.glance-label { font-size: .68rem; line-height: 1.15; color: var(--muted); }
 .glance-list { margin-top: 10px; padding: 10px 14px; border-radius: 8px; background: var(--bg-2); border: 1px solid var(--line); }
 .glance-list p { margin: 0 0 6px; }
 .glance-list ul { columns: 220px; column-gap: 24px; margin: 0; padding-left: 18px; font-size: .9rem; }
-.glance-source { margin: 10px 0 0; }
+.glance-source { margin: 8px 0 0; }
+.glance-panel { margin-bottom: 8px; }
+
+/* Colors under the stats (src/components/ColorStats.tsx) */
+.color-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; max-width: 760px; }
+.color-col { display: grid; justify-items: center; gap: 8px; padding: 14px 6px 12px; border-radius: 10px; background: var(--bg-2); border: 1px solid var(--line); text-align: center; }
+.color-sym { width: 52px; height: 52px; border-radius: 50%; box-shadow: 0 2px 8px rgb(0 0 0 / 40%); }
+.color-row { display: grid; justify-items: center; cursor: help; }
+.color-big { font-size: 1.25rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.color-col.unused { opacity: .35; }
+.color-col.unused .color-sym { filter: grayscale(1); box-shadow: none; }
+.color-note { margin: 10px 0 0; max-width: 760px; }
+@media (max-width: 560px) {
+  .color-grid { gap: 5px; }
+  .color-sym { width: 36px; height: 36px; }
+  .color-big { font-size: 1rem; }
+}
 @media (max-width: 560px) {
   .bracket-pick { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
   .bracket-name { font-size: .64rem; }
