@@ -10,7 +10,7 @@ export function Landing() {
           <p className="eyebrow">Four-player Commander in your browser</p>
           <h1>Gather your pod. <span className="accent">Let the rules engine judge.</span></h1>
           <p className="lead">
-            CommandQuest runs full games of Magic on the Forge rules engine. You bring the deck, it handles the stack, the triggers and the combat math.
+            Free, in any browser, nothing to install. You bring the deck, and the Forge rules engine handles the stack, the triggers and the combat math for more than 30,000 cards.
           </p>
           <div className="cta">
             <a href="#/play" className="btn big">Play</a>
@@ -20,8 +20,8 @@ export function Landing() {
         </div>
       </section>
       <section className="features">
-        <Feature icon="⚔" title="Play" href="#/play" text="Commander pods of up to four, against friends or AI opponents. Coming soon." />
-        <Feature icon="🗂" title="Deck builder" href="#/decks" text="Search every card on Scryfall, sort by type, check your curve and color identity." />
+        <Feature icon="⚔" title="Play" href="#/play" text="Sit down with up to three AI opponents under Commander rules. Tables with friends are coming next." />
+        <Feature icon="🗂" title="Deck builder" href="#/decks" text="Search every card on Scryfall, sort by type, check your curve and color identity. Start from any Commander precon." />
         <Feature icon="⇩" title="Import anywhere" href="#/decks/new?import=1" text="Paste a Moxfield or Archidekt link, a text export, or upload a .txt file." />
         <Feature icon="☁" title="Saved to your account" href={isAuthenticated ? "#/decks" : "#/signin"} text="Your decks follow you to any device once you sign in." />
       </section>
