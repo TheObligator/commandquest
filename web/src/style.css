@@ -62,7 +62,7 @@ input, select, textarea {
   min-width: 0;
 }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
-input[type="checkbox"] { width: auto; accent-color: var(--accent); }
+input[type="checkbox"], input[type="radio"] { width: auto; accent-color: var(--accent); }
 input[type="file"] { padding: 7px; }
 textarea { resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; }
 label { display: grid; gap: 6px; font-weight: 500; font-size: .92rem; }
@@ -584,7 +584,10 @@ button.text-link:hover { text-decoration: underline; }
 .settings-section h2 { margin: 0; font-size: 1.1rem; }
 .settings-section > p { margin: 0; }
 .printing-prefs { display: grid; gap: 8px; }
-.printing-pref { display: flex; gap: 8px; align-items: baseline; cursor: pointer; }
+.printing-pref { display: flex; gap: 10px; align-items: baseline; cursor: pointer; font-weight: 400; }
+.printing-pref > input { flex: none; margin: 0; padding: 0; }
+.printing-pref > span { font-weight: 500; }
+.printing-pref > span > .small { font-weight: 400; }
 .printing-pref > span > .small { display: block; }
 .username-form { display: flex; gap: 8px; width: 100%; max-width: 420px; }
 .username-form input { flex: 1; }
