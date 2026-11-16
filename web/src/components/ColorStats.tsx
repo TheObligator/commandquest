@@ -1,12 +1,26 @@
-// Under the deck stats: for each of W U B R G, the colored mana symbols on the deck's cards and
-// how many of its lands make that color. Colors the deck doesn't use are greyed out.
+// Under the deck stats: for each of W U B R G, a bar for its share of the colored mana symbols in
+// the deck's costs and a bar for its share of what the deck's mana sources can make, so the two
+// can be compared. Colors the deck doesn't use are greyed out.
 import type { DeckCard } from "../../convex/model/deckRules";
-import { WUBRG, colorPips, landSources, percent } from "../colorstats";
+import { WUBRG, colorPips, manaProduction, type Color } from "../colorstats";
 import * as scry from "../scryfall";
 
 const NAMES = { W: "White", U: "Blue", B: "Black", R: "Red", G: "Green" } as const;
 
 const costOf = (s: scry.ScryCard) => s.mana_cost || s.card_faces?.map((f) => f.mana_cost ?? "").join("");
+
+function Bar({ label, n, total, color, tip }: { label: string; n: number; total: number; color: Color; tip: string }) {
+  const pct = total ? Math.round((n / total) * 100) : 0;
+  return (
+    <div className="color-bar" title={tip} role="meter" aria-label={`${label}: ${pct}%`} aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+      <div className={`color-fill fill-${color}`} style={{ width: `${pct}%` }} />
+      <span className="color-bar-text">
+        <span>{label}</span>
+        <strong>{pct}%</strong>
+      </span>
+    </div>
+  );
+}
 
 export function ColorStats({ cards, identity }: { cards: DeckCard[]; /** The commander's colors, in Commander-style decks. */ identity?: string[] }) {
   const played = cards.flatMap((c) => {
@@ -15,10 +29,12 @@ export function ColorStats({ cards, identity }: { cards: DeckCard[]; /** The com
   });
   const pips = colorPips(played.map((e) => ({ quantity: e.quantity, manaCost: costOf(e.card) })));
   const pipTotal = WUBRG.reduce((n, c) => n + pips[c], 0);
-  const lands = landSources(
-    played.filter((e) => e.board === "main" && scry.primaryType(e.card) === "Land").map((e) => ({ quantity: e.quantity, produced: e.card.produced_mana })),
+  const made = manaProduction(
+    played.filter((e) => e.board === "main").map((e) => ({ quantity: e.quantity, produced: e.card.produced_mana })),
+    identity?.length ? identity : undefined,
   );
-  const used = (c: string) => pips[c as keyof typeof pips] > 0 || !!identity?.includes(c);
+  const madeTotal = WUBRG.reduce((n, c) => n + made[c], 0);
+  const used = (c: Color) => pips[c] > 0 || !!identity?.includes(c);
 
   return (
     <section className="board color-stats">
@@ -27,20 +43,14 @@ export function ColorStats({ cards, identity }: { cards: DeckCard[]; /** The com
         {WUBRG.map((c) => (
           <div key={c} className={`color-col${used(c) ? "" : " unused"}`}>
             <img className="color-sym" src={`https://svgs.scryfall.io/card-symbols/${c}.svg`} alt={NAMES[c]} title={NAMES[c]} />
-            <div className="color-row" title={`${pips[c]} of the deck's ${pipTotal} colored mana symbols are ${NAMES[c].toLowerCase()}`}>
-              <span className="color-big">{percent(pips[c], pipTotal)}</span>
-              <span className="muted small">{pips[c]} symbol{pips[c] === 1 ? "" : "s"}</span>
-            </div>
-            <div className="color-row" title={`${lands.byColor[c]} of ${lands.total} lands can make ${NAMES[c].toLowerCase()} mana`}>
-              <span className="color-big">{percent(lands.byColor[c], lands.total)}</span>
-              <span className="muted small">{lands.byColor[c]} land{lands.byColor[c] === 1 ? "" : "s"}</span>
-            </div>
+            <Bar label="Costs" n={pips[c]} total={pipTotal} color={c} tip={`${pips[c]} of the ${pipTotal} colored mana symbols in the deck's costs are ${NAMES[c].toLowerCase()}`} />
+            <Bar label="Mana" n={made[c]} total={madeTotal} color={c} tip={`${made[c]} of the ${madeTotal} colors the deck's mana sources can make are ${NAMES[c].toLowerCase()}`} />
           </div>
         ))}
       </div>
       <p className="muted small color-note">
-        Top: share of the colored mana symbols in the main deck's and commander's costs (hybrid counts for each color).
-        Bottom: share of the main deck's {lands.total} lands that can make that color.
+        Costs: each color's share of the mana symbols on the cards (commander included; hybrid counts for each color). Mana: its share of what the deck's
+        mana sources can make: lands, rocks, dorks, rituals and Treasure makers.
       </p>
     </section>
   );

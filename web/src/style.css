@@ -678,15 +678,25 @@ table.hotkeys { width: 100%; border-collapse: collapse; }
 
 /* Colors under the stats (src/components/ColorStats.tsx) */
 .color-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; max-width: 760px; }
-.color-col { display: grid; justify-items: center; gap: 8px; padding: 14px 6px 12px; border-radius: 10px; background: var(--bg-2); border: 1px solid var(--line); text-align: center; }
-.color-sym { width: 52px; height: 52px; border-radius: 50%; box-shadow: 0 2px 8px rgb(0 0 0 / 40%); }
-.color-row { display: grid; justify-items: center; cursor: help; }
-.color-big { font-size: 1.25rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.color-col { display: grid; justify-items: center; gap: 7px; padding: 14px 10px 12px; border-radius: 10px; background: var(--bg-2); border: 1px solid var(--line); text-align: center; }
+.color-sym { width: 52px; height: 52px; border-radius: 50%; box-shadow: 0 2px 8px rgb(0 0 0 / 40%); margin-bottom: 2px; }
+/* A bar filled to the color's share, with "Costs 38%" written over it. */
+.color-bar { position: relative; width: 100%; height: 24px; border-radius: 6px; background: var(--panel); border: 1px solid var(--line); overflow: hidden; cursor: help; }
+.color-fill { position: absolute; inset: 0 auto 0 0; transition: width .3s; }
+.fill-W { background: #d9cc9c; }
+.fill-U { background: #3f86c9; }
+.fill-B { background: #7d6f86; }
+.fill-R { background: #d4553a; }
+.fill-G { background: #3d9a5c; }
+.color-bar-text { position: relative; display: flex; justify-content: space-between; align-items: center; height: 100%; padding: 0 7px; font-size: .74rem; color: #fff; text-shadow: 0 1px 2px rgb(0 0 0 / 85%); }
+.color-bar-text strong { font-variant-numeric: tabular-nums; }
 .color-col.unused { opacity: .35; }
-.color-col.unused .color-sym { filter: grayscale(1); box-shadow: none; }
+.color-col.unused .color-sym, .color-col.unused .color-fill { filter: grayscale(1); box-shadow: none; }
 .color-note { margin: 10px 0 0; max-width: 760px; }
 @media (max-width: 560px) {
   .color-grid { gap: 5px; }
   .color-sym { width: 36px; height: 36px; }
-  .color-big { font-size: 1rem; }
+  .color-col { padding: 10px 4px; }
+  .color-bar-text { flex-direction: column; justify-content: center; line-height: 1; font-size: .62rem; padding: 0 2px; }
+  .color-bar { height: 30px; }
 }

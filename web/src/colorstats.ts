@@ -20,15 +20,22 @@ export function colorPips(cards: { quantity: number; manaCost?: string }[]): Rec
   return out;
 }
 
-/** How many lands (copies counted) can make each color, and how many lands there are. */
-export function landSources(lands: { quantity: number; produced?: string[] }[]): { total: number; byColor: Record<Color, number> } {
-  const byColor = zero();
-  let total = 0;
-  for (const l of lands) {
-    total += l.quantity;
-    for (const color of WUBRG) if (l.produced?.includes(color)) byColor[color] += l.quantity;
+/**
+ * The colors the deck's mana sources (lands, rocks, dorks, rituals, Treasure makers: anything
+ * Scryfall says produces mana) can make: one per color a card makes, times its copies. With
+ * `identity`, a card that makes any color counts only for the deck's colors (an Arcane Signet in
+ * a green-white deck makes green or white).
+ */
+export function manaProduction(cards: { quantity: number; produced?: string[] }[], identity?: string[]): Record<Color, number> {
+  const out = zero();
+  for (const c of cards) {
+    for (const color of WUBRG) {
+      if (!c.produced?.includes(color)) continue;
+      if (identity && !identity.includes(color)) continue;
+      out[color] += c.quantity;
+    }
   }
-  return { total, byColor };
+  return out;
 }
 
 /** n as a whole percentage of total ("0%" when total is 0). */
