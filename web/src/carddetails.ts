@@ -1,9 +1,9 @@
 // Card details dialog: Scryfall's card image (both faces), rules text, artist, printing and
-// format legality, with a link back to the card on Scryfall.
+// format legality, official rulings, with a link back to the card on Scryfall.
 
 import { h, manaCost, rulesText } from "./dom";
 import { cardLegality } from "./formats/conquest";
-import { artistOf, hasBackImage, imageUrl, type CardFace, type ScryCard } from "./scryfall";
+import { artistOf, hasBackImage, imageUrl, rulings, type CardFace, type ScryCard } from "./scryfall";
 
 const LEGALITY_FORMATS: [string, string][] = [
   ["commander", "Commander"], ["standard", "Standard"], ["pioneer", "Pioneer"], ["modern", "Modern"],
@@ -50,6 +50,7 @@ export function showCardDetails(card: ScryCard, actions: CardDetailAction[] = []
             return h("span", { class: `legal is-${v}`, title: LEGALITY_LABEL[v] ?? v }, label);
           }),
         ),
+        rulingsSection(card),
         h("div", { class: "detail-actions" },
           ...actions.map((a) => h("button", { class: "btn small", onclick: () => { a.run(); dialog.close(); } }, a.label)),
           h("a", { class: "btn ghost small", href: card.scryfall_uri, target: "_blank", rel: "noopener" }, "View on Scryfall ↗"),
@@ -61,6 +62,23 @@ export function showCardDetails(card: ScryCard, actions: CardDetailAction[] = []
   dialog.addEventListener("click", (e) => closeOnBackdrop(e, dialog));
   document.body.append(dialog);
   dialog.showModal();
+}
+
+/** The card's official rulings, filled in once Scryfall answers. Left out when there are none. */
+function rulingsSection(card: ScryCard): HTMLElement {
+  const count = h("span", { class: "muted" });
+  const body = h("div", null, h("p", { class: "muted small" }, "Looking up rulings…"));
+  const section = h("details", { class: "detail-rulings" }, h("summary", null, h("h3", null, "Rulings ", count)), body);
+  rulings(card.name).then(
+    (list) => {
+      if (!list.length) return section.remove();
+      count.textContent = `(${list.length})`;
+      section.open = list.length <= 3;
+      body.replaceChildren(h("ul", null, ...list.map((r) => h("li", null, h("time", { datetime: r.published_at }, r.published_at), rulesText(r.comment)))));
+    },
+    () => body.replaceChildren(h("p", { class: "muted small" }, "Couldn't load rulings from Scryfall.")),
+  );
+  return section;
 }
 
 /** Conquest isn't a Scryfall format, so its legality comes from our own rules. */

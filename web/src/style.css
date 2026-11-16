@@ -357,6 +357,18 @@ dialog.card-detail { width: min(860px, calc(100vw - 32px)); max-height: 90vh; ba
 .legal.is-legal { color: var(--ok); border-color: rgb(111 207 151 / 40%); }
 .legal.is-banned { color: var(--danger); border-color: rgb(239 107 107 / 40%); }
 .legal.is-restricted { color: var(--accent); border-color: rgb(224 168 79 / 40%); }
+.detail-rulings { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
+.detail-rulings summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px; }
+.detail-rulings summary::-webkit-details-marker { display: none; }
+.detail-rulings summary::after { content: "▸"; color: var(--muted); font-size: .8rem; }
+.detail-rulings[open] summary::after { content: "▾"; }
+.detail-rulings h3 { margin: 0; font-size: 1rem; }
+.detail-rulings h3 .muted { font-weight: 400; }
+.detail-rulings ul { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+.detail-rulings li { display: grid; gap: 2px; font-size: .9rem; line-height: 1.5; }
+.detail-rulings li .rules p { margin: 0; }
+.detail-rulings time { font-size: .75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.detail-rulings > div > p { margin: 8px 0 0; }
 .detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
 .printings .result-img { gap: 2px; }
 .printings .result-img:hover img { transform: none; outline: 2px solid var(--accent-2); }
