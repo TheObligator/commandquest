@@ -3,6 +3,7 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { navigate, useRoute } from "./router";
 import { UpdateNotice } from "./UpdateNotice";
+import { BrandMark } from "../components/BrandMark";
 
 /** `full`: the page uses the whole window width (the game table). */
 export function Layout({ children, full }: { children: React.ReactNode; full?: boolean }) {
@@ -13,7 +14,7 @@ export function Layout({ children, full }: { children: React.ReactNode; full?: b
   return (
     <>
       <header className="topbar">
-        <a href="#/" className="brand"><span className="brand-mark">◆</span>CommandQuest</a>
+        <a href="#/" className="brand"><BrandMark />CommandQuest</a>
         <nav>
           {nav("/play", "Play")}
           {nav("/decks", "Decks")}

@@ -100,7 +100,7 @@ label.inline select { width: auto; padding: 5px 8px; }
 }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 1.15rem; color: var(--text); letter-spacing: .01em; }
 .brand:hover { text-decoration: none; }
-.brand-mark { color: var(--accent); }
+.brand-mark { flex: none; }
 .topbar nav { display: flex; gap: 4px; }
 .topbar nav a { color: var(--muted); padding: 6px 12px; border-radius: 8px; font-weight: 500; }
 .topbar nav a:hover { color: var(--text); text-decoration: none; background: var(--panel); }
