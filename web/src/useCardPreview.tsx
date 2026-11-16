@@ -26,7 +26,12 @@ export function useCardPreview() {
       const url = scry.imageUrl(c, "normal");
       if (url) setPreview({ url, ...position(e) });
     },
-    onMouseMove: (e: React.MouseEvent) => setPreview((p) => (p ? { ...p, ...position(e) } : p)),
+    // Measure now: React clears the event's currentTarget once the handler returns, and a state
+    // updater runs later (that blanked the page).
+    onMouseMove: (e: React.MouseEvent) => {
+      const at = position(e);
+      setPreview((p) => (p ? { ...p, ...at } : p));
+    },
     onMouseLeave: () => setPreview(null),
   });
   /** Render inside any open modal <dialog>, or the dialog's top layer hides it. */
