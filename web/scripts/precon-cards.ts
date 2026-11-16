@@ -21,19 +21,26 @@ interface ScryCard {
   name: string;
   set: string;
   collector_number: string;
-  cmc: number;
-  type_line: string;
+  layout?: string;
+  cmc?: number;
+  type_line?: string;
   mana_cost?: string;
-  card_faces?: { name: string; mana_cost?: string; image_uris?: unknown }[];
+  card_faces?: { name: string; mana_cost?: string; cmc?: number; type_line?: string; image_uris?: unknown }[];
 }
 
 type Identifier = { set: string; collector_number: string } | { name: string; set?: string };
 
-/** What we keep of a Scryfall card. */
+/** What we keep of a Scryfall card. A reversible card (both sides the same card, as in some Secret
+ *  Lairs) has its cost and type only on its faces, so those come from the front. */
 export function toData(c: ScryCard): PreconCardData {
-  const mana = c.mana_cost ?? c.card_faces?.map((f) => f.mana_cost).filter(Boolean).join(" // ") ?? "";
-  return [c.id, c.set, c.collector_number, c.cmc, c.type_line, mana, c.card_faces?.[1]?.image_uris ? 1 : 0];
+  const front = c.card_faces?.[0];
+  const faceCosts = c.layout === "reversible_card" ? [front?.mana_cost] : c.card_faces?.map((f) => f.mana_cost);
+  const mana = c.mana_cost ?? faceCosts?.filter(Boolean).join(" // ") ?? "";
+  return [c.id, c.set, c.collector_number, c.cmc ?? front?.cmc ?? 0, c.type_line ?? front?.type_line ?? "", mana, c.card_faces?.[1]?.image_uris ? 1 : 0];
 }
+
+/** Whether saved data is complete (files from before reversible cards were handled lack a type). */
+const complete = (d: PreconCardData | null) => d === null || (typeof d[3] === "number" && typeof d[4] === "string");
 
 /** How Scryfall's collection lookup finds a card key: by set and number, name and set, or just name. */
 export function identifierFor(key: string, byNameOnly = false): Identifier {
@@ -110,7 +117,7 @@ export async function writePreconCards(decks: Precon[], dir: string, log: (s: st
     }
     try {
       const file = JSON.parse(readFileSync(join(dir, f), "utf8")) as PreconCardsFile;
-      for (const [k, v] of Object.entries(file.cards)) known.set(k, v);
+      for (const [k, v] of Object.entries(file.cards)) if (complete(v)) known.set(k, v);
     } catch {
       // Unreadable: it's rewritten below.
     }

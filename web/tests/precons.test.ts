@@ -86,6 +86,10 @@ test("precon card data: lookups by set and number, name and set, or name, and wh
   assert.ok(answers(dfc, { name: "Delver of Secrets", set: "isd" }) && answers(dfc, { set: "isd", collector_number: "51" }));
   assert.ok(!answers(dfc, { name: "Delver of Secrets", set: "m21" }));
   assert.deepEqual(toData(dfc), ["abc", "isd", "51", 1, "Creature — Human Wizard // Creature — Human Insect", "{U}", 1]);
+  // A reversible card keeps its cost and type only on its faces, which are the same card twice.
+  const face = { name: "Okaun, Eye of Chaos", mana_cost: "{4}{R}", cmc: 5, type_line: "Legendary Creature — Cyclops Berserker", image_uris: {} };
+  const reversible = { id: "def", name: "Okaun, Eye of Chaos // Okaun, Eye of Chaos", layout: "reversible_card", set: "sld", collector_number: "380", card_faces: [face, face] };
+  assert.deepEqual(toData(reversible), ["def", "sld", "380", 5, "Legendary Creature — Cyclops Berserker", "{4}{R}", 1]);
   assert.equal(cardImage("fc817e07-c1f3", "normal"), "https://cards.scryfall.io/normal/front/f/c/fc817e07-c1f3.jpg");
 });
 
