@@ -98,8 +98,6 @@ function TokenPrintings({ token, onPick, onClose }: { token: DeckToken; onPick: 
       .catch((e) => setError(errorMessage(e)));
   }, [token.identity]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** The deck's cards that make this printing, e.g. "Lathril, Blade of the Elves, Elvish Warmaster". */
-  const fromCards = (id: string) => [...new Set(token.sources.filter((s) => s.tokenId === id).map((s) => s.card))].join(", ");
   return (
     <dialog ref={ref} className="printings" onClose={onClose} onClick={(e) => closeOnBackdrop(e.nativeEvent, ref.current)}>
       <button className="dialog-close" aria-label="Close" onClick={() => ref.current?.close()}>×</button>
@@ -123,7 +121,6 @@ function TokenPrintings({ token, onPick, onClose }: { token: DeckToken; onPick: 
                 {p.set.toUpperCase()} #{p.collector_number}
                 {p.id === token.defaultId && " · default"}
               </span>
-              {fromCards(p.id) && <span className="small muted">from {fromCards(p.id)}</span>}
               {scry.artistOf(p) && <span className="small muted">{scry.artistOf(p)}</span>}
             </button>
           ))}
