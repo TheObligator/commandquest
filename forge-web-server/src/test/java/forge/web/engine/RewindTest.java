@@ -258,7 +258,9 @@ public class RewindTest {
                 PlayerView me = (PlayerView) prompt[0];
                 IGameController ctl = session.controller("You", me);
                 Player mine = session.game().getPlayer(me.getId());
-                var input = ((forge.player.PlayerControllerHuman) mine.getController()).getInputQueue().getInput();
+                // Not mine.getController(): while Forge works out which of your cards are playable it swaps in an AI
+                // controller for a moment, on the game thread, so reading it from here can catch the AI one.
+                var input = ((forge.player.PlayerControllerHuman) ctl).getInputQueue().getInput();
                 boolean myTurn = me.equals(gv.getPlayerTurn());
                 if (input instanceof forge.gamemodes.match.input.InputPayMana) {
                     FThreads.invokeInEdtLater(ctl::selectButtonOk);   // auto-pay
@@ -336,7 +338,7 @@ public class RewindTest {
             GameView end = session.view();
             Player you = session.game().getPlayers().get(0);
             Assert.assertEquals(step, 6, "went through redeclaring; now turn " + end.getTurn() + " " + end.getPhase()
-                    + ", input " + ((forge.player.PlayerControllerHuman) you.getController()).getInputQueue().getInput()
+                    + ", input " + (you.getController() instanceof forge.player.PlayerControllerHuman h ? h.getInputQueue().getInput() : "(busy)")
                     + ", priority " + session.game().getPhaseHandler().getPriorityPlayer() + ", combat "
                     + session.game().getPhaseHandler().getCombat());
         } finally {

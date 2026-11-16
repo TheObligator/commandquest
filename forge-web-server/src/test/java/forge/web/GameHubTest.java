@@ -314,6 +314,9 @@ public class GameHubTest {
             boolean kept = false;
             boolean bottomed = false;
             int handAfterKeep = -1;
+            String lastButtons = "";
+            String lastMessage = "";
+            boolean answeredLast = false;
             long end = System.currentTimeMillis() + 90_000;
             while (System.currentTimeMillis() < end && handAfterKeep < 0) {
                 String s = b.inbox.poll(5, TimeUnit.SECONDS);
@@ -335,14 +338,25 @@ public class GameHubTest {
                         ws.sendText(json.writeValueAsString(a), true);
                     }
                     case "prompt" -> {
-                        if (m.path("message").asText().isBlank()) {
-                            continue; // the buttons arrive before the text: answer the prompt once, when it's complete
+                        // Forge often sets a prompt's buttons before its text, so a new prompt can first arrive with
+                        // the previous one's text (or none), then again with its own. Go by the buttons, and answer
+                        // each prompt once: same buttons with new text is the prompt just answered, filled in.
+                        String buttons = m.path("ok").toString() + m.path("cancel");
+                        String message = m.path("message").asText();
+                        boolean filledIn = buttons.equals(lastButtons) && !message.equals(lastMessage) && answeredLast;
+                        lastButtons = buttons;
+                        lastMessage = message;
+                        answeredLast = false;
+                        if (message.isBlank() || filledIn) {
+                            answeredLast = filledIn;
+                            continue;
                         }
+                        answeredLast = true;
                         JsonNode hand = state.path("players").get(0).path("hand");
                         boolean mulliganPrompt = m.path("cancel").path("label").asText().equals("Mulligan");
                         boolean priority = m.path("cancel").path("label").asText().equals("End Turn");
                         seen.add((mulliganPrompt ? "keep?" : priority ? "priority" : "choose") + " hand=" + hand.size() + " " + m.path("message").asText().replace("\n", " ") + " " + m.path("ok") + m.path("cancel"));
-                        if (m.path("message").asText().contains("play or draw")) {
+                        if (m.path("ok").path("label").asText().equals("Play")) {
                             // Won the coin toss (it depends on the shared random's state, so on test order).
                             ws.sendText("{\"t\":\"ok\"}", true);
                         } else if (mulliganPrompt) {
