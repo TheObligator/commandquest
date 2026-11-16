@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { commanderSlug, parsePage } from "../src/edhrec.ts";
-import { displayTerms, forEdhrecCards, hasOrder, joinQuery, locallyReadable, stripDisplay } from "../src/searchquery.ts";
+import { displayTerms, forEdhrecCards, hasOrder, joinQuery, locallyReadable, restrictToNames, stripDisplay } from "../src/searchquery.ts";
 
 test("display keywords split from the filters", () => {
   assert.equal(stripDisplay("game:paper order:cmc dir:desc"), "game:paper");
@@ -56,4 +56,14 @@ test("an EDHREC page becomes cards by share of decks, each once", () => {
   };
   assert.deepEqual(parsePage(page).map((c) => [c.name, c.inclusion]), [["Sol Ring", 0.9], ["Counterspell", 0.6], ["Rhystic Study", 0.4]]);
   assert.deepEqual(parsePage({}), []);
+});
+
+test("restrictToNames packs names into queries Scryfall reads whole", () => {
+  assert.deepEqual(restrictToNames("set:dmu", ['Sol Ring', 'Delver of Secrets // Insectile Aberration']), ['(set:dmu) (!"Sol Ring" or !"Delver of Secrets")']);
+  const names = Array.from({ length: 100 }, (_, i) => `Some Long Card Name Number ${i}`);
+  const qs = restrictToNames("t:creature game:paper", names, 300);
+  assert.ok(qs.length > 1);
+  assert.ok(qs.every((q) => q.length <= 300 && q.startsWith("(t:creature game:paper) (")));
+  assert.equal(qs.join(" ").match(/!"/g)!.length, 100);
+  assert.deepEqual(restrictToNames("", ['Say "Hi"']), ['(!"Say Hi")']);
 });

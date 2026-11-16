@@ -63,3 +63,24 @@ export function locallyReadable(q: string): boolean {
 }
 
 export const MAX_ADDITIONS = 300;
+
+/** Scryfall reads about 1000 characters of a query; stay under that. */
+const MAX_QUERY = 900;
+
+/**
+ * Queries for the cards of `names` that match `filter`, as many names per query as fit:
+ * `(filter) (!"A" or !"B" ...)`. Double-faced cards go by their front face.
+ */
+export function restrictToNames(filter: string, names: string[], maxLength = MAX_QUERY): string[] {
+  const head = filter.trim() ? `(${filter.trim()}) ` : "";
+  const out: string[] = [];
+  let batch: string[] = [];
+  const query = (b: string[]) => `${head}(${b.join(" or ")})`;
+  for (const n of names) {
+    const term = `!"${n.split(" // ")[0].replace(/"/g, "")}"`;
+    if (batch.length && query([...batch, term]).length > maxLength) (out.push(query(batch)), (batch = []));
+    batch.push(term);
+  }
+  if (batch.length) out.push(query(batch));
+  return out;
+}

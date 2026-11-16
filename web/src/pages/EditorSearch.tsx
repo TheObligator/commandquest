@@ -12,7 +12,7 @@ import { bestExtraColor, identityQuery, mentionsIdentity, offIdentity } from "..
 import { commanderCards } from "../edhrec";
 import { compileQuery } from "../game/scryquery";
 import * as scry from "../scryfall";
-import { displayTerms, forEdhrecCards, hasOrder, joinQuery, locallyReadable, stripDisplay } from "../searchquery";
+import { displayTerms, forEdhrecCards, hasOrder, joinQuery, locallyReadable, restrictToNames, stripDisplay } from "../searchquery";
 import { BOARDS, boardLabel } from "./boards";
 
 /** The ⓘ button, drawn in CSS (the Unicode glyph renders badly in many fonts). */
@@ -145,6 +145,8 @@ export function SearchBox(props: { onPick: (name: string) => void; onSubmit: (qu
 
 // ---- Full results page -----------------------------------------------------------------
 
+const normName = (n: string) => n.split(" // ")[0].replace(/[‘’]/g, "'").toLowerCase();
+
 export function SearchResults(props: {
   query: string;
   format: string;
@@ -168,7 +170,9 @@ export function SearchResults(props: {
   const [loadingMore, setLoadingMore] = useState(false);
   const support = useCardSupport();
   const [allColors, setAllColors] = useState(false);
-  const [order, setOrder] = useState<"commander" | "overall">("commander");
+  /** The player's pick for ranking by the commander's EDHREC list; null = the default. Kept across searches. */
+  const [rankChoice, setRankChoice] = useState<boolean | null>(null);
+  const [rankStatus, setRankStatus] = useState("");
   // The player's saved additions, which they can turn off for one search.
   const settings = useQuery(api.settings.get);
   const additions = settings?.searchAdditions ?? "";
@@ -198,38 +202,61 @@ export function SearchResults(props: {
   const offIds = (cs: scry.ScryCard[]) => new Set(offIdentity(cs.map((c) => ({ name: c.id, card: c })), props.commanders, fitsIdentity, extraColor).map((e) => e.name));
   const off = filtered && conquest ? offIds(cards) : null;
 
-  // Most played with the commander first (EDHREC), when the search is one we can check locally
-  // against that list. A search with its own order: keeps it.
+  // Most played with the commander first (EDHREC). By default only for searches we can check
+  // against that list locally (and without their own order:); the button ranks any search, asking
+  // Scryfall which of the list's cards match when we can't tell locally.
   const commanderNames = props.commanders.map((c) => scry.deckName(c)).join(" and ");
   const localQuery = joinQuery(forEdhrecCards(props.query), forEdhrecCards(added));
-  const canRank = commanderDeck && !hasOrder(fullQuery) && locallyReadable(localQuery);
-  const rankByCommander = canRank && order === "commander";
+  const readable = locallyReadable(localQuery);
+  const rankOn = commanderDeck && (rankChoice ?? (readable && !hasOrder(fullQuery)));
+  const filterQuery = joinQuery(props.query, idClause, stripDisplay(added));
   const commanderKey = props.commanders.map((c) => c.name).join("|");
 
   useEffect(() => {
     setRanked([]);
-    if (!rankByCommander) return;
+    setRankStatus("");
+    if (!rankOn) return;
     let live = true;
-    const pred = compileQuery(localQuery);
-    if (typeof pred !== "function") return;
+    const pred = readable ? compileQuery(localQuery) : null;
     void (async () => {
+      setRankStatus("Loading EDHREC's list…");
       const list = await commanderCards(props.commanders.map((c) => scry.deckName(c)));
-      await scry.cardsById(list.map((e) => e.id)).catch(() => undefined);
-      let found = list.flatMap((e) => {
-        const card = scry.cachedById(e.id);
-        return card && pred(card) ? [{ card, inclusion: e.inclusion }] : [];
-      });
-      if (filtered) {
-        const outside = new Set(offIdentity(found.map((f) => ({ name: f.card.id, card: f.card })), props.commanders, fits, extraColor).map((e) => e.name));
-        found = found.filter((f) => !outside.has(f.card.id));
+      if (!live) return;
+      if (!list.length) return setRankStatus(`EDHREC has no list for ${commanderNames}.`);
+      let found: { card: scry.ScryCard; inclusion: number }[];
+      if (typeof pred === "function") {
+        await scry.cardsById(list.map((e) => e.id)).catch(() => undefined);
+        found = list.flatMap((e) => {
+          const card = scry.cachedById(e.id);
+          return card && pred(card) ? [{ card, inclusion: e.inclusion }] : [];
+        });
+        if (filtered) {
+          const outside = new Set(offIdentity(found.map((f) => ({ name: f.card.id, card: f.card })), props.commanders, fits, extraColor).map((e) => e.name));
+          found = found.filter((f) => !outside.has(f.card.id));
+        }
+      } else {
+        // Scryfall checks the list against the whole search, ~40 names per request.
+        const matched = new Map<string, scry.ScryCard>();
+        const chunks = restrictToNames(filterQuery, list.map((e) => e.name));
+        for (let i = 0; i < chunks.length; i++) {
+          if (!live) return;
+          setRankStatus(`Checking EDHREC's list against your search (${i + 1} of ${chunks.length})…`);
+          const page = await scry.search(chunks[i]).catch(() => null);
+          for (const c of page?.cards ?? []) matched.set(normName(scry.deckName(c)), c);
+        }
+        found = list.flatMap((e) => {
+          const card = matched.get(normName(e.name));
+          return card ? [{ card, inclusion: e.inclusion }] : [];
+        });
+        if (filtered && conquest) found = found.filter((f) => !offIds([f.card]).has(f.card.id));
       }
-      if (live) setRanked(found);
+      if (live) (setRanked(found), setRankStatus(found.length ? "" : `None of the cards EDHREC lists for ${commanderNames} match this search.`));
     })();
     return () => {
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rankByCommander, localQuery, commanderKey, filtered, extraColor, conquest]);
+  }, [rankOn, readable, localQuery, filterQuery, commanderKey, filtered, extraColor, conquest]);
 
   const rankedNames = new Set(ranked.map((r) => scry.deckName(r.card)));
   const shown = cards.filter((c) => !off?.has(c.id) && !rankedNames.has(scry.deckName(c)));
@@ -388,18 +415,20 @@ export function SearchResults(props: {
           </label>
         )}
         {commanderDeck && (
-          <label className="inline">
-            {" "}Order{" "}
-            <select value={canRank ? order : "overall"} disabled={!canRank} onChange={(e) => setOrder(e.target.value as "commander" | "overall")}>
-              <option value="commander">Most played with your commander</option>
-              <option value="overall">{hasOrder(fullQuery) ? "As the search says (order:)" : "Most played overall"}</option>
-            </select>
-          </label>
+          <>
+            {" "}
+            <button
+              className={`btn small ${rankOn ? "" : "ghost"}`}
+              aria-pressed={rankOn}
+              title={rankOn ? "Show this search in its normal order" : `Put the cards EDHREC says ${commanderNames} decks play most first`}
+              onClick={() => setRankChoice(!rankOn)}
+            >
+              {rankOn ? `Ranked for ${commanderNames} ✕` : `Rank by EDHREC for ${commanderNames}`}
+            </button>
+          </>
         )}
       </p>
-      {commanderDeck && !canRank && !hasOrder(fullQuery) && (
-        <p className="muted small">This search uses terms we can't check against your commander's EDHREC list, so it's in overall EDHREC order.</p>
-      )}
+      {rankOn && rankStatus && <p className="muted small">{rankStatus}</p>}
       {additionsOn && hidden > 0 && (
         <p className="small search-notice">
           Your search additions (<code>{additions}</code>) hid {hidden.toLocaleString()} card{hidden === 1 ? "" : "s"}.{" "}
