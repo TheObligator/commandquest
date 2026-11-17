@@ -34,15 +34,22 @@ the game server still ends every game: they're only in its memory.
 
 ## Starting a game
 
-`{t:"start", deck: {name, cards: [{name, quantity, board, set?, collectorNumber?}], tokens?}, name, opponents, freePlay?}` starts a Commander
+`{t:"start", deck: {name, cards: [{name, quantity, board, set?, collectorNumber?, standIn?}], tokens?}, name, opponents, freePlay?}` starts a Commander
 game against 1–3 Forge AI seats, each playing a random Commander precon that ships with Forge
 (`forge-gui/res/quest/commanderprecons`). `board` is `commander` or `main` (others are ignored).
 Card names are Scryfall's; double-faced cards resolve by their front face. `set` and
 `collectorNumber` (Scryfall's) pick the printing, so the card's set, and the tokens it makes, match
 the one in your deck; Forge's default printing is used when it doesn't have that one. `tokens` is
 the deck's token art, `{"<token identity>": "<Scryfall id>"}` (identity as in `web/src/tokens.ts`,
-e.g. `goblin|R|1/1`); your tokens are tagged with it. If Forge doesn't know a
-card, the answer is an `error` that lists them.
+e.g. `goblin|R|1/1`); your tokens are tagged with it. Decks have at most 1000 cards
+(`Decks.MAX_DECK_SIZE`).
+
+If Forge doesn't know a card, the answer is an `error` that lists them, unless `freePlay` is on and
+the card has a `standIn`: Scryfall's data for it, `{name, manaCost, typeLine, oracleText, power?,
+toughness?, loyalty?, defense?, layout, faces?}` (`faces`, the same fields, for transform and modal
+double-faced cards). It then plays as a stand-in with that name, cost, types and stats and no
+abilities: players do what its text says by hand (`StandIns.java`). Stand-ins belong to that deck
+only and are never added to Forge's card database; malformed data is refused like an unknown card.
 
 `rewind` (0–4, default 0) is how far back players may ask to rewind ([rewind.md](rewind.md)): 0 off,
 1 the last action, 2 this step, 3 this turn, 4 into the previous turn.

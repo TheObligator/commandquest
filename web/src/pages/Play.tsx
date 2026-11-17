@@ -2,7 +2,7 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { gameSocketUrl } from "../game/useLiveGame";
-import { useGameProblems } from "../useGameDecks";
+import { useGameChecks } from "../useGameDecks";
 
 type SocketState = "connecting" | "open" | "closed";
 
@@ -46,11 +46,13 @@ export function Play() {
   const label = { connecting: "connecting…", open: "online", closed: "offline, retrying…" }[status];
   const [deckId, setDeckId] = useState("");
   // Only decks that can start a game are offered; the rest are listed with what's wrong.
-  const problems = useGameProblems(decks);
-  const checking = !!decks?.length && !problems;
-  const ready = problems ? (decks ?? []).filter((d) => !problems.get(d._id)?.length) : [];
-  const notReady = problems ? (decks ?? []).filter((d) => problems.get(d._id)?.length) : [];
+  // Decks with cards the engine doesn't have are offered too: they need free play.
+  const checks = useGameChecks(decks);
+  const checking = !!decks?.length && !checks;
+  const ready = checks ? (decks ?? []).filter((d) => !checks.get(d._id)?.problems.length) : [];
+  const notReady = checks ? (decks ?? []).filter((d) => checks.get(d._id)?.problems.length) : [];
   const chosen = ready.some((d) => d._id === deckId) ? deckId : ready[0]?._id ?? "";
+  const needsFreePlay = checks?.get(chosen)?.needsFreePlay ?? [];
 
   return (
     <>
@@ -73,11 +75,21 @@ export function Play() {
             ) : !ready.length ? (
               <option>None of your decks is ready to play yet</option>
             ) : (
-              ready.map((d) => <option key={d._id} value={d._id}>{d.name} ({d.commanders.join(" & ")})</option>)
+              ready.map((d) => (
+                <option key={d._id} value={d._id}>
+                  {d.name} ({d.commanders.join(" & ")}){checks?.get(d._id)?.needsFreePlay.length ? " · needs free play" : ""}
+                </option>
+              ))
             )}
           </select>
         </label>
         <a href="#/decks" className="link">Manage decks →</a>
+        {needsFreePlay.length > 0 && (
+          <p className="free-play-note small">
+            ✋ Needs free play: {needsFreePlay.join(", ")} {needsFreePlay.length === 1 ? "isn't" : "aren't"} in the rules engine yet, so you play{" "}
+            {needsFreePlay.length === 1 ? "it" : "them"} by hand (cast free, move, tap). Leave Free play on when you start.
+          </p>
+        )}
         {notReady.length > 0 && (
           <details className="not-ready">
             <summary className="muted small">
@@ -88,7 +100,7 @@ export function Play() {
                 <li key={d._id}>
                   <a className="link" href={`#/decks/${d._id}`}>{d.name}</a>
                   <ul className="muted small">
-                    {problems!.get(d._id)!.map((p) => <li key={p}>{p}</li>)}
+                    {checks!.get(d._id)!.problems.map((p) => <li key={p}>{p}</li>)}
                   </ul>
                 </li>
               ))}

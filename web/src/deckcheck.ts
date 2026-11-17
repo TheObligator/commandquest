@@ -19,6 +19,8 @@ export interface DeckCheck {
   problems: string[];
   /** Worth knowing, but the deck can still be played (cards known to misbehave). */
   notes: string[];
+  /** Cards Forge has no rules for: games with the deck need free play, where you play them by hand. */
+  needsFreePlay: string[];
 }
 
 /** The format's color identity test: Conquest relaxes hybrid symbols, Commander doesn't. */
@@ -38,6 +40,7 @@ export function checkDeck(
 ): DeckCheck {
   const problems: string[] = [];
   const notes: string[] = [];
+  let needsFreePlay: string[] = [];
   const played = deck.cards.filter((c) => c.board === "main" || c.board === "commander");
   const count = (board?: Board) => deck.cards.filter((c) => (board ? c.board === board : c.board === "main" || c.board === "commander")).reduce((n, c) => n + c.quantity, 0);
   const missing = knownMissing ?? played.filter((c) => !card(c)).map((c) => c.name);
@@ -46,7 +49,8 @@ export function checkDeck(
     const status = played.filter((c) => card(c)).map((c) => [c, support.status(card(c) ?? c.name)] as const);
     const absent = status.filter(([, st]) => !st.works && st.missing).map(([c]) => c.name);
     const issues = status.filter(([, st]) => !st.works && !st.missing).map(([c]) => c.name);
-    if (absent.length) problems.push(`Not in the rules engine yet, so this deck can't start a game: ${list(absent)}.`);
+    needsFreePlay = absent;
+    if (absent.length) notes.push(`Not in the rules engine yet: ${list(absent)}. Games with this deck need free play, where you play ${absent.length === 1 ? "it" : "them"} by hand.`);
     if (issues.length) notes.push(`Known not to work right in games: ${list(issues)}.`);
   }
   const total = count();
@@ -55,7 +59,7 @@ export function checkDeck(
   if (fmt === "conquest") {
     const off: OffIdentity = (main, cmdrs) => offIdentity(main, cmdrs, fitsIdentity, deck.extraColor);
     problems.push(...validateConquest(deck.cards.map((c) => ({ ...c, card: card(c) })), off));
-    return { problems, notes };
+    return { problems, notes, needsFreePlay };
   }
   if (fmt === "commander") {
     const cmdrs = deck.cards.filter((c) => c.board === "commander");
@@ -94,13 +98,19 @@ export function checkDeck(
       .map((c) => c.name);
     if (illegal.length) problems.push(`Not legal in ${capitalize(fmt)}: ${list(illegal)}.`);
   }
-  return { problems, notes };
+  return { problems, notes, needsFreePlay };
 }
 
-/**
- * Why a deck can't be used in a game (games are Commander), or [] when it can. A deck saved
- * under another format is checked as a Commander deck.
- */
-export function gameProblems(deck: DeckToCheck, card: (c: DeckCard) => ScryCard | undefined, support?: CardSupport): string[] {
-  return checkDeck({ ...deck, format: "commander" }, card, support).problems;
+/** Whether a deck can be used in a game: what stops it, and cards that need free play. */
+export interface GameCheck {
+  /** Why it can't start a game ([] when it can). */
+  problems: string[];
+  /** Cards Forge doesn't have, played by hand: the game needs free play on. */
+  needsFreePlay: string[];
+}
+
+/** A deck checked for a game (games are Commander; a deck saved under another format is checked as one). */
+export function gameCheck(deck: DeckToCheck, card: (c: DeckCard) => ScryCard | undefined, support?: CardSupport): GameCheck {
+  const { problems, needsFreePlay } = checkDeck({ ...deck, format: "commander" }, card, support);
+  return { problems, needsFreePlay };
 }

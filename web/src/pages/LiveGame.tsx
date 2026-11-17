@@ -5,14 +5,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { navigate, useRoute } from "../app/router";
 import { useCardSupport } from "../cardsupport";
-import { useGameProblems } from "../useGameDecks";
+import { useGameChecks } from "../useGameDecks";
 import { toast } from "../dom";
 import { useCardData } from "../game/cards";
 import { LiveRail } from "../game/LiveRail";
 import { REWIND_LEVELS } from "../game/RewindPanel";
 import { LAYOUTS, LayoutPicker, TableBoard, useStored, useTableStops, type LayoutId, type MenuPart, type MenuTarget } from "../game/TableBoard";
 import { useHotkeys } from "../game/useHotkeys";
-import { useLiveGame, type DeckPayload, type ManaOptions } from "../game/useLiveGame";
+import { useLiveGame, type DeckPayload, type ManaOptions, type StandIn } from "../game/useLiveGame";
+import * as scry from "../scryfall";
 import { ManaDialog, type ManaDialogCard } from "../game/ManaDialog";
 import { painText, symbols } from "../game/manaPlan";
 import { useLandCheck } from "../game/useLandCheck";
@@ -74,7 +75,10 @@ export function LiveGame() {
   const support = useCardSupport();
   /** Why this deck can't start a game (not Commander-legal, cards Forge doesn't have, ...). */
   const deckList = useMemo(() => (deck ? [{ ...deck, _id: deck._id as string }] : undefined), [deck]);
-  const deckProblems = useGameProblems(deckList)?.get(deck?._id ?? "") ?? [];
+  const deckCheck = useGameChecks(deckList)?.get(deck?._id ?? "");
+  const deckProblems = deckCheck?.problems ?? [];
+  /** Cards the engine doesn't have: played by hand as stand-ins, so the game needs free play. */
+  const needsFreePlay = deckCheck?.needsFreePlay ?? [];
 
   useEffect(() => {
     if (game.error) {
@@ -97,7 +101,15 @@ export function LiveGame() {
 
   const start = () => {
     if (!deck) return;
-    const payload: DeckPayload = { name: deck.name, cards: deck.cards.map((c) => ({ name: support?.forgeName(c.name) ?? c.name, quantity: c.quantity, board: c.board, set: c.set, collectorNumber: c.collectorNumber })), tokens: tokenArtMap(tokens) };
+    const payload: DeckPayload = {
+      name: deck.name,
+      cards: deck.cards.map((c) => {
+        const missing = support?.notInForge(c.name);
+        const card = missing ? (scry.cachedExact(c) ?? scry.cached(c)) : undefined;
+        return { name: support?.forgeName(c.name) ?? c.name, quantity: c.quantity, board: c.board, set: c.set, collectorNumber: c.collectorNumber, standIn: card && standIn(card) };
+      }),
+      tokens: tokenArtMap(tokens),
+    };
     game.start(payload, me?.name ?? "You", opponents, freePlay, rewind);
   };
 
@@ -247,7 +259,13 @@ export function LiveGame() {
                   <ul>{deckProblems.map((p) => <li key={p}>{p}</li>)}</ul>
                 </div>
               )}
-              <button className="btn" onClick={start} disabled={!deck || game.status !== "ready" || deckProblems.length > 0}>
+              {needsFreePlay.length > 0 && (
+                <p className={freePlay ? "free-play-note small" : "form-error"}>
+                  ✋ {needsFreePlay.join(", ")} {needsFreePlay.length === 1 ? "isn't" : "aren't"} in the rules engine yet: you play{" "}
+                  {needsFreePlay.length === 1 ? "it" : "them"} by hand, so this deck needs free play{freePlay ? "." : ". Turn on Free play to start."}
+                </p>
+              )}
+              <button className="btn" onClick={start} disabled={!deck || game.status !== "ready" || deckProblems.length > 0 || (needsFreePlay.length > 0 && !freePlay)}>
                 {game.status === "starting" ? "Starting…" : game.status === "ready" ? "Start game" : STATUS[game.status]}
               </button>
             </>
@@ -930,4 +948,23 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
 /** Forge's "you have priority" prompt (InputPassPriority): OK, and End Turn or Undo. */
 function isPriorityPrompt(p: { ok: { label: string }; cancel: { label: string } }) {
   return p.ok.label === "OK" && (p.cancel.label === "End Turn" || p.cancel.label.startsWith("Undo"));
+}
+
+/** Scryfall's data for a card the engine doesn't have, for the game server's stand-in (forge-web-server StandIns). */
+function standIn(c: scry.ScryCard): StandIn {
+  const face = (f: { name: string; mana_cost?: string; type_line?: string; oracle_text?: string; power?: string; toughness?: string; loyalty?: string; defense?: string }) => ({
+    name: f.name,
+    manaCost: f.mana_cost ?? "",
+    typeLine: f.type_line ?? "",
+    oracleText: f.oracle_text ?? "",
+    power: f.power,
+    toughness: f.toughness,
+    loyalty: f.loyalty,
+    defense: f.defense,
+  });
+  const twoFaced = (c.layout === "transform" || c.layout === "modal_dfc") && c.card_faces?.length === 2;
+  if (twoFaced) return { ...face(c.card_faces![0]), layout: c.layout, faces: c.card_faces!.map(face) };
+  const front = c.card_faces?.[0];
+  // Split, adventure, flip and similar cards: the front face.
+  return front ? { ...face({ ...front, type_line: front.type_line ?? c.type_line.split(" // ")[0] }), layout: c.layout } : { ...face(c), layout: c.layout };
 }

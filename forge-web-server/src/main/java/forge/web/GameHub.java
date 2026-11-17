@@ -317,7 +317,8 @@ public final class GameHub {
         work.execute(() -> {
             try {
                 ForgeEngine.start();
-                Deck mine = Decks.fromJson(m.path("deck"));
+                boolean freePlay = m.path("freePlay").asBoolean(true);
+                Deck mine = Decks.fromJson(m.path("deck"), freePlay);
                 List<GameSession.Seat> seats = new ArrayList<>();
                 int rewindLevel = m.path("rewind").asInt(0);
                 String name = m.path("name").asText("You").trim();
@@ -330,7 +331,7 @@ public final class GameHub {
                         sendRaw(to, s);
                     }
                 });
-                seat.setFreePlay(m.path("freePlay").asBoolean(true));
+                seat.setFreePlay(freePlay);
                 h.seat = seat;
                 seats.add(new GameSession.Seat(name, mine, seat, tokenArt(m.path("deck").path("tokens"))));
                 List<Deck> ai = Decks.randomPrecons(opponents);

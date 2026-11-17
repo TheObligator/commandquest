@@ -28,10 +28,20 @@ public final class Decks {
     private Decks() {
     }
 
-    /** A deck the browser sent: {@code {name, cards: [{name, quantity, board}]}} (the Convex deck shape). */
+    /** A deck the browser sent, for a game without free play. */
     public static Deck fromJson(JsonNode deck) {
+        return fromJson(deck, false);
+    }
+
+    /**
+     * A deck the browser sent: {@code {name, cards: [{name, quantity, board, standIn?}]}} (the Convex
+     * deck shape). With free play, a card Forge doesn't have plays as its {@code standIn}
+     * (Scryfall's data, see {@link StandIns}).
+     */
+    public static Deck fromJson(JsonNode deck, boolean freePlay) {
         Deck d = new Deck(deck.path("name").asText("Deck"));
         Set<String> unknown = new LinkedHashSet<>();
+        int standIns = 0;
         int total = 0;
         for (JsonNode c : deck.path("cards")) {
             String name = c.path("name").asText("").trim();
@@ -40,12 +50,19 @@ public final class Decks {
             if (name.isEmpty() || qty < 1 || qty > 250 || !(board.equals("main") || board.equals("commander"))) {
                 continue;
             }
+            DeckSection section = board.equals("commander") ? DeckSection.Commander : DeckSection.Main;
             String forgeName = resolve(name);
             if (forgeName == null) {
-                unknown.add(name);
+                PaperCard standIn = freePlay && c.has("standIn") && standIns < StandIns.MAX_PER_DECK ? StandIns.build(c.path("standIn")) : null;
+                if (standIn == null) {
+                    unknown.add(name);
+                } else {
+                    standIns++;
+                    d.getOrCreate(section).add(standIn, qty);
+                    total += qty;
+                }
                 continue;
             }
-            DeckSection section = board.equals("commander") ? DeckSection.Commander : DeckSection.Main;
             // The printing you picked (Scryfall set + collector number), so the card's set, and the
             // tokens it makes, match it. Forge's own choice if it doesn't have that printing.
             PaperCard print = printing(forgeName, c.path("set").asText(""), c.path("collectorNumber").asText(""));
@@ -57,7 +74,8 @@ public final class Decks {
             total += qty;
         }
         if (!unknown.isEmpty()) {
-            throw new IllegalArgumentException("Forge doesn't know these cards: " + String.join(", ", unknown));
+            throw new IllegalArgumentException("Forge doesn't know these cards: " + String.join(", ", unknown)
+                    + (freePlay ? "." : ". Turn on free play to play them by hand."));
         }
         if (d.get(DeckSection.Commander) == null || d.get(DeckSection.Commander).isEmpty()) {
             throw new IllegalArgumentException("This deck has no commander.");

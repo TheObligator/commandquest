@@ -169,6 +169,7 @@ label.inline select { width: auto; padding: 5px 8px; }
 .play-deck { display: flex; align-items: end; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
 .play-deck label { flex: 1; min-width: 240px; max-width: 480px; }
 .play-deck .not-ready { flex-basis: 100%; }
+.free-play-note { flex-basis: 100%; margin: 0; padding: 8px 12px; border-radius: 8px; background: var(--bg-2); border: 1px solid var(--line); }
 .play-deck .not-ready summary { cursor: pointer; }
 .play-deck .not-ready > ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; }
 .play-deck .not-ready ul ul { margin: 2px 0 0; padding-left: 16px; }

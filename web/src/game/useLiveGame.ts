@@ -152,10 +152,24 @@ export type LiveStatus = "connecting" | "signing-in" | "ready" | "starting" | "p
 const PING_MS = 10_000;
 const SILENT_MS = 25_000;
 
+/** A card the engine doesn't have, from Scryfall: the game server plays it as a stand-in with free play. */
+export interface StandIn {
+  name: string;
+  manaCost: string;
+  typeLine: string;
+  oracleText: string;
+  power?: string;
+  toughness?: string;
+  loyalty?: string;
+  defense?: string;
+  layout: string;
+  faces?: Omit<StandIn, "layout" | "faces">[];
+}
+
 export interface DeckPayload {
   name: string;
   /** `set` / `collectorNumber`: the printing you picked (Scryfall codes), so Forge uses it too. */
-  cards: { name: string; quantity: number; board: string; set?: string; collectorNumber?: string }[];
+  cards: { name: string; quantity: number; board: string; set?: string; collectorNumber?: string; standIn?: StandIn }[];
   /** The deck's token art: token identity (src/tokens.ts) -> Scryfall id. */
   tokens?: Record<string, string>;
 }
