@@ -95,9 +95,11 @@ public final class ViewJson {
         ArrayNode log = o.putArray("log"); // oldest first
         if (gv.getGameLog() != null) {
             List<GameLogEntry> entries = gv.getGameLog().getLogEntries(null); // newest first
-            for (int i = Math.min(entries.size(), LOG_LINES) - 1; i >= 0; i--) {
-                log.add(entries.get(i).message());
-            }
+            // Read further back than we send, so a resolving spell finds how it was put on the stack.
+            List<GameLogEntry> oldestFirst = new ArrayList<>(entries.subList(0, Math.min(entries.size(), LOG_LINES * 3)));
+            java.util.Collections.reverse(oldestFirst);
+            List<String> lines = LogLines.render(oldestFirst);
+            lines.subList(Math.max(0, lines.size() - LOG_LINES), lines.size()).forEach(log::add);
         }
         return o;
     }
