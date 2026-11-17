@@ -99,3 +99,11 @@ test("the futureshifted frame counts only on Future Sight itself", () => {
   const tarmogoyf = [p("fut", "2007-05-04", { frame: "future" }), p("mb2-goyf", "2024-08-02", { set: "mb2", frame: "future" })];
   assert.equal(choosePrinting(tarmogoyf, "oldest", "2026-11-16")?.id, "fut");
 });
+
+test("a token with the card's name is never a printing of it", () => {
+  const angel = [
+    p("tdrc", "2026-01-01", { set: "tdrc", set_type: "token", layout: "token", type_line: "Token Creature — Zombie Angel", prices: { usd: "0.05" } }),
+    p("akh", "2017-04-28", { prices: { usd: "0.40" } }),
+  ];
+  for (const pref of ["newest", "cheapest", "oldest"] as const) assert.equal(choosePrinting(angel, pref, "2026-11-17")?.id, "akh");
+});

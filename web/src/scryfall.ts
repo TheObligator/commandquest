@@ -160,8 +160,18 @@ function trim(c: ScryCard): ScryCard {
   return card;
 }
 
+/**
+ * Tokens, emblems and art cards. Some share a card's name (Angel of Sanctions makes an Angel of
+ * Sanctions token), so they're only ever looked up by id, never by name, and a deck card never
+ * takes one as its printing.
+ */
+export function isTokenLike(c: { layout?: string; type_line?: string }): boolean {
+  return ["token", "double_faced_token", "emblem", "art_series"].includes(c.layout ?? "") || /^(Token|Emblem)\b/.test(c.type_line ?? "");
+}
+
 function index(c: ScryCard) {
   byId.set(c.id, c);
+  if (isTokenLike(c)) return;
   byName.set(c.name.toLowerCase(), c);
   if (c.card_faces?.[0]) byName.set(c.card_faces[0].name.toLowerCase(), c);
 }
@@ -213,8 +223,10 @@ function remember(c: ScryCard) {
 
 loadStore();
 
+/** The card for a deck entry: its printing, else any printing by name. Never a token. */
 export function cached(card: DeckCard): ScryCard | undefined {
-  return (card.scryfallId && byId.get(card.scryfallId)) || byName.get(card.name.toLowerCase());
+  const hit = card.scryfallId ? byId.get(card.scryfallId) : undefined;
+  return hit && !isTokenLike(hit) ? hit : byName.get(card.name.toLowerCase());
 }
 
 export function cachedById(id: string): ScryCard | undefined {
@@ -240,6 +252,19 @@ export function cachedInSet(name: string, set: string): ScryCard | undefined {
 
 /** The cached card for exactly the printing a deck entry asks for (id, set + number, or set), else by name. */
 export function cachedExact(card: DeckCard): ScryCard | undefined {
+  const hit = exactPrinting(card);
+  return hit && !isTokenLike(hit) ? hit : undefined;
+}
+
+/** True when a deck entry's printing is a token (an old bug): it needs its card again. */
+export function printingIsToken(card: DeckCard): boolean {
+  const hit = exactPrinting(card);
+  return !!hit && isTokenLike(hit);
+}
+
+const withoutPrinting = (c: DeckCard): DeckCard => ({ ...c, scryfallId: undefined, set: undefined, collectorNumber: undefined });
+
+function exactPrinting(card: DeckCard): ScryCard | undefined {
   if (card.scryfallId) return byId.get(card.scryfallId);
   if (card.set && card.collectorNumber) return cachedPrinting(card.set, card.collectorNumber);
   if (card.set) return cachedInSet(card.name, card.set);
@@ -407,7 +432,10 @@ function identifier(c: DeckCard): Identifier {
  */
 export async function resolve(cards: DeckCard[]): Promise<string[]> {
   const unique = new Map<string, DeckCard>();
-  for (const c of cards) if (!cachedExact(c)) unique.set(JSON.stringify(identifier(c)), c);
+  // A named entry whose printing is a token wants the card: ask by name. (Token lookups by id, with
+  // no name, are the token list's and stay as they are.)
+  const asked = cards.map((c) => (c.name && printingIsToken(c) ? withoutPrinting(c) : c));
+  for (const c of asked) if (!exactPrinting(c)) unique.set(JSON.stringify(identifier(c)), c);
   // Cards another caller is already looking up (the editor and its token list open together) share
   // that request instead of sending a second one.
   const waits = new Set<Promise<string[]>>();
@@ -447,6 +475,8 @@ async function lookUp(list: DeckCard[]): Promise<string[]> {
       else missing.push(card?.name ?? ("name" in nf ? nf.name : "?"));
     }
   }
+  // A printing that turned out to be a token: look the card up by name instead.
+  for (const c of list) if (c.name && printingIsToken(c) && !byName.has(c.name.toLowerCase())) retry.push(withoutPrinting(c));
   if (retry.length) missing.push(...(await resolve(retry)));
   return missing;
 }

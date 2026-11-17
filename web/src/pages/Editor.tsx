@@ -132,7 +132,7 @@ function DeckEditor({ initial }: { initial: Draft }) {
     setMissing(notFound);
     setCardData((n) => n + 1);
     // Use Forge's names ("Delver of Secrets", not "Delver of Secrets // Insectile Aberration")
-    // and fill in printings for cards that don't have one.
+    // and fill in printings for cards that don't have one (or have a token's).
     setDeck((d) => {
       let changed = false;
       const next = d.cards.map((c) => {
@@ -140,7 +140,8 @@ function DeckEditor({ initial }: { initial: Draft }) {
         if (!s) return c;
         const out = { ...c };
         if (out.name !== scry.deckName(s)) (out.name = scry.deckName(s)), (changed = true);
-        if (!out.scryfallId) {
+        // No printing yet, or a token's printing (Angel of Sanctions' token) where the card should be.
+        if (!out.scryfallId || scry.printingIsToken(c)) {
           out.scryfallId = s.id;
           out.set = s.set;
           out.collectorNumber = s.collector_number;

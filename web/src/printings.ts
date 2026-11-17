@@ -32,6 +32,7 @@ export interface Print {
   frame_effects?: string[];
   promo_types?: string[];
   lang?: string;
+  layout?: string;
   type_line?: string;
   prices?: { usd?: string | null; usd_foil?: string | null; usd_etched?: string | null };
 }
@@ -93,6 +94,8 @@ const oldestOf = <T extends Print>(ps: T[]) => ps.reduce((a, b) => (date(b) < da
  */
 export function choosePrinting<T extends Print>(prints: T[], pref: PrintingPref, today = new Date().toISOString().slice(0, 10)): T | undefined {
   // Paper printings that are out (Scryfall lists previewed sets before release).
+  // Never a token, emblem or art card, even one with the card's name.
+  prints = prints.filter((p) => !["token", "double_faced_token", "emblem", "art_series"].includes(p.layout ?? "") && p.set_type !== "token");
   const pool = firstTier(prints, [(p) => !p.digital && date(p) <= today, (p) => !p.digital]);
   if (!pool.length || pref === "default") return undefined;
   // Best first; a card only printed in Universes Beyond gets its plainest one.
