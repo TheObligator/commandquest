@@ -361,8 +361,8 @@ public class GameHubTest {
                         boolean mulliganPrompt = m.path("cancel").path("label").asText().equals("Mulligan");
                         boolean priority = m.path("cancel").path("label").asText().equals("End Turn");
                         seen.add((mulliganPrompt ? "keep?" : priority ? "priority" : "choose") + " hand=" + hand.size() + " " + m.path("message").asText().replace("\n", " ") + " " + m.path("ok") + m.path("cancel"));
-                        if (m.path("ok").path("label").asText().equals("Play")) {
-                            // Won the coin toss (it depends on the shared random's state, so on test order).
+                        if (m.path("ok").path("label").asText().equals("Yes")) {
+                            // Won the die roll (it depends on the shared random's state, so on test order).
                             ws.sendText("{\"t\":\"ok\"}", true);
                         } else if (mulliganPrompt) {
                             Assert.assertEquals(hand.size(), 7, "every new hand is seven cards: " + seen);
@@ -424,11 +424,11 @@ public class GameHubTest {
             start.set("deck", deck());
             ws.sendText(json.writeValueAsString(start), true);
             JsonNode prompt = next(first, "prompt", 60_000);
-            if (prompt.path("ok").path("label").asText().equals("Play")) {
-                ws.sendText("{\"t\":\"ok\"}", true); // won the coin toss: play first
+            if (prompt.path("ok").path("label").asText().equals("Yes")) {
+                ws.sendText("{\"t\":\"ok\"}", true); // won the die roll: play first
                 do {
                     prompt = next(first, "prompt", 60_000);
-                } while (prompt.path("ok").path("label").asText().equals("Play")); // its buttons can come twice
+                } while (prompt.path("ok").path("label").asText().equals("Yes")); // its buttons can come twice
             }
             Assert.assertEquals(prompt.path("cancel").path("label").asText(), "Mulligan", "the opening hand: " + prompt);
 

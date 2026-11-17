@@ -2,7 +2,6 @@ package forge.web.engine;
 
 import forge.deck.Deck;
 import forge.deck.DeckSection;
-import forge.game.GameStage;
 import forge.game.GameView;
 import forge.game.card.CardView;
 import forge.game.phase.PhaseType;
@@ -14,7 +13,6 @@ import forge.gamemodes.net.event.IdentifiableNetEvent;
 import forge.gamemodes.net.event.NetEvent;
 import forge.gui.FThreads;
 import forge.interfaces.IGameController;
-import forge.player.PlayerControllerHuman;
 import forge.trackable.TrackableCollection;
 import forge.util.MyRandom;
 import java.util.ArrayList;
@@ -35,19 +33,11 @@ public class GameSessionTest {
 
     /** Stands in for the browser: records prompts, answers blocking questions with defaults. */
     /**
-     * Presses OK for the human seat (keep the hand, pass priority), on Forge's UI thread. Winning
-     * the coin toss in a multiplayer game has no OK: you click who goes first, so this picks you.
+     * Presses OK for the human seat (keep the hand, pass priority, and Yes to playing first after
+     * winning the die roll: {@link WebPlayerController#chooseStartingPlayer}), on Forge's UI thread.
      */
     static void pass(IGameController ctl) {
-        FThreads.invokeInEdtLater(() -> {
-            if (ctl instanceof PlayerControllerHuman h && h.getGame() != null && h.getPlayer() != null
-                    && h.getGame().getAge() == GameStage.BeforeMulligan && h.getGame().getPlayers().size() > 2) {
-                System.out.println("PICKED-SELF");
-                h.selectPlayer(h.getPlayer().getView(), null);
-            } else {
-                ctl.selectButtonOk();
-            }
-        });
+        FThreads.invokeInEdtLater(ctl::selectButtonOk);
     }
 
     static final class ScriptedBrowser implements IRemote {
