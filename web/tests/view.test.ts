@@ -103,3 +103,18 @@ test("with a width, cards are centered; new cards join an arranged row near the 
   const more = [...cards, redact(card(4, "C"), "me"), redact(card(5, "D"), "me")];
   assert.deepEqual(ids(arrange(more, arr, 9)[0]), [[5, 2], [1, 3], [2, 4], [4, 5]]);
 });
+
+test("a board shows its rows with cards plus one empty row to play into", async () => {
+  const { shownRows, dropRow } = await import("../src/game/view.ts");
+  const pile = { key: "x", col: 0, cards: [] };
+  assert.deepEqual(shownRows([[], [], []]), [0]);
+  assert.deepEqual(shownRows([[], [], [pile]]), [0, 2]);
+  assert.deepEqual(shownRows([[pile], [], [pile]]), [0, 1, 2]);
+  assert.deepEqual(shownRows([[pile], [pile], [pile]]), [0, 1, 2]);
+  assert.deepEqual(shownRows([[pile], [pile], []]), [0, 1, 2]);
+  // On the empty row: a land goes to the lands row if that's empty too; otherwise where it's dropped.
+  assert.equal(dropRow(0, [[], [], []], { types: ["Land"] }), 2);
+  assert.equal(dropRow(0, [[], [], [pile]], { types: ["Land"] }), 0);
+  assert.equal(dropRow(0, [[], [], [pile]], { types: ["Artifact"] }), 1);
+  assert.equal(dropRow(2, [[], [], [pile]], { types: ["Creature"] }), 2);
+});

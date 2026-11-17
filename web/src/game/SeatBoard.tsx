@@ -1,16 +1,18 @@
-// One player's area: header (life, poison, commander damage), the battlefield in three rows, and
+// One player's area: header (life, poison, commander damage), the battlefield in up to three rows, and
 // along the bottom-left their zones as card tiles: library (a card back), top of graveyard, top of
 // exile and the commander, each labelled with its count, plus how many cards they hold.
 //
-// The three battlefield rows share the board's height, and each is a grid of cells (one card or
-// pile per cell, so nothing overlaps). Cards shrink to fit so a board never scrolls until they'd
-// get unreadably small. You can drag cards to any cell on any board; that only changes your view.
+// The battlefield rows (creatures, other permanents, lands) share the board's height, and each is a
+// grid of cells (one card or pile per cell, so nothing overlaps). Only rows with cards show, plus one
+// empty row to play into, so a new board is one row and a board of lands two. Cards shrink to fit
+// so a board never scrolls until they'd get unreadably small. You can drag cards to any cell on any
+// board; that only changes your view.
 import { useLayoutEffect, useRef, useState } from "react";
 import { ManaCost } from "../components/ManaCost";
 import { CardBack, CardBadges, CardFace, CostOverlay, previewFor, usePreview } from "./cards";
 import { isMarkClick, useMarks, useMarquee } from "./marks";
 import type { OpenMenu } from "./TableBoard";
-import { arrange, isPermanentCard, moveCards, ROW_LABELS, usedCols, type Arrangement, type CardView, type Pile, type PlayerView, type Row } from "./view";
+import { arrange, dropRow, isPermanentCard, moveCards, shownRows, usedCols, type Arrangement, type CardView, type Pile, type PlayerView, type Row } from "./view";
 
 export type ZoneName = "graveyard" | "exile" | "command" | "library";
 
@@ -26,16 +28,16 @@ export const DRAG_TYPE = "application/x-commandquest-card";
 let currentDrag: DragData | null = null; // dragover can't read dataTransfer contents
 export const setDrag = (d: DragData | null) => (currentDrag = d);
 
-const MIN_CW = 34;
+const MIN_CW = 24;
 const ROW_GAP = 6;
 const CARD_GAP = 5;
 /** Free cells kept at the end of each row, to drop cards into. */
 const SPARE = 1;
 
 /**
- * Picks the card width that fits every row in the box: each row gets a third of the height and
- * room for its rightmost card plus a spare cell. In `line` mode (short seats) the three rows sit
- * side by side, one line each.
+ * Picks the card width that fits every shown row in the box: each row gets an equal share of the
+ * height and room for its rightmost card plus a spare cell. In `line` mode (short seats) the rows
+ * sit side by side, one line each.
  */
 function fitWidth(rows: Pile[][], w: number, h: number, max: number, line = false): number {
   const cols = rows.map((r) => usedCols(r) + SPARE);
@@ -44,7 +46,7 @@ function fitWidth(rows: Pile[][], w: number, h: number, max: number, line = fals
     const total = cols.reduce((a, b) => a + b, 0);
     cw = Math.min(h / 1.4, (w - CARD_GAP * total - 16 * 2) / total);
   } else {
-    cw = (h - ROW_GAP * 2) / 3 / 1.4;
+    cw = (h - ROW_GAP * (rows.length - 1)) / rows.length / 1.4;
     for (const n of cols) cw = Math.min(cw, (w - CARD_GAP * (n - 1)) / n);
   }
   return Math.max(MIN_CW, Math.min(max, Math.floor(cw)));
@@ -283,7 +285,8 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
   // Size the cards for what's on the board, then center it in the columns that fit across: every
   // row has the same columns, so lands line up under creatures. (Side-by-side rows aren't centered.)
   const packed = arrange(p.battlefield, arrangement);
-  const cw = fitWidth(packed, box.w, box.h, props.maxCard, props.line);
+  const shown = shownRows(packed);
+  const cw = fitWidth(shown.map((r) => packed[r]), box.w, box.h, props.maxCard, props.line);
   const width = props.line ? 0 : Math.max(1, Math.floor((box.w - 8 + CARD_GAP) / (cw + CARD_GAP)));
   const rows = props.line ? packed : arrange(p.battlefield, arrangement, width);
   const accepts = (d: DragData | null) => !!d && ((d.from === "battlefield" && d.seat === p.id) || (d.from === "hand" && isMe));
@@ -299,6 +302,9 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
     setDropAt(null);
     if (!accepts(d) || !d) return;
     e.preventDefault();
+    // Dropped on the empty row: a card whose own row is empty too goes there (a land to the lands row).
+    const card = d.from === "hand" ? { types: d.types } : p.battlefield.find((c) => c.id === d.ids[0]);
+    row = dropRow(row, rows, card);
     // A card from hand lands in the cell you dropped it on once it's in play.
     props.onArrange(moveCards(p.battlefield, arrangement, d.ids, row, col, width));
     if (d.from !== "hand") return;
@@ -316,13 +322,13 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
       onMouseDown={onMouseDown}
     >
       {marquee}
-      {rows.map((piles, r) => {
+      {shown.map((r) => {
+        const piles = rows[r];
         const cols = Math.max(width, usedCols(piles) + SPARE);
         return (
           <div
             key={r}
             className={`bf-row${piles.length ? "" : " empty"}${dropAt?.row === r ? " drop" : ""}`}
-            data-label={ROW_LABELS[r]}
             style={{ "--cols": cols, flexGrow: props.line ? cols : undefined } as React.CSSProperties}
             onDragOver={(e) => {
               if (!accepts(currentDrag)) return;

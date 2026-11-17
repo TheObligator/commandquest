@@ -300,7 +300,7 @@ export function isPermanentCard(c: { types?: string[] }): boolean {
   return (c.types ?? []).some((t) => PERMANENT_TYPES.includes(t));
 }
 
-export function defaultRow(c: CardView): Row {
+export function defaultRow(c: { types?: string[] }): Row {
   const t = c.types ?? [];
   if (t.includes("Creature")) return 0;
   if (t.includes("Land")) return 2;
@@ -400,6 +400,26 @@ export function arrange(cards: CardView[], arr: Arrangement, width = 0): [Pile[]
     }
   });
   return cells.map((m) => [...m.values()].sort((a, b) => a.col - b.col)) as [Pile[], Pile[], Pile[]];
+}
+
+/**
+ * The rows a board shows, top to bottom: every row with cards in it, plus the first empty row as
+ * room to play into. An empty board is one row; a board with only lands, two.
+ */
+export function shownRows(rows: Pile[][]): Row[] {
+  const all: Row[] = [0, 1, 2];
+  const spare = all.find((r) => !rows[r].length);
+  return all.filter((r) => rows[r].length || r === spare);
+}
+
+/**
+ * The row a card dropped on row `row` goes to. On the empty row, a card whose own row (lands,
+ * creatures, other) is empty too goes there instead, so it lands where it's expected.
+ */
+export function dropRow(row: Row, rows: Pile[][], card?: { types?: string[] }): Row {
+  if (rows[row].length || !card?.types?.length) return row;
+  const own = defaultRow(card);
+  return rows[own].length ? row : own;
 }
 
 /** Columns a row needs: up to its rightmost card. */

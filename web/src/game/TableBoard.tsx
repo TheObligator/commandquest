@@ -208,6 +208,13 @@ export function TableBoard(props: {
 
   const seatOf = (id: string) => v.players.find((p) => p.id === id);
   const nameOf = (id: string) => (id === me ? "you" : seatOf(id)?.name ?? id);
+  // Every card you've seen this game, so the log can still show one that has since gone somewhere
+  // hidden (a library, a hand) or turned face down.
+  const seenCards = useRef(new Map<number, CardView>());
+  const visible = (c?: CardView) => (c && !c.hidden && c.name ? c : undefined);
+  for (const p of v.players) for (const z of [p.hand, p.battlefield, p.graveyard, p.exile, p.command]) for (const c of z) if (visible(c)) seenCards.current.set(c.id, c);
+  for (const s of v.stack) if (visible(s.card)) seenCards.current.set(s.card!.id, s.card!);
+  const logCard = (id: number) => visible(findCard(v, id)) ?? seenCards.current.get(id);
   const colorOf = (id: string) => seatOf(id)?.color ?? "#888";
   const meSeat: Seat = { id: me, name: v.players[0].name, color: v.players[0].color };
   const oppSeats: Seat[] = useMemo(() => v.players.slice(1).map((p) => ({ id: p.id, name: p.name, color: p.color })), [v.players]);
@@ -354,7 +361,7 @@ export function TableBoard(props: {
       >
         {/* Left: the log, then (by your hand) the decision and the auto-pass skips. */}
         <div className="rail-col">
-          <Log lines={v.log} />
+          <Log lines={v.log} cardOf={logCard} viewer={me} nameOf={nameOf} />
           {props.rail(preview)}
         </div>
 

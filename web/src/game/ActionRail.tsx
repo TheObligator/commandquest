@@ -3,11 +3,12 @@
 import { useEffect, useRef } from "react";
 import type { HotkeyAction } from "./hotkeys";
 import { Kbd, useHotkeys } from "./useHotkeys";
-import type { Preview } from "./cards";
+import { previewFor, usePreview, type Preview } from "./cards";
+import { logParts } from "./logText";
 import type { AutoPassMode } from "./phases";
 import { stepLabel } from "./sim";
 import type { SimGame } from "./useSimGame";
-import { commanderTax } from "./view";
+import { commanderTax, type CardView } from "./view";
 
 export const AUTO_PASS: { mode: AutoPassMode; label: string; key: HotkeyAction; title: string }[] = [
   { mode: "END_OF_TURN", label: "End of turn", key: "autoEndOfTurn", title: "Skip the rest of this turn. Your stops apply again next turn." },
@@ -137,8 +138,19 @@ function Decision({ sim, nameOf, bottomIds, onError }: Parameters<typeof ActionR
   );
 }
 
-export function Log({ lines }: { lines: string[] }) {
+/**
+ * The game log, newest at the bottom. Cards it names ("Forgotten Cave (1138)") show as their name,
+ * and hovering one shows the card, for spells, lands and the sources of triggered abilities alike.
+ */
+export function Log({ lines, cardOf, viewer = "", nameOf = (id) => id }: {
+  lines: string[];
+  /** The card with this id, if you can see it (or have seen it). */
+  cardOf?: (id: number) => CardView | undefined;
+  viewer?: string;
+  nameOf?: (id: string) => string;
+}) {
   const ref = useRef<HTMLOListElement>(null);
+  const setPreview = usePreview();
   useEffect(() => {
     ref.current?.scrollTo({ top: ref.current.scrollHeight });
   }, [lines.length]);
@@ -147,7 +159,23 @@ export function Log({ lines }: { lines: string[] }) {
       <header><h3>Log</h3></header>
       <ol ref={ref}>
         {lines.slice(-60).map((l, i) => (
-          <li key={i}>{l}</li>
+          <li key={i}>
+            {cardOf
+              ? logParts(l, (id) => cardOf(id)?.name).map((part, k) => typeof part === "string" ? part : (
+                <span
+                  key={k}
+                  className="log-card"
+                  onMouseEnter={() => {
+                    const c = cardOf(part.id);
+                    if (c) setPreview(previewFor(c, viewer, nameOf));
+                  }}
+                  onMouseLeave={() => setPreview(null)}
+                >
+                  {part.name}
+                </span>
+              ))
+              : l}
+          </li>
         ))}
       </ol>
     </section>
