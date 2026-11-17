@@ -44,13 +44,32 @@ export interface BrokenEntry {
   date?: string;
 }
 
+/**
+ * The other names a card script gives its front face: `Variant:UniversesWithin:FlavorName:Cecily,
+ * Haunted Mage` on Eleven, the Mage. Scryfall uses that name for the Universes Within printing.
+ */
+export function flavorNames(text: string): string[] {
+  const out: string[] = [];
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (line === "ALTERNATE") break; // the back face's lines
+    const m = /^Variant:[^:]*:FlavorName:(.+)$/.exec(line);
+    if (m) out.push(m[1].trim());
+  }
+  return out;
+}
+
 export function buildSupport(cardsDir: string, brokenFile: string): CardSupportData {
   const names = new Set<string>();
+  const aliases: Record<string, string> = {};
   for (const letter of readdirSync(cardsDir, { withFileTypes: true })) {
     if (!letter.isDirectory()) continue;
     for (const f of readdirSync(join(cardsDir, letter.name))) {
       if (!f.endsWith(".txt")) continue;
-      for (const n of scriptNames(readFileSync(join(cardsDir, letter.name, f), "utf8"))) names.add(n);
+      const text = readFileSync(join(cardsDir, letter.name, f), "utf8");
+      const own = scriptNames(text);
+      for (const n of own) names.add(n);
+      if (own.length) for (const a of flavorNames(text)) aliases[a] = own[0];
     }
   }
   const brokenRaw = existsSync(brokenFile) ? (JSON.parse(readFileSync(brokenFile, "utf8")) as { cards?: Record<string, BrokenEntry> }) : {};
@@ -58,16 +77,19 @@ export function buildSupport(cardsDir: string, brokenFile: string): CardSupportD
   for (const [name, entry] of Object.entries(brokenRaw.cards ?? {}).sort(([a], [z]) => a.localeCompare(z))) {
     broken[name] = entry.reason;
   }
-  return { cards: [...names].sort((a, z) => (a < z ? -1 : a > z ? 1 : 0)), broken };
+  const byName = (a: string, z: string) => (a < z ? -1 : a > z ? 1 : 0);
+  const sortedAliases = Object.fromEntries(Object.keys(aliases).filter((a) => !names.has(a)).sort(byName).map((a) => [a, aliases[a]]));
+  return { cards: [...names].sort(byName), broken, aliases: sortedAliases };
 }
 
 /** One name per line, so a Forge merge shows up as a readable diff. */
 export function render(data: CardSupportData): string {
-  return `{\n"broken": ${JSON.stringify(data.broken)},\n"cards": [\n${data.cards.map((n) => JSON.stringify(n)).join(",\n")}\n]\n}\n`;
+  const aliases = Object.entries(data.aliases ?? {}).map(([a, n]) => `${JSON.stringify(a)}: ${JSON.stringify(n)}`);
+  return `{\n"broken": ${JSON.stringify(data.broken)},\n"aliases": {\n${aliases.join(",\n")}\n},\n"cards": [\n${data.cards.map((n) => JSON.stringify(n)).join(",\n")}\n]\n}\n`;
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const data = buildSupport(CARDS_DIR, BROKEN_FILE);
   writeFileSync(OUT_FILE, render(data));
-  console.log(`Wrote ${data.cards.length} working card names and ${Object.keys(data.broken).length} known-broken cards to ${OUT_FILE}`);
+  console.log(`Wrote ${data.cards.length} working card names, ${Object.keys(data.aliases ?? {}).length} other names and ${Object.keys(data.broken).length} known-broken cards to ${OUT_FILE}`);
 }

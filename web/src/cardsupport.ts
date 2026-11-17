@@ -9,6 +9,11 @@ export interface CardSupportData {
   cards: string[];
   /** Cards Forge has but that misbehave: name → what's wrong. */
   broken: Record<string, string>;
+  /**
+   * Other names Forge knows a card by → Forge's name. Scryfall calls the Universes Within version
+   * of a crossover card by its own name ("Cecily, Haunted Mage"); Forge's script is "Eleven, the Mage".
+   */
+  aliases?: Record<string, string>;
 }
 
 export type CardStatus = { works: true } | { works: false; missing: boolean; reason: string };
@@ -23,6 +28,7 @@ export class CardSupport {
 
   constructor(data: CardSupportData) {
     this.known = new Map(data.cards.map((n) => [norm(n), n]));
+    for (const [alias, name] of Object.entries(data.aliases ?? {})) if (!this.known.has(norm(alias))) this.known.set(norm(alias), name);
     this.broken = new Map(Object.entries(data.broken).map(([n, r]) => [norm(n), r]));
   }
 
@@ -39,7 +45,7 @@ export class CardSupport {
   status(card: ScryCard | string): CardStatus {
     const names = namesOf(card);
     for (const n of names) {
-      const reason = this.broken.get(n);
+      const reason = this.broken.get(n) ?? this.broken.get(norm(this.known.get(n) ?? ""));
       if (reason) return { works: false, missing: false, reason };
     }
     if (names.some((n) => this.known.has(n))) return WORKS;

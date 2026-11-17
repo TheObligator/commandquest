@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
-import { BROKEN_FILE, CARDS_DIR, OUT_FILE, buildSupport, render, scriptNames } from "../scripts/cardsupport.ts";
+import { BROKEN_FILE, CARDS_DIR, OUT_FILE, buildSupport, flavorNames, render, scriptNames } from "../scripts/cardsupport.ts";
 import { CardSupport, type CardSupportData } from "../src/cardsupport.ts";
 import type { ScryCard } from "../src/scryfall.ts";
 
@@ -12,9 +12,16 @@ test("scriptNames reads the card's name, and both halves of a split card", () =>
   assert.deepEqual(scriptNames("Types:Artifact\n"), []);
 });
 
+test("flavorNames reads a front face's Universes Within name", () => {
+  assert.deepEqual(flavorNames("Name:Eleven, the Mage\nVariant:UniversesWithin:FlavorName:Cecily, Haunted Mage\r\nManaCost:1 U B R\n"), ["Cecily, Haunted Mage"]);
+  assert.deepEqual(flavorNames("Name:Front\nALTERNATE\nName:Back\nVariant:UniversesWithin:FlavorName:Other Back\n"), []);
+  assert.deepEqual(flavorNames("Name:Sol Ring\nVariant:A:Lights:2 6\n"), []);
+});
+
 const data: CardSupportData = {
   cards: ["Sol Ring", "Delver of Secrets", "Fire", "Fire // Ice", "All Good Things . . .", "Human-Time Lord Meta-Crisis", "Shahrazad"],
   broken: { Shahrazad: "Subgames aren't supported." },
+  aliases: { "Cecily, Haunted Mage": "Eleven, the Mage", "Some Shahrazad Alias": "Shahrazad" },
 };
 const card = (name: string, faces?: string[]) => ({ name, card_faces: faces?.map((n) => ({ name: n })) }) as unknown as ScryCard;
 
@@ -48,6 +55,13 @@ test("Scryfall's punctuation matches Forge's, and the game server gets Forge's s
   assert.equal(s.forgeName("All Good Things..."), "All Good Things . . .");
   assert.equal(s.forgeName("Sol Ring"), "Sol Ring");
   assert.equal(s.forgeName("Unknown Card"), "Unknown Card");
+});
+
+test("a card under its Universes Within name works, and the game server gets Forge's name", () => {
+  const s = new CardSupport({ ...data, cards: [...data.cards, "Eleven, the Mage"] });
+  assert.deepEqual(s.status(card("Cecily, Haunted Mage")), { works: true });
+  assert.equal(s.forgeName("Cecily, Haunted Mage"), "Eleven, the Mage");
+  assert.deepEqual(s.status("Some Shahrazad Alias"), { works: false, missing: false, reason: "Subgames aren't supported." });
 });
 
 // Forge's files aren't in CI's sparse checkout; locally this catches a stale public/card-support.json.
