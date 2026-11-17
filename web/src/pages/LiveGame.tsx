@@ -21,6 +21,7 @@ import type { AutoPassMode } from "../game/phases";
 import { tokenArtMap } from "../tokens";
 import { useDeckTokens } from "../useDeckTokens";
 import { isPermanentCard, type CardView, type GameView, type RewindLevel } from "../game/view";
+import { usePreloadZoom } from "../game/CardZoom";
 import type { MenuSection } from "../components/CardMenu";
 import { CounterDialog } from "../game/CounterDialog";
 import { PayPrompt } from "../game/PayPrompt";
@@ -307,6 +308,14 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
     return [...all].sort();
   }, [view, game.libraryList]);
   useCardData(names);
+  // Every card on the table, ready to zoom before you hover it (hidden ones have no image).
+  const visible = useMemo(() => {
+    const all: CardView[] = [];
+    for (const p of view.players) for (const z of [p.hand, p.battlefield, p.graveyard, p.exile, p.command]) for (const c of z) if (!c.hidden) all.push(c);
+    for (const s of view.stack) if (s.card && !s.card.hidden) all.push(s.card);
+    return all;
+  }, [view]);
+  usePreloadZoom(visible);
 
   // Send your stops to the server at the start and whenever you change them.
   const sentStops = useRef("");

@@ -20,6 +20,30 @@ function bigImage(card: CardView): string | undefined {
   return sc && imageUrl(sc, "large");
 }
 
+/** Large images already asked for in this tab, so each is fetched once. */
+const preloaded = new Set<string>();
+
+/**
+ * Fetches the large image of every card you can see, so hovering one shows it at once. Runs again
+ * when the cards change or their Scryfall data arrives (the caller re-renders then).
+ */
+export function usePreloadZoom(cards: CardView[]) {
+  const urls = new Set<string>();
+  for (const c of cards) {
+    const src = bigImage(c);
+    if (src && !preloaded.has(src)) urls.add(src);
+  }
+  const key = [...urls].sort().join("\n");
+  useEffect(() => {
+    if (!key) return;
+    for (const src of key.split("\n")) {
+      if (preloaded.has(src)) continue;
+      preloaded.add(src);
+      new Image().src = src;
+    }
+  }, [key]);
+}
+
 export function HoverZoom({ preview }: { preview: Preview | null }) {
   const [shown, setShown] = useState<Preview | null>(null);
   const pointer = useRef({ x: 0, y: 0 });
