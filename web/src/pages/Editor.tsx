@@ -9,7 +9,8 @@ import { closeOnBackdrop, showCardDetails } from "../carddetails";
 import { useCardSupport, type CardSupport } from "../cardsupport";
 import { mergeDuplicates, parseDecklist, writeDecklist, type ParsedToken } from "../decklist";
 import { toast } from "../dom";
-import { CardMenu } from "../components/CardMenu";
+import { CardMenu, type MenuItem, type MenuSection } from "../components/CardMenu";
+import { ContextMenu, type ContextMenuState } from "../components/ContextMenu";
 import { ColorStats } from "../components/ColorStats";
 import { DeckBracket } from "../components/DeckBracket";
 import { deckAverages } from "../deckstats";
@@ -28,7 +29,7 @@ import { tokenPicks } from "../tokens";
 import { useCardPreview } from "../useCardPreview";
 import { printingPref, usePrintingPref } from "../usePrintingPref";
 import { BOARDS, TYPE_ORDER } from "./boards";
-import { SearchBox, SearchResults } from "./EditorSearch";
+import { canCommand, SearchBox, SearchResults } from "./EditorSearch";
 import { capitalize } from "./DeckList";
 
 const FORMATS = ["commander", "conquest", "standard", "pioneer", "modern", "legacy", "vintage", "pauper", "other"];
@@ -248,6 +249,25 @@ function DeckEditor({ initial }: { initial: Draft }) {
       d.cards[i].board = board;
       return { ...d, cards: mergeDuplicates(d.cards) };
     });
+  }
+
+  /**
+   * Makes one copy of `target` a commander. Alone, it replaces the deck's commander(s), who go to
+   * the main deck; as a partner it joins the one already there.
+   */
+  function makeCommander(target: DeckCard, partner: boolean) {
+    const i = deck.cards.indexOf(target);
+    const replaced = partner ? [] : deck.cards.filter((c) => c.board === "commander").map((c) => c.name);
+    change((d) => {
+      if (!partner) for (const c of d.cards) if (c.board === "commander") c.board = "main";
+      const t = d.cards[i];
+      if (t.quantity > 1) {
+        t.quantity--;
+        d.cards.push({ ...t, quantity: 1, board: "commander" });
+      } else t.board = "commander";
+      return { ...d, cards: mergeDuplicates(d.cards) };
+    });
+    toast(`${target.name} is now ${partner ? "a" : "your"} commander${replaced.length ? `. ${replaced.join(" and ")} moved to the main deck` : ""}`);
   }
 
   function setPrinting(target: DeckCard, p: scry.ScryCard) {
@@ -527,6 +547,7 @@ function DeckEditor({ initial }: { initial: Draft }) {
             count={count}
             onQty={setQty}
             onMove={moveCard}
+            onMakeCommander={makeCommander}
             onPrinting={setPrinting}
             onAddCommander={(c) => void addCard(c, "commander")}
             onExtraColor={(c) => change((d) => ({ ...d, extraColor: c }))}
@@ -641,6 +662,7 @@ function DeckView(props: {
   count: (b?: Board) => number;
   onQty: (c: DeckCard, q: number) => void;
   onMove: (c: DeckCard, b: Board) => void;
+  onMakeCommander: (c: DeckCard, partner: boolean) => void;
   onPrinting: (c: DeckCard, p: scry.ScryCard) => void;
   onAddCommander: (c: scry.ScryCard) => void;
   onExtraColor: (color: string | undefined) => void;
@@ -654,16 +676,24 @@ function DeckView(props: {
   const preview = useCardPreview();
   const [printingsFor, setPrintingsFor] = useState<DeckCard | null>(null);
   const [pickingPartner, setPickingPartner] = useState(false);
+  /** The right-clicked card's menu: where it opened and which entry (by `key`), rebuilt each render. */
+  const [menu, setMenu] = useState<{ x: number; y: number; key: string } | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
   const [view, setView] = useCardView();
   const stacked = view === "stacked" || view === "spread";
   const [measure, stackCols] = useStackColumns();
   const support = useCardSupport();
   const warnings = useMemo(() => deckWarnings(deck, missing, count, support), [deck, missing, count, support]);
+  /** The tile's outline class for a card that won't work: red when it's missing, amber for a known issue. */
+  const brokenClass = (c: DeckCard, s: scry.ScryCard | undefined) => {
+    const st = support?.status(s ?? c.name);
+    return !st || st.works ? "" : st.missing ? " not-playable" : " known-issue";
+  };
   /** "Not playable" on cards that won't work in a game (src/cardsupport.ts). */
   const notWorking = (c: DeckCard, s: scry.ScryCard | undefined, className: string) => {
     const st = support?.status(s ?? c.name);
     if (!st || st.works) return null;
-    return <span className={className} title={st.reason}>{st.missing ? "Not playable" : "Known issue"}</span>;
+    return <span className={`${className}${st.missing ? " missing" : ""}`} title={st.reason}>{st.missing ? "Not playable" : "Known issue"}</span>;
   };
 
   if (!deck.cards.length) {
@@ -693,45 +723,69 @@ function DeckView(props: {
     </span>
   );
 
-  /** Every action for one deck entry, in a dark popup menu (no native <select>). */
-  const cardMenu = (c: DeckCard, s: scry.ScryCard | undefined, className?: string) => {
+  /**
+   * Every action for one deck entry. The same list opens from the "⋯" button and from a
+   * right-click on the card (no native <select>).
+   */
+  const menuSections = (c: DeckCard, s: scry.ScryCard | undefined): MenuSection[] => {
     const boardLabel = BOARDS.find((b) => b.id === c.board)!.label;
-    return (
-      <CardMenu
-        label={`Options for ${c.name}`}
-        className={className}
-        sections={[
-          {
-            title: `${c.quantity} × ${c.name} · ${boardLabel}`,
-            items: [
-              { label: "+ Add one", keepOpen: true, onSelect: () => props.onQty(c, c.quantity + 1) },
-              { label: "− Remove one", keepOpen: c.quantity > 1, onSelect: () => props.onQty(c, c.quantity - 1) },
-              { label: "Add", onSelect: () => {}, amount: { initial: 1, min: 1, max: MAX_QUANTITY - c.quantity, button: "Add", onAmount: (n) => props.onQty(c, c.quantity + n) } },
-              { label: "Set to", onSelect: () => {}, amount: { initial: c.quantity, min: 0, max: MAX_QUANTITY, button: "Set", onAmount: (n) => props.onQty(c, n) } },
-            ],
-          },
-          {
-            items: [
-              { label: "Card details", disabled: !s, onSelect: () => s && openDetails(c, s) },
-              { label: "Choose printing…", onSelect: () => setPrintingsFor(c) },
-            ],
-          },
-          {
-            title: "Move to",
-            items: BOARDS.filter((b) => b.id !== c.board).map((b) => ({ label: b.label, onSelect: () => props.onMove(c, b.id) })),
-          },
-          { items: [{ label: c.quantity > 1 ? `Remove all ${c.quantity}` : "Remove from deck", danger: true, onSelect: () => props.onQty(c, 0) }] },
-        ]}
-      />
-    );
+    const cmdrs = deck.cards.filter((x) => x.board === "commander");
+    const cmdrCards = cmdrs.map((x) => scry.cached(x));
+    const commanderFormat = deck.format === "commander" || deck.format === "conquest";
+    const eligible = commanderFormat && c.board !== "commander" && !!s && canCommand(s, deck.format);
+    const asPartner = eligible && cmdrs.length === 1 && !!cmdrCards[0] && canPair(cmdrCards[0], s!);
+    const commanderItems: MenuItem[] = !eligible
+      ? []
+      : [
+          ...(asPartner ? [{ label: "★ Add as second commander", onSelect: () => props.onMakeCommander(c, true) }] : []),
+          { label: cmdrs.length ? (cmdrs.length > 1 ? "★ Make commander (replaces both)" : `★ Make commander (replaces ${cmdrs[0].name})`) : "★ Make commander", onSelect: () => props.onMakeCommander(c, false) },
+        ];
+    const sections: MenuSection[] = [
+      {
+        title: `${c.quantity} × ${c.name} · ${boardLabel}`,
+        items: [
+          { label: "+ Add one", keepOpen: true, onSelect: () => props.onQty(c, c.quantity + 1) },
+          { label: "− Remove one", keepOpen: c.quantity > 1, onSelect: () => props.onQty(c, c.quantity - 1) },
+          { label: "Add", onSelect: () => {}, amount: { initial: 1, min: 1, max: MAX_QUANTITY - c.quantity, button: "Add", onAmount: (n) => props.onQty(c, c.quantity + n) } },
+          { label: "Set to", onSelect: () => {}, amount: { initial: c.quantity, min: 0, max: MAX_QUANTITY, button: "Set", onAmount: (n) => props.onQty(c, n) } },
+        ],
+      },
+      {
+        items: [
+          { label: "Card details", disabled: !s, onSelect: () => s && openDetails(c, s) },
+          { label: "Choose printing…", onSelect: () => setPrintingsFor(c) },
+        ],
+      },
+      { items: commanderItems },
+      {
+        title: "Move to",
+        items: BOARDS.filter((b) => b.id !== c.board && !(b.id === "commander" && eligible)).map((b) => ({ label: b.label, onSelect: () => props.onMove(c, b.id) })),
+      },
+      { items: [{ label: c.quantity > 1 ? `Remove all ${c.quantity}` : "Remove from deck", danger: true, onSelect: () => props.onQty(c, 0) }] },
+    ];
+    return sections.filter((sec) => sec.items.length);
+  };
+
+  const cardMenu = (c: DeckCard, s: scry.ScryCard | undefined, className?: string) => (
+    <CardMenu label={`Options for ${c.name}`} className={className} sections={menuSections(c, s)} />
+  );
+
+  /** Right-clicking a card opens the same menu at the pointer. */
+  const onContextMenu = (c: DeckCard) => (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("input")) return; // the quantity box keeps the browser's menu (paste)
+    e.preventDefault();
+    preview.hide();
+    setMenu({ x: e.clientX, y: e.clientY, key: key(c, deck.cards.indexOf(c)) });
   };
 
   const key = (c: DeckCard, i: number) => `${c.board}|${c.name}|${c.scryfallId ?? i}`;
+  const menuCard = menu && deck.cards.find((c, i) => key(c, i) === menu.key);
+  const contextMenu: ContextMenuState | null = menuCard ? { x: menu.x, y: menu.y, sections: menuSections(menuCard, scry.cached(menuCard)) } : null;
 
   const row = (c: DeckCard, i: number) => {
     const s = scry.cached(c);
     return (
-      <li key={key(c, i)} className={s ? "card-row" : "card-row unresolved"} {...preview.handlers(s)}>
+      <li key={key(c, i)} className={s ? "card-row" : "card-row unresolved"} {...preview.handlers(s)} onContextMenu={onContextMenu(c)}>
         {qty(c)}
         {s ? <button className="cname" title="Card details" onClick={() => openDetails(c, s)}>{c.name}</button> : <span className="cname">{c.name}</span>}
         {notWorking(c, s, "nw-badge")}
@@ -752,7 +806,7 @@ function DeckView(props: {
     const s = scry.cached(c);
     const img = s && scry.imageUrl(s, "normal");
     return (
-      <div key={key(c, i)} className={s ? "card-tile" : "card-tile unresolved"} {...(stacked ? preview.handlers(s) : {})}>
+      <div key={key(c, i)} className={`card-tile${s ? "" : " unresolved"}${brokenClass(c, s)}`} {...(stacked ? preview.handlers(s) : {})} onContextMenu={onContextMenu(c)}>
         <button className="tile-img" title={stacked ? undefined : s ? `${c.name}: card details` : c.name} aria-label={`${c.quantity} × ${c.name}: card details`} disabled={!s} onClick={() => s && openDetails(c, s)}>
           {img ? <img src={img} alt={c.name} loading="lazy" /> : <span className="noimg">{c.name}{missing.includes(c.name) ? " (not found)" : ""}</span>}
         </button>
@@ -897,6 +951,7 @@ function DeckView(props: {
       />
       <DeckTokens deckId={deck.id} cards={deck.cards} />
       {preview.element}
+      {contextMenu && <ContextMenu menu={contextMenu} onClose={closeMenu} />}
       {printingsFor && <Printings card={printingsFor} onPick={(p) => props.onPrinting(printingsFor, p)} onClose={() => setPrintingsFor(null)} />}
       {pickingPartner && leadCard && slotLabel && (
         <PartnerPicker commander={leadCard} label={slotLabel} onPick={props.onAddCommander} onClose={() => setPickingPartner(false)} />

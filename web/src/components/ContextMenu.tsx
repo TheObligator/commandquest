@@ -2,7 +2,7 @@
 // instead of a button. Sections can arrive later (e.g. a card's abilities from the game server):
 // `loading` shows a placeholder line until then. Closes on outside click, Escape, scroll or resize.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { MenuItem, MenuSection } from "./CardMenu";
+import { AmountRow, type MenuItem, type MenuSection } from "./CardMenu";
 
 export interface ContextMenuState {
   x: number;
@@ -113,6 +113,7 @@ function Row({ item, onClose }: { item: MenuItem; onClose: () => void }) {
     const left = row.right - 2 + p.width <= innerWidth - 8 ? row.right - 2 : Math.max(8, row.left + 2 - p.width);
     setPos({ left, top: clamp(row.top - 5, 8, innerHeight - p.height - 8) });
   }, [open]);
+  if (item.amount) return <AmountRow item={item} amount={item.amount} onDone={onClose} />;
   if (item.submenu) {
     return (
       <div ref={ref} className="cm-sub" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>

@@ -328,17 +328,21 @@ label.inline select { width: auto; padding: 5px 8px; }
 .card-row.unresolved .cname { color: var(--danger); }
 /* Cards that won't work in a game (src/cardsupport.ts). */
 .nw-badge { flex: none; font-size: .68rem; font-weight: 700; padding: 1px 6px; border-radius: 4px; background: rgb(224 168 79 / 16%); color: var(--accent-2); border: 1px solid rgb(224 168 79 / 45%); white-space: nowrap; cursor: help; }
-.nw-badge.tile-nw { position: absolute; top: 7px; left: 7px; z-index: 1; background: rgb(14 16 22 / 88%); }
-.nw-badge.tile-nw.below { top: 30px; }
-.card-tile:has(.tile-nw) .tile-qty { top: calc(6% + 24px); }
+.nw-badge.missing { color: #ffb3ad; background: rgb(255 107 107 / 14%); border-color: rgb(255 107 107 / 55%); }
+/* On a card image: bottom left, at the foot of the text box, clear of the top corners (quantity,
+   options button) and above the artist and copyright line, which nothing may cover. 139cqw is the
+   card's height (488 × 680). The card itself is outlined: red when not playable, amber for a known issue. */
+.nw-badge.tile-nw { position: absolute; top: calc(127cqw - 1.6em); left: 7px; z-index: 1; background: rgb(14 16 22 / 88%); }
+.search-card { container-type: inline-size; }
+.card-tile.not-playable .tile-img img, .search-card.not-playable .tile-img img { outline: 2px solid var(--danger); outline-offset: 1px; }
+.card-tile.known-issue .tile-img img, .search-card.known-issue .tile-img img { outline: 2px solid var(--accent-2); outline-offset: 1px; }
 /* Game Changers (Commander Brackets) in Commander decks and searches. */
 .gc-badge { flex: none; font-size: .66rem; font-weight: 800; letter-spacing: .04em; padding: 1px 5px; border-radius: 4px; background: rgb(195 155 255 / 16%); color: #d6bfff; border: 1px solid rgb(195 155 255 / 55%); white-space: nowrap; cursor: help; }
 .gc-badge.tile-gc { position: absolute; top: 7px; right: 7px; z-index: 1; background: rgb(14 16 22 / 88%); }
-.card-tile:hover .tile-gc, .card-tile:has(.tile-menu.open) .tile-gc { opacity: 0; }
+.card-tile:hover .tile-gc, .card-tile:has(.tile-menu.open) .tile-gc { opacity: 0; pointer-events: none; }
 .search-card:has(.in-deck-badge) .tile-gc { top: 34px; }
 .stack .tile-gc { top: 3.5cqw; right: 4cqw; font-size: max(.58rem, 5.5cqw); padding: 0 4px; line-height: 1.6; }
 .stack .card-tile:has(.tile-qty) .tile-gc { right: calc(4cqw + 3.4em); }
-.stack .card-tile:has(.tile-qty):has(.tile-nw) .tile-gc { right: calc(4cqw + 10em); }
 .qty { display: inline-flex; align-items: center; gap: 2px; font-variant-numeric: tabular-nums; min-width: 58px; }
 .qty > span { min-width: 1.6em; text-align: center; }
 .qty-input { width: 2.4em; padding: 1px 2px; text-align: center; font: inherit; font-variant-numeric: tabular-nums; color: inherit; background: none; border: 1px solid transparent; border-radius: 4px; }
@@ -484,11 +488,11 @@ dialog.card-detail { width: min(860px, calc(100vw - 32px)); max-height: 90vh; ba
 .stack .card-tile .tile-img:hover:not(:disabled) img { transform: none; box-shadow: 0 -2px 6px rgb(0 0 0 / 35%); outline: 2px solid var(--accent-2); outline-offset: -1px; }
 .stack .card-tile .noimg { display: flex; align-items: flex-start; width: 100%; aspect-ratio: 488 / 680; padding: 6% 7%; border: 1px solid var(--line); border-radius: 4.75% / 3.5%; background: var(--panel-2); font-size: .8rem; text-align: left; }
 .stack .tile-qty { top: 3.5cqw; left: auto; right: 4cqw; padding: 0 6px; font-size: max(.7rem, 7cqw); line-height: 1.5; }
-.stack .tile-nw { top: 3.5cqw; left: auto; right: 4cqw; font-size: max(.6rem, 6cqw); padding: 0 5px; line-height: 1.6; }
-.stack .card-tile:has(.tile-qty) .tile-nw { right: calc(4cqw + 3.4em); }
-.stack .card-tile:has(.tile-nw) .tile-qty { top: 3.5cqw; }
+/* The "not playable" mark stays at the card's foot, under the next card: only the outline shows on a covered card. */
+.stack .tile-nw { z-index: auto; font-size: max(.6rem, 6cqw); padding: 0 5px; line-height: 1.6; }
+.stack .card-tile.not-playable .tile-img img, .stack .card-tile.known-issue .tile-img img { outline-offset: -2px; }
 .stack .tile-menu { top: 3cqw; right: 3cqw; }
-.stack .card-tile:hover .tile-qty, .stack .card-tile:hover .tile-nw, .stack .card-tile:has(.tile-menu.open) .tile-qty, .stack .card-tile:has(.tile-menu.open) .tile-nw { opacity: 0; }
+.stack .card-tile:hover .tile-qty, .stack .card-tile:has(.tile-menu.open) .tile-qty { opacity: 0; pointer-events: none; }
 
 /* Card options: "⋯" button + dark popup menu (replaces the native <select>) */
 .menu-btn { width: 28px; height: 24px; padding: 0; border-radius: 6px; border: 1px solid transparent; background: none; color: var(--muted); cursor: pointer; font-size: 1.1rem; line-height: 1; opacity: 0; transition: opacity .1s; }

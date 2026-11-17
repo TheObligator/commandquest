@@ -124,7 +124,7 @@ export function CardMenu({ label, sections, className = "", trigger }: { label: 
 }
 
 /** "Add [4] [Add]": a number box in the menu. Enter or the button applies it and closes the menu. */
-function AmountRow({ item, amount, onDone }: { item: MenuItem; amount: NonNullable<MenuItem["amount"]>; onDone: () => void }) {
+export function AmountRow({ item, amount, onDone }: { item: MenuItem; amount: NonNullable<MenuItem["amount"]>; onDone: () => void }) {
   const [value, setValue] = useState(String(amount.initial));
   const n = Math.floor(Number(value));
   const ok = value.trim() !== "" && Number.isFinite(n) && n >= amount.min && n <= amount.max;

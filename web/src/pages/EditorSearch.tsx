@@ -24,7 +24,8 @@ export function InfoButton({ label, onClick, className = "" }: { label: string; 
   );
 }
 
-const canCommand = (c: scry.ScryCard, format: string) =>
+/** Whether a card can lead a deck of this format. */
+export const canCommand = (c: scry.ScryCard, format: string) =>
   format === "conquest" ? isCommanderEligible(c) : /Legendary.*Creature|can be your commander/i.test(`${c.type_line} ${c.oracle_text ?? ""}`);
 
 // ---- Name box with suggestions -----------------------------------------------------------
@@ -338,13 +339,13 @@ export function SearchResults(props: {
         ...(commander ? [{ label: "★ Set as commander", run: () => props.onAdd(c, "commander", exact) }] : []),
       ]);
     return (
-      <div key={c.id} className={`search-card${count ? " in-deck" : ""}${verdict.ok ? "" : " not-legal"}`}>
+      <div key={c.id} className={`search-card${count ? " in-deck" : ""}${verdict.ok ? "" : " not-legal"}${playable && !playable.works ? (playable.missing ? " not-playable" : " known-issue") : ""}`}>
         <button className="tile-img" title={`${c.name}: card details`} onClick={details}>
           {img ? <img src={img} alt={c.name} loading="lazy" /> : <span className="noimg">{c.name}</span>}
         </button>
         {!verdict.ok && <span className="legal-badge" title={`Not legal in Conquest: ${verdict.reason}`}>Not legal</span>}
         {playable && !playable.works && (
-          <span className={`nw-badge tile-nw${verdict.ok ? "" : " below"}`} title={playable.reason}>{playable.missing ? "Not playable" : "Known issue"}</span>
+          <span className={`nw-badge tile-nw${playable.missing ? " missing" : ""}`} title={playable.reason}>{playable.missing ? "Not playable" : "Known issue"}</span>
         )}
         {props.format === "commander" && c.game_changer && (
           <span className="gc-badge tile-gc" title="Game Changer: Exhibition and Core decks allow none, Upgraded up to 3">GC</span>
