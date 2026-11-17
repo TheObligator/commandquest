@@ -35,6 +35,13 @@ function art(s: StackItemView): string | undefined {
   return sc && imageUrl(sc, "art_crop");
 }
 
+/** A spell (not an ability) shows its whole card: the image for that, or undefined to show the art and text. */
+function fullCard(s: StackItemView, size: "normal" | "large"): string | undefined {
+  if (s.kind !== "Spell" || !s.card || s.card.hidden || s.card.token) return undefined;
+  const sc = s.card.name ? cached({ name: s.card.name, quantity: 1, board: "main" }) : undefined;
+  return sc && imageUrl(sc, size);
+}
+
 /** Stack positions are numbered from the bottom: 1 resolves last. */
 const numberOf = (view: GameView, s: StackItemView) => view.stack.indexOf(s) + 1;
 
@@ -131,6 +138,7 @@ export function StackWindow(props: {
         <ol className="stk-list">
           {items.map((s) => {
             const src = art(s);
+            const whole = fullCard(s, "normal");
             const n = numberOf(view, s);
             const targets = s.targets ?? [];
             return (
@@ -146,7 +154,13 @@ export function StackWindow(props: {
               >
                 <span className="stk-num" aria-label={`Stack position ${n}`}>{n}</span>
                 <div className="stk-name">{s.name}</div>
-                {src ? <img className="stk-art" src={src} alt="" draggable={false} /> : <div className="stk-art none" />}
+                {whole ? (
+                  <img className="stk-card" src={whole} alt={s.name} draggable={false} />
+                ) : src ? (
+                  <img className="stk-art" src={src} alt="" draggable={false} />
+                ) : (
+                  <div className="stk-art none" />
+                )}
                 <div className="stk-kind">
                   {s.kind}
                   <span> · {s.controller === view.viewer ? "you" : nameOf(s.controller)}</span>
@@ -154,7 +168,7 @@ export function StackWindow(props: {
                     <b className="stk-flag">{s.autoYield ? "auto-yield" : s.decision === "ACCEPT" ? "always yes" : "always no"}</b>
                   )}
                 </div>
-                {s.text && <p className="stk-text">{stackText(s.text, s.card?.name ?? s.name).text}</p>}
+                {s.text && !whole && <p className="stk-text">{stackText(s.text, s.card?.name ?? s.name).text}</p>}
                 <footer className="stk-foot">
                   <span className="stk-targets">{targets.length ? `→ ${targets.map((t) => t.label).join(", ")}` : ""}</span>
                   <button className="stk-more" aria-label={`More about ${s.name}`} onClick={(e) => openItem(e, s)}>
@@ -213,6 +227,7 @@ function StackDetail(props: { item: StackItemView; number: number; x: number; y:
 
   const sections = menu.filter((s) => s.items.length);
   const text = stackText(item.text ?? "", item.card?.name ?? item.name);
+  const whole = fullCard(item, "large");
   return (
     <div ref={ref} className="stk-detail-wrap" style={pos} onContextMenu={(e) => (e.preventDefault(), e.stopPropagation())}>
       <article className="stk-detail" style={{ "--seat": "var(--accent)" } as React.CSSProperties}>
@@ -222,7 +237,11 @@ function StackDetail(props: { item: StackItemView; number: number; x: number; y:
           </h4>
           <button className="dialog-close" aria-label="Close" onClick={onClose}>×</button>
         </header>
-        {props.src && <img className="stk-art" src={props.src} alt="" draggable={false} />}
+        {whole ? (
+          <img className="stk-card" src={whole} alt={item.name} draggable={false} />
+        ) : (
+          props.src && <img className="stk-art" src={props.src} alt="" draggable={false} />
+        )}
         <div className="stk-kind">{item.kind}</div>
         <p className="stk-full">{text.text || item.name}</p>
         {text.info.length > 0 && <p className="stk-full-info">{text.info.join(" · ")}</p>}

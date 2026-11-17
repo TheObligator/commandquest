@@ -310,6 +310,9 @@ dialog.zone-viewer { width: min(980px, calc(100vw - 32px)); max-height: 86vh; ba
 .stk-item:hover, .stk-item.open { box-shadow: 0 0 0 1px var(--seat), 0 0 14px -4px var(--seat); }
 .stk-name { padding: 6px 8px 5px 30px; font-weight: 700; font-size: .84rem; color: #f1e9d6; background: color-mix(in srgb, var(--seat) 16%, #2a241a); border-radius: 8px 8px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stk-art { display: block; width: 100%; aspect-ratio: 626 / 457; object-fit: cover; max-height: 120px; }
+/* A spell: the whole card, not just its art. */
+.stk-card { display: block; width: calc(100% - 12px); margin: 6px auto 0; aspect-ratio: 488 / 680; border-radius: 4.75% / 3.5%; object-fit: cover; }
+.stk-detail .stk-card { width: min(300px, calc(100% - 24px)); margin-top: 10px; }
 .stk-art.none { height: 6px; background: #221e17; }
 .stk-kind { padding: 6px 8px 2px; font-size: .64rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #6aa2ff; }
 .stk-kind span { color: #8a826e; letter-spacing: .04em; text-transform: none; font-weight: 500; }
