@@ -18,6 +18,13 @@ import java.util.Set;
 /** Decks for a game: a player's deck sent by the browser, and Forge's Commander precons for AI seats. */
 public final class Decks {
 
+    /**
+     * The most cards a deck may have, commander included. Commander decks are 100 cards, but a
+     * Rulebreaker like Whtz, the Bibliophile lifts the maximum; this cap keeps the server safe.
+     * Matches MAX_DECK_SIZE in web/convex/model/deckRules.ts.
+     */
+    public static final int MAX_DECK_SIZE = 1000;
+
     private Decks() {
     }
 
@@ -55,8 +62,8 @@ public final class Decks {
         if (d.get(DeckSection.Commander) == null || d.get(DeckSection.Commander).isEmpty()) {
             throw new IllegalArgumentException("This deck has no commander.");
         }
-        if (total > 250) {
-            throw new IllegalArgumentException("This deck is too big.");
+        if (total > MAX_DECK_SIZE) {
+            throw new IllegalArgumentException("This deck has " + total + " cards. Games allow at most " + MAX_DECK_SIZE + ".");
         }
         return d;
     }

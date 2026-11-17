@@ -2,6 +2,7 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { gameSocketUrl } from "../game/useLiveGame";
+import { useGameProblems } from "../useGameDecks";
 
 type SocketState = "connecting" | "open" | "closed";
 
@@ -41,10 +42,15 @@ function useGameServerStatus(): SocketState {
 export function Play() {
   const status = useGameServerStatus();
   const { isAuthenticated } = useConvexAuth();
-  const decks = useQuery(api.decks.list, isAuthenticated ? {} : "skip");
+  const decks = useQuery(api.decks.forPlay, isAuthenticated ? {} : "skip");
   const label = { connecting: "connecting…", open: "online", closed: "offline, retrying…" }[status];
   const [deckId, setDeckId] = useState("");
-  const chosen = deckId || decks?.[0]?._id || "";
+  // Only decks that can start a game are offered; the rest are listed with what's wrong.
+  const problems = useGameProblems(decks);
+  const checking = !!decks?.length && !problems;
+  const ready = problems ? (decks ?? []).filter((d) => !problems.get(d._id)?.length) : [];
+  const notReady = problems ? (decks ?? []).filter((d) => problems.get(d._id)?.length) : [];
+  const chosen = ready.some((d) => d._id === deckId) ? deckId : ready[0]?._id ?? "";
 
   return (
     <>
@@ -55,17 +61,40 @@ export function Play() {
       <div className="card play-deck">
         <label>
           Your deck
-          <select disabled={!decks?.length} value={chosen} onChange={(e) => setDeckId(e.target.value)}>
+          <select disabled={!ready.length} value={chosen} onChange={(e) => setDeckId(e.target.value)}>
             {!isAuthenticated ? (
               <option>Sign in to pick a deck</option>
-            ) : !decks?.length ? (
+            ) : decks === undefined ? (
+              <option>Loading your decks…</option>
+            ) : !decks.length ? (
               <option>No decks yet: build one first</option>
+            ) : checking ? (
+              <option>Checking your decks…</option>
+            ) : !ready.length ? (
+              <option>None of your decks is ready to play yet</option>
             ) : (
-              decks.map((d) => <option key={d._id} value={d._id}>{d.name} ({d.commanders.join(" & ") || d.format})</option>)
+              ready.map((d) => <option key={d._id} value={d._id}>{d.name} ({d.commanders.join(" & ")})</option>)
             )}
           </select>
         </label>
         <a href="#/decks" className="link">Manage decks →</a>
+        {notReady.length > 0 && (
+          <details className="not-ready">
+            <summary className="muted small">
+              {notReady.length} {notReady.length === 1 ? "deck isn't" : "decks aren't"} ready for a Commander game
+            </summary>
+            <ul>
+              {notReady.map((d) => (
+                <li key={d._id}>
+                  <a className="link" href={`#/decks/${d._id}`}>{d.name}</a>
+                  <ul className="muted small">
+                    {problems!.get(d._id)!.map((p) => <li key={p}>{p}</li>)}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
       </div>
       <p className="card table-preview-link">
         <strong>Set up your stops: </strong>try the game table's phase sidebar on a simulated game.{" "}
@@ -77,7 +106,7 @@ export function Play() {
           tag="Against AI"
           text="You and up to three Forge AI opponents, Commander rules."
           href={chosen && status === "open" ? `#/game?deck=${encodeURIComponent(chosen)}` : undefined}
-          why={!isAuthenticated ? "Sign in first" : !chosen ? "Build a deck first" : status !== "open" ? "The game server is offline" : undefined}
+          why={!isAuthenticated ? "Sign in first" : checking ? "Checking your decks…" : !chosen ? (decks?.length ? "No deck is ready to play" : "Build a deck first") : status !== "open" ? "The game server is offline" : undefined}
         />
         <Mode title="Create a table" tag="Multiplayer" text="Open a table and invite friends with a link." />
         <Mode title="Join a table" tag="Multiplayer" text="Enter a table code from a friend." />

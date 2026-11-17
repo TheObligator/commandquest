@@ -20,9 +20,10 @@ import { ManaCurve } from "../components/ManaCurve";
 import { columnSpans, columnsOf, stackColClass } from "../stackLayout";
 import { ManaCost } from "../components/ManaCost";
 import { Loading } from "../components/Spinner";
-import { CONQUEST, fitsIdentity, validateConquest, type OffIdentity } from "../formats/conquest";
+import { CONQUEST } from "../formats/conquest";
+import { checkDeck, identityTest } from "../deckcheck";
 import { canPair, partnerQuery, partnerSlotLabel } from "../formats/partners";
-import { bestExtraColor, extraColorChoice, noMaxDeckSize, offIdentity } from "../formats/rulebreakers";
+import { bestExtraColor, extraColorChoice, noMaxDeckSize } from "../formats/rulebreakers";
 import { PRINTING_PREFS, prefLabel, type PrintingPref } from "../printings";
 import * as scry from "../scryfall";
 import { tokenPicks } from "../tokens";
@@ -35,9 +36,6 @@ import { capitalize } from "./DeckList";
 const FORMATS = ["commander", "conquest", "standard", "pioneer", "modern", "legacy", "vintage", "pauper", "other"];
 /** Up to this many main-deck planeswalkers are shown beside the commander(s). */
 const MAX_WALKERS_BESIDE_COMMANDER = 3;
-/** The format's color identity test: Conquest relaxes hybrid symbols, Commander doesn't. */
-const identityTest = (format: string) =>
-  format === "conquest" ? fitsIdentity : (card: { color_identity: string[] }, identity: Set<string>) => card.color_identity.every((x) => identity.has(x));
 
 const COLORS: Record<string, string> = { W: "White", U: "Blue", B: "Black", R: "Red", G: "Green" };
 const UNTITLED = "Untitled deck";
@@ -683,7 +681,7 @@ function DeckView(props: {
   const stacked = view === "stacked" || view === "spread";
   const [measure, stackCols] = useStackColumns();
   const support = useCardSupport();
-  const warnings = useMemo(() => deckWarnings(deck, missing, count, support), [deck, missing, count, support]);
+  const warnings = useMemo(() => deckWarnings(deck, missing, support), [deck, missing, support]);
   /** The tile's outline class for a card that won't work: red when it's missing, amber for a known issue. */
   const brokenClass = (c: DeckCard, s: scry.ScryCard | undefined) => {
     const st = support?.status(s ?? c.name);
@@ -999,62 +997,9 @@ function QtyInput({ value, label, onChange }: { value: number; label: string; on
   );
 }
 
-function deckWarnings(deck: Draft, missing: string[], count: (b?: Board) => number, support?: CardSupport): string[] {
-  const w: string[] = [];
-  const list = (names: string[]) => names.slice(0, 6).join(", ") + (names.length > 6 ? "…" : "");
-  if (missing.length) w.push(`Scryfall doesn't know: ${missing.slice(0, 8).join(", ")}${missing.length > 8 ? "…" : ""}. Check the spelling.`);
-  if (support) {
-    const played = deck.cards.filter((c) => c.board === "main" || c.board === "commander");
-    const status = played.filter((c) => !missing.includes(c.name)).map((c) => [c, support.status(scry.cached(c) ?? c.name)] as const);
-    const absent = status.filter(([, st]) => !st.works && st.missing).map(([c]) => c.name);
-    const issues = status.filter(([, st]) => !st.works && !st.missing).map(([c]) => c.name);
-    if (absent.length) w.push(`Not in the rules engine yet, so this deck can't start a game: ${list(absent)}.`);
-    if (issues.length) w.push(`Known not to work right in games: ${list(issues)}.`);
-  }
-  const fmt = deck.format;
-  if (fmt === "conquest") {
-    const off: OffIdentity = (main, cmdrs) => offIdentity(main, cmdrs, fitsIdentity, deck.extraColor);
-    return [...w, ...validateConquest(deck.cards.map((c) => ({ ...c, card: scry.cached(c) })), off)];
-  }
-  if (fmt === "commander") {
-    const cmdrs = deck.cards.filter((c) => c.board === "commander");
-    const cmdrCards = cmdrs.flatMap((c) => scry.cached(c) ?? []);
-    const total = count();
-    if (!cmdrs.length) w.push("No commander yet. Use ★ on a search result or move a card to the Commander board.");
-    if (cmdrs.reduce((n, c) => n + c.quantity, 0) > 2) w.push("A deck can have at most two commanders.");
-    else if (cmdrs.length === 2 && cmdrCards.length === 2 && !canPair(cmdrCards[0], cmdrCards[1])) {
-      w.push(`${cmdrs[0].name} and ${cmdrs[1].name} can't be commanders together: two commanders need partner, partner with each other, a Background, or a Doctor and companion.`);
-    }
-    if (noMaxDeckSize(cmdrCards)) {
-      if (total < 100) w.push(`Commander decks have at least 100 cards (you have ${total}). Your commander lifts the maximum.`);
-    } else if (total !== 100) w.push(`Commander decks have exactly 100 cards (you have ${total}).`);
-    const main = deck.cards.flatMap((c) => {
-      const card = c.board === "main" ? scry.cached(c) : undefined;
-      return card ? [{ name: c.name, card }] : [];
-    });
-    const offColor = cmdrs.length ? offIdentity(main, cmdrCards, identityTest("commander"), deck.extraColor).map((e) => e.name) : [];
-    const dupes: string[] = [];
-    for (const c of deck.cards) {
-      if (c.board !== "main") continue;
-      const s = scry.cached(c);
-      if (!s) continue;
-      const unlimited = /Basic/.test(s.type_line) || /any number of cards named/i.test(s.oracle_text ?? "");
-      if (c.quantity > 1 && !unlimited) dupes.push(c.name);
-    }
-    if (offColor.length) w.push(`Outside your commander's colors: ${list(offColor)}.`);
-    if (dupes.length) w.push(`Commander is singleton, but you have multiples of: ${list(dupes)}.`);
-  }
-  if (fmt !== "other") {
-    const illegal = deck.cards
-      .filter((c) => c.board !== "maybe")
-      .filter((c) => {
-        const l = scry.cached(c)?.legalities?.[fmt];
-        return l === "banned" || l === "not_legal";
-      })
-      .map((c) => c.name);
-    if (illegal.length) w.push(`Not legal in ${capitalize(fmt)}: ${list(illegal)}.`);
-  }
-  return w;
+function deckWarnings(deck: Draft, missing: string[], support?: CardSupport): string[] {
+  const { problems, notes } = checkDeck(deck, scry.cached, support, missing);
+  return [...problems, ...notes];
 }
 
 function Stats({ deck, count, onExtraColor }: { deck: Draft; count: (b?: Board) => number; onExtraColor: (color: string | undefined) => void }) {

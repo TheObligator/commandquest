@@ -45,6 +45,24 @@ export const list = query({
   },
 });
 
+/** How many of your most recent decks the Play page checks and offers. */
+const PLAY_DECKS = 100;
+
+/** Your most recent decks with their cards, for the Play page to check which can start a game. */
+export const forPlay = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+    const decks = await ctx.db
+      .query("decks")
+      .withIndex("by_user_updated", (q) => q.eq("userId", userId))
+      .order("desc")
+      .take(PLAY_DECKS);
+    return decks.map((d) => ({ _id: d._id, name: d.name, format: d.format, cards: d.cards, extraColor: d.extraColor, commanders: summarize(d.cards).commanders }));
+  },
+});
+
 /** One of your decks, or null (not found, someone else's, or signed out). */
 export const get = query({
   args: { id: v.string() },

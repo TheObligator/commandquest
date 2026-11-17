@@ -28,6 +28,8 @@ export interface DeckInput {
 export const MAX_NAME = 100;
 export const MAX_CARDS = 1000;
 export const MAX_QUANTITY = 250;
+/** The most cards a deck can have in a game (forge-web-server's Decks.MAX_DECK_SIZE). */
+export const MAX_DECK_SIZE = 1000;
 export const MAX_DECKS_PER_USER = 500;
 export const MAX_BRACKET_TAGS = 20;
 export const MAX_BRACKET_TAG_LENGTH = 40;

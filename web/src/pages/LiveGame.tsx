@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { navigate, useRoute } from "../app/router";
 import { useCardSupport } from "../cardsupport";
+import { useGameProblems } from "../useGameDecks";
 import { toast } from "../dom";
 import { useCardData } from "../game/cards";
 import { LiveRail } from "../game/LiveRail";
@@ -71,14 +72,9 @@ export function LiveGame() {
   const game = useLiveGame();
   const { tokens } = useDeckTokens(deck?.cards, deck?.tokenArt);
   const support = useCardSupport();
-  /** Cards Forge doesn't have: the server refuses to start a game with them. */
-  const unplayable = useMemo(
-    () =>
-      support && deck
-        ? deck.cards.filter((c) => (c.board === "main" || c.board === "commander") && support.notInForge(c.name)).map((c) => c.name)
-        : [],
-    [support, deck],
-  );
+  /** Why this deck can't start a game (not Commander-legal, cards Forge doesn't have, ...). */
+  const deckList = useMemo(() => (deck ? [{ ...deck, _id: deck._id as string }] : undefined), [deck]);
+  const deckProblems = useGameProblems(deckList)?.get(deck?._id ?? "") ?? [];
 
   useEffect(() => {
     if (game.error) {
@@ -245,13 +241,13 @@ export function LiveGame() {
                   ))}
                 </datalist>
               </label>
-              {unplayable.length > 0 && (
-                <p className="form-error">
-                  Forge's rules engine doesn't have {unplayable.length === 1 ? "this card" : "these cards"} yet, so this deck can't start a game:{" "}
-                  {unplayable.join(", ")}. <a className="link" href={`#/decks/${deckId}`}>Edit the deck</a>
-                </p>
+              {deckProblems.length > 0 && (
+                <div className="form-error">
+                  This deck can't start a game yet. <a className="link" href={`#/decks/${deckId}`}>Edit the deck</a>
+                  <ul>{deckProblems.map((p) => <li key={p}>{p}</li>)}</ul>
+                </div>
               )}
-              <button className="btn" onClick={start} disabled={!deck || game.status !== "ready" || unplayable.length > 0}>
+              <button className="btn" onClick={start} disabled={!deck || game.status !== "ready" || deckProblems.length > 0}>
                 {game.status === "starting" ? "Starting…" : game.status === "ready" ? "Start game" : STATUS[game.status]}
               </button>
             </>
