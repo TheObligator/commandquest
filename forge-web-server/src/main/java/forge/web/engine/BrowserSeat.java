@@ -270,6 +270,10 @@ public final class BrowserSeat implements IRemote {
                 view.set("selection", sel);
             }
             view.put("landDrop", landDrop());
+            String out = outcome(live);
+            if (out != null) {
+                view.put("outcome", out);
+            }
             untapLocks(live, view);
             if (!searching.isEmpty()) {
                 ArrayNode s = view.putArray("searching"); // players whose library you may search
@@ -286,6 +290,25 @@ public final class BrowserSeat implements IRemote {
             lastState = state;
             emitRaw(state);
         }
+    }
+
+    /** How you left the game ("You conceded."), once you have lost; null while you're still in. */
+    private String outcome(Game live) {
+        Player p = live == null || me == null ? null : live.getPlayer(me.getId());
+        if (p == null || !p.hasLost() || p.getOutcome() == null || p.getOutcome().lossState == null) {
+            return null;
+        }
+        String spell = p.getOutcome().loseConditionSpell;
+        return switch (p.getOutcome().lossState) {
+            case Conceded -> "You conceded.";
+            case LifeReachedZero -> "You lost: your life reached 0.";
+            case Milled -> "You lost: you had to draw from an empty library.";
+            case Poisoned -> "You lost to poison counters.";
+            case CommanderDamage -> "You lost to commander damage.";
+            case SpellEffect -> spell == null ? "You lost to a card's effect." : "You lost to " + spell + ".";
+            case OpponentWon -> spell == null ? "You lost: an opponent won the game." : "You lost: an opponent won with " + spell + ".";
+            default -> "You're out of the game.";
+        };
     }
 
     /**

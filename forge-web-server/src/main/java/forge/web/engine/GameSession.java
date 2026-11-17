@@ -6,8 +6,12 @@ import forge.game.GameEndReason;
 import forge.game.GameRules;
 import forge.game.GameType;
 import forge.game.GameView;
+import forge.game.event.GameEvent;
+import forge.game.player.Player;
 import forge.game.player.PlayerView;
 import forge.game.player.RegisteredPlayer;
+import com.google.common.eventbus.Subscribe;
+import forge.gamemodes.match.DrawOfferCoordinator;
 import forge.gamemodes.match.HostedMatch;
 import forge.gamemodes.net.IRemote;
 import forge.gamemodes.net.ProtocolGuiGame;
@@ -141,6 +145,12 @@ public final class GameSession {
             return;
         }
         hooked = true;
+        g.subscribeToEvents(new Object() {
+            @Subscribe
+            public void on(GameEvent ev) {
+                endIfNoHumansLeft(g);
+            }
+        });
         if (options.replays() != null) {
             Recording rec = new Recording(g, new com.fasterxml.jackson.databind.ObjectMapper(), tokenArt);
             ReplaySink sink = options.replays();
@@ -157,6 +167,37 @@ public final class GameSession {
     }
 
     private boolean hooked;
+    private volatile boolean ending;
+
+    /**
+     * Once every human seat has lost (conceded, or lost in a game still going on), the game ends,
+     * as Forge's own client does: AI playing on alone would only keep a game slot busy, and the
+     * player waits for a game that is over for them.
+     */
+    private void endIfNoHumansLeft(Game g) {
+        if (ending || g.isGameOver()) {
+            return;
+        }
+        boolean anyHuman = false;
+        for (Player p : g.getRegisteredPlayers()) {
+            if (p.getLobbyPlayer() instanceof WebLobbyPlayer) {
+                anyHuman = true;
+                if (!p.hasLost()) {
+                    return;
+                }
+            }
+        }
+        if (!anyHuman) {
+            return;
+        }
+        ending = true;
+        g.getAction().invoke(() -> {
+            if (!g.isGameOver()) {
+                g.setGameOver(GameEndReason.AllHumansLost);
+                DrawOfferCoordinator.releaseInputQueues(g);
+            }
+        });
+    }
 
     /** This game's recording, or null when it isn't recorded. */
     public Recording recording() {

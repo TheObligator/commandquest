@@ -140,6 +140,11 @@ public class GameHubTest {
                     }
                     case "prompt" -> {
                         prompts++;
+                        if (m.path("message").asText().contains("won the coin toss")) {
+                            // Won the toss in a multiplayer game: click a player to go first (yourself).
+                            ws.sendText("{\"t\":\"player\",\"id\":" + state.path("viewer").asText() + "}", true);
+                            continue;
+                        }
                         boolean myMain = state.path("active").asText().equals(state.path("viewer").asText())
                                 && state.path("step").asText().equals("MAIN1");
                         JsonNode land = null;
@@ -419,6 +424,12 @@ public class GameHubTest {
             start.set("deck", deck());
             ws.sendText(json.writeValueAsString(start), true);
             JsonNode prompt = next(first, "prompt", 60_000);
+            if (prompt.path("ok").path("label").asText().equals("Play")) {
+                ws.sendText("{\"t\":\"ok\"}", true); // won the coin toss: play first
+                do {
+                    prompt = next(first, "prompt", 60_000);
+                } while (prompt.path("ok").path("label").asText().equals("Play")); // its buttons can come twice
+            }
             Assert.assertEquals(prompt.path("cancel").path("label").asText(), "Mulligan", "the opening hand: " + prompt);
 
             // The tab reloads: the old socket closes, a new one signs in.
@@ -450,6 +461,77 @@ public class GameHubTest {
                     w.sendClose(WebSocket.NORMAL_CLOSURE, "done");
                 }
             }
+            Thread.sleep(500);
+            app.stop();
+        }
+    }
+
+    /**
+     * Conceding against three AI ends the game (the AI don't play on alone), and the table says
+     * you conceded.
+     */
+    @Test(timeOut = 120_000)
+    public void concedeEndsTheGameForYou() throws Exception {
+        MyRandom.setRandom(new Random(7));
+        TestTokens tokens = new TestTokens();
+        Javalin app = WebServer.create(new WebServer.Options(null, Set.of(), null, tokens.auth(), 2)).start(0);
+        Browser b = new Browser();
+        WebSocket ws = connect(app, b);
+        try {
+            ws.sendText("{\"t\":\"hello\",\"token\":\"" + tokens.valid("user1") + "\"}", true);
+            next(b, "hello", 10_000);
+            ObjectNode start = json.createObjectNode();
+            start.put("t", "start");
+            start.put("name", "Tester");
+            start.put("opponents", 3);
+            start.set("deck", deck());
+            ws.sendText(json.writeValueAsString(start), true);
+            Assert.assertEquals(next(b, "prompt", 60_000).path("cancel").path("label").asText(), "Mulligan");
+            ws.sendText("{\"t\":\"ok\"}", true);
+            // Play on until the game stops for you with priority (past the mulligan), then concede.
+            JsonNode prompt = null;
+            long until = System.currentTimeMillis() + 60_000;
+            while (prompt == null && System.currentTimeMillis() < until) {
+                String s = b.inbox.poll(500, TimeUnit.MILLISECONDS);
+                JsonNode m = s == null ? null : json.readTree(s);
+                if (m != null && m.path("t").asText().equals("prompt") && m.path("ok").path("label").asText().equals("OK")
+                        && !m.path("message").asText().contains("hand")) {
+                    prompt = m;
+                } else if (m != null && m.path("t").asText().equals("ask")) {
+                    ObjectNode ans = json.createObjectNode();
+                    ans.put("t", "answer");
+                    ans.put("id", m.path("id").asInt());
+                    ans.putArray("choice").add(m.path("selected").size() > 0 ? m.path("selected").get(0).asInt() : 0);
+                    ws.sendText(json.writeValueAsString(ans), true);
+                }
+            }
+            Assert.assertNotNull(prompt, "the game stopped for you");
+            ws.sendText("{\"t\":\"concede\"}", true);
+
+            java.util.List<String> trace = new java.util.ArrayList<>();
+            boolean over = false;
+            JsonNode last = null;
+            long end = System.currentTimeMillis() + 20_000;
+            while (System.currentTimeMillis() < end && !over) {
+                String s = b.inbox.poll(500, TimeUnit.MILLISECONDS);
+                if (s == null) {
+                    continue;
+                }
+                JsonNode m = json.readTree(s);
+                String t = m.path("t").asText();
+                trace.add(t + (t.equals("prompt") ? " '" + m.path("message").asText().replace('\n', ' ') + "'" : ""));
+                if (t.equals("state")) {
+                    last = m.path("view");
+                    over |= last.path("gameOver").asBoolean(); // the browser ends the game on this
+                }
+                over |= t.equals("over");
+            }
+            Assert.assertTrue(over, "conceding ends the game, after " + prompt.path("message") + ": " + trace);
+            Assert.assertNotNull(last, "a last look at the table");
+            Assert.assertTrue(last.path("gameOver").asBoolean(), "the game is over: " + last);
+            Assert.assertEquals(last.path("outcome").asText(), "You conceded.");
+        } finally {
+            ws.sendClose(WebSocket.NORMAL_CLOSURE, "done");
             Thread.sleep(500);
             app.stop();
         }

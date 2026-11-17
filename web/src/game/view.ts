@@ -159,6 +159,8 @@ export interface GameView {
   searching?: string[];
   /** Live games: your cards you can use right now (cast, play or activate). */
   playable?: number[];
+  /** Live games: how you left the game ("You conceded."), once you've lost. */
+  outcome?: string;
   /** Live games: it's your turn and you could still play a land from your hand this turn. */
   landDrop?: boolean;
   /** In turn order, starting with the viewer. */

@@ -87,7 +87,10 @@ public class DeckSizeTest {
                 if (owner.equals(gv.getPlayerTurn()) && gv.getPhase() == PhaseType.MAIN1 && lastLandTurn != gv.getTurn() && owner.getHand() != null) {
                     land = owner.getHand().isEmpty() ? null : owner.getHand().iterator().next();
                 }
-                if (land != null) {
+                if (!Boolean.TRUE.equals(prompt[3]) && !Boolean.TRUE.equals(prompt[4])) {
+                    // No buttons: you won the coin toss and pick who goes first by clicking a player (yourself).
+                    FThreads.invokeInEdtLater(() -> controller.selectPlayer(owner, null));
+                } else if (land != null) {
                     CardView toPlay = land;
                     lastLandTurn = gv.getTurn();
                     FThreads.invokeInEdtLater(() -> controller.selectCard(toPlay, null, null));
