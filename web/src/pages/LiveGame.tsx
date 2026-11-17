@@ -172,10 +172,21 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
   // A double-click is two clicks: the second would hit the card again once it's in play (and tap a
   // land you just played for mana). One click per card per half second.
   const lastClick = useRef({ id: -1, at: 0 });
-  const click = (id: number) => {
+  // Forge is asking you to declare attackers (InputAttack): your turn's declare attackers step,
+  // with a prompt that isn't the priority one you get once attackers are locked in.
+  const declaringAttackers = view.step === "COMBAT_DECLARE_ATTACKERS" && view.active === view.viewer
+    && !!game.prompt && !game.ask && !isPriorityPrompt(game.prompt);
+  const click = (id: number, pile?: number[]) => {
     const now = performance.now();
     if (lastClick.current.id === id && now - lastClick.current.at < 500) return;
     lastClick.current = { id, at: now };
+    // Declaring attackers, a click on a pile of creatures toggles all of them. A pile's cards are
+    // all attacking or all not (attacking is part of what makes cards pile up), so each click
+    // flips them the same way.
+    if (pile && pile.length > 1 && declaringAttackers && view.players[0].battlefield.some((c) => c.id === id)) {
+      for (const c of pile) game.clickCard(c);
+      return;
+    }
     castFrom.current ??= view.stack.length;
     game.clickCard(id);
   };

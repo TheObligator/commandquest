@@ -141,7 +141,7 @@ export function TableBoard(props: {
     onClick?: (id: number) => void;
   };
   /** Click on any card on any board (live games). Without it, clicking your own permanent taps it. */
-  onCardClick?: (id: number) => void;
+  onCardClick?: (id: number, pile?: number[]) => void;
   onPlayerClick?: (id: string) => void;
   onTap?: (id: number) => void;
   /** Cast a commander from your command zone (by card id: partners are two). */

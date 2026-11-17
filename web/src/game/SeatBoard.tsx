@@ -65,8 +65,9 @@ export function SeatBoard(props: {
   focused?: boolean;
   /** Short seat: battlefield groups side by side instead of three rows. */
   line?: boolean;
-  /** Live games: a click on any card goes to the game (Forge decides what it does). */
-  onCardClick?: (cardId: number) => void;
+  /** Live games: a click on any card goes to the game (Forge decides what it does). `pile`: every
+   *  card in the clicked pile, the top one first. */
+  onCardClick?: (cardId: number, pile: number[]) => void;
   /** Live games: click a player's name to pick them (targets). */
   onPlayerClick?: (playerId: string) => void;
   /** Cards that can be picked right now. */
@@ -307,7 +308,7 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
                   }}
                   onDragEnd={() => (setDrag(null), setDropAt(null))}
                   title={props.onCardClick ? `${c.name ?? "Face-down card"}: click to use or choose it, right-click for more, drag to move` : isMe && props.onTap ? `${c.name ?? "Face-down card"}: click to ${c.tapped ? "untap" : "tap"}, drag to move` : undefined}
-                  onClick={() => (props.onCardClick ? props.onCardClick(c.id) : isMe && props.onTap?.(c.id))}
+                  onClick={() => (props.onCardClick ? props.onCardClick(c.id, pile.cards.map((x) => x.id)) : isMe && props.onTap?.(c.id))}
                   onContextMenu={props.onMenu && ((e) => props.onMenu!(e, { kind: "card", card: c, where: "battlefield" }))}
                   {...props.hover(c)}
                 >
