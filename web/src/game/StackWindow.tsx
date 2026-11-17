@@ -6,6 +6,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { MenuSection } from "../components/CardMenu";
 import { cached, imageUrl } from "../scryfall";
 import { tokenImage, usePreview } from "./cards";
+import { stackText } from "./stackText";
 import type { GameView, StackItemView } from "./view";
 
 interface Box {
@@ -153,7 +154,7 @@ export function StackWindow(props: {
                     <b className="stk-flag">{s.autoYield ? "auto-yield" : s.decision === "ACCEPT" ? "always yes" : "always no"}</b>
                   )}
                 </div>
-                {s.text && <p className="stk-text">{s.text}</p>}
+                {s.text && <p className="stk-text">{stackText(s.text, s.card?.name ?? s.name).text}</p>}
                 <footer className="stk-foot">
                   <span className="stk-targets">{targets.length ? `→ ${targets.map((t) => t.label).join(", ")}` : ""}</span>
                   <button className="stk-more" aria-label={`More about ${s.name}`} onClick={(e) => openItem(e, s)}>
@@ -180,7 +181,7 @@ export function StackWindow(props: {
   );
 }
 
-/** An item opened from the stack: its settings menu beside the whole ability, targets included. */
+/** An item opened from the stack: the whole ability, targets included, with its settings menu under it. */
 function StackDetail(props: { item: StackItemView; number: number; x: number; y: number; src?: string; menu: MenuSection[]; onClose: () => void }) {
   const { item, menu, onClose } = props;
   const ref = useRef<HTMLDivElement>(null);
@@ -211,22 +212,9 @@ function StackDetail(props: { item: StackItemView; number: number; x: number; y:
   }, [onClose]);
 
   const sections = menu.filter((s) => s.items.length);
+  const text = stackText(item.text ?? "", item.card?.name ?? item.name);
   return (
     <div ref={ref} className="stk-detail-wrap" style={pos} onContextMenu={(e) => (e.preventDefault(), e.stopPropagation())}>
-      {sections.length > 0 && (
-        <div className="card-menu stk-menu" role="menu" aria-label={`${item.name} settings`}>
-          {sections.map((s, i) => (
-            <div key={i} className="card-menu-section">
-              {s.title && <div className="card-menu-title">{s.title}</div>}
-              {s.items.map((it) => (
-                <button key={it.label} role="menuitem" disabled={it.disabled} onClick={() => it.onSelect()}>
-                  {it.label}
-                </button>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
       <article className="stk-detail" style={{ "--seat": "var(--accent)" } as React.CSSProperties}>
         <header>
           <h4>
@@ -236,8 +224,24 @@ function StackDetail(props: { item: StackItemView; number: number; x: number; y:
         </header>
         {props.src && <img className="stk-art" src={props.src} alt="" draggable={false} />}
         <div className="stk-kind">{item.kind}</div>
-        <p className="stk-full">{item.text || item.name}</p>
+        <p className="stk-full">{text.text || item.name}</p>
+        {text.info.length > 0 && <p className="stk-full-info">{text.info.join(" · ")}</p>}
         {item.targets?.length ? <p className="stk-full-targets">Targets: {item.targets.map((t) => t.label).join(", ")}</p> : null}
+        {/* Its settings go under the text, so they never cover the name or the art. */}
+        {sections.length > 0 && (
+          <div className="card-menu stk-menu" role="menu" aria-label={`${item.name} settings`}>
+            {sections.map((s, i) => (
+              <div key={i} className="card-menu-section">
+                {s.title && <div className="card-menu-title">{s.title}</div>}
+                {s.items.map((it) => (
+                  <button key={it.label} role="menuitem" disabled={it.disabled} onClick={() => it.onSelect()}>
+                    {it.label}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
       </article>
     </div>
   );
