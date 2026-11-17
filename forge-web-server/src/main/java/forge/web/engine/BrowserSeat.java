@@ -312,8 +312,8 @@ public final class BrowserSeat implements IRemote {
     }
 
     /**
-     * Your cards you could use right now (cast, play, activate: not mana abilities), for the
-     * table's "playable" glow. Empty unless you have priority.
+     * Your cards you could use right now and can pay for (cast, play, activate: not mana
+     * abilities), for the table's "playable" glow. Empty unless you have priority.
      */
     private ArrayNode playable() {
         ArrayNode ids = json.createArrayNode();
@@ -325,13 +325,12 @@ public final class BrowserSeat implements IRemote {
             }
             Set<Integer> seen = new HashSet<>();
             for (Card c : p.getCardsIn(PLAYABLE_ZONES)) {
-                if (seen.add(c.getId()) && c.getAllPossibleAbilities(p, true).stream().anyMatch(sa -> !sa.isManaAbility() && Explain.hasTargets(sa, p))) {
+                if (seen.add(c.getId()) && Explain.usableNow(c, p)) {
                     ids.add(c.getId());
                 }
             }
             for (Card c : g.getCardsIn(ZoneType.Exile)) { // cards others exiled that you may play
-                if (c.getOwner() != p && seen.add(c.getId()) && !c.mayPlay(p).isEmpty()
-                        && c.getAllPossibleAbilities(p, true).stream().anyMatch(sa -> !sa.isManaAbility() && Explain.hasTargets(sa, p))) {
+                if (c.getOwner() != p && seen.add(c.getId()) && !c.mayPlay(p).isEmpty() && Explain.usableNow(c, p)) {
                     ids.add(c.getId());
                 }
             }

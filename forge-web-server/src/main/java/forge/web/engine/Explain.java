@@ -1,11 +1,14 @@
 package forge.web.engine;
 
+import forge.ai.ComputerUtilMana;
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.card.CardView;
+import forge.game.cost.CostPayment;
 import forge.game.phase.PhaseHandler;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
+import forge.game.spellability.SpellAbility;
 import forge.game.zone.Zone;
 import forge.game.zone.ZoneType;
 
@@ -72,6 +75,36 @@ public final class Explain {
             return name + " has no ability you can use right now" + (card.isTapped() ? " (it's tapped)." : ".");
         }
         return "There's nothing you can do with " + name + " right now.";
+    }
+
+    /**
+     * Could {@code p} use {@code c} right now: cast or play it, or activate one of its abilities
+     * (not mana abilities), with something to target and the mana and other costs to pay for it?
+     * This is the table's "playable" glow.
+     */
+    public static boolean usableNow(Card c, Player p) {
+        for (SpellAbility sa : c.getAllPossibleAbilities(p, true)) {
+            if (!sa.isManaAbility() && hasTargets(sa, p) && affordable(sa, p)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Can {@code p} pay for it now: mana from the pool and untapped sources (with cost changes such
+     * as commander tax), and its other costs? Call on the game thread.
+     */
+    public static boolean affordable(SpellAbility sa, Player p) {
+        try {
+            if (sa.getActivatingPlayer() == null) {
+                sa.setActivatingPlayer(p);
+            }
+            return CostPayment.canPayAdditionalCosts(sa.getPayCosts(), sa, false, p)
+                    && ComputerUtilMana.canPayManaCost(sa, p, 0, false);
+        } catch (RuntimeException e) {
+            return true; // when in doubt, let Forge decide
+        }
     }
 
     /**

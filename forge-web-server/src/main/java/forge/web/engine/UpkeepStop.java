@@ -1,9 +1,7 @@
 package forge.web.engine;
 
-import forge.ai.ComputerUtilMana;
 import forge.game.Game;
 import forge.game.card.Card;
-import forge.game.cost.CostPayment;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
@@ -38,7 +36,7 @@ public final class UpkeepStop {
         for (ZoneType zone : ZONES) {
             for (Card c : p.getCardsIn(zone).threadSafeIterable()) {
                 for (SpellAbility sa : c.getAllPossibleAbilities(p, true)) {
-                    if (!sa.isManaAbility() && UPKEEP_ONLY.equals(sa.getRestrictions().getPhases()) && affordable(sa, p)) {
+                    if (!sa.isManaAbility() && UPKEEP_ONLY.equals(sa.getRestrictions().getPhases()) && Explain.affordable(sa, p)) {
                         return c;
                     }
                 }
@@ -47,9 +45,4 @@ public final class UpkeepStop {
         return null;
     }
 
-    /** Can {@code p} pay for it now (mana from untapped sources, and any other costs)? */
-    private static boolean affordable(SpellAbility sa, Player p) {
-        return CostPayment.canPayAdditionalCosts(sa.getPayCosts(), sa, false, p)
-                && ComputerUtilMana.canPayManaCost(sa, p, 0, false);
-    }
 }
