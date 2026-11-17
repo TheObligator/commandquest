@@ -87,7 +87,7 @@ public class AutoPassTest {
                 if (g.getStack().isEmpty()) {
                     break;
                 }
-                FThreads.invokeInEdtLater(ctl::selectButtonOk); // something on the stack: let it resolve
+                GameSessionTest.pass(ctl); // something on the stack: let it resolve
             }
             Assert.assertFalse(seen.isEmpty(), "asked again eventually");
             String last = seen.get(seen.size() - 1);

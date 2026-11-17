@@ -96,7 +96,7 @@ public class ManualEffectsTest {
             Card extra = talrand;
             long deadline = System.currentTimeMillis() + 60_000;
             boolean declared = false;
-            FThreads.invokeInEdtLater(ctl::selectButtonOk); // leave the main phase (its prompt was already taken)
+            GameSessionTest.pass(ctl); // leave the main phase (its prompt was already taken)
             while (System.currentTimeMillis() < deadline) {
                 Object[] prompt = browser.buttonPrompts.poll(5, TimeUnit.SECONDS);
                 if (prompt == null) {
@@ -127,7 +127,7 @@ public class ManualEffectsTest {
                     }
                     return;
                 }
-                FThreads.invokeInEdtLater(ctl::selectButtonOk);
+                GameSessionTest.pass(ctl);
             }
             Assert.fail("never got into combat");
         } finally {

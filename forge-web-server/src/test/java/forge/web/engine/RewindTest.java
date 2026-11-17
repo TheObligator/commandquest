@@ -131,7 +131,7 @@ public class RewindTest {
                             .anyMatch(e -> e.message().startsWith("Rewound to before")), "the log says so");
                     undone = true;
                     browser.buttonPrompts.clear();
-                    FThreads.invokeInEdtLater(ctl::selectButtonOk);
+                    GameSessionTest.pass(ctl);
                     continue;
                 }
                 if (undone && gv.getTurn() > landTurn) {
@@ -154,7 +154,7 @@ public class RewindTest {
                         Assert.assertTrue(System.currentTimeMillis() < end, "timed out going back a turn: now "
                                 + session.view().getTurn() + " " + session.view().getPhase() + ", " + rewind.json(JSON, mine));
                         if (browser.buttonPrompts.poll(500, TimeUnit.MILLISECONDS) != null && !done.getAsBoolean()) {
-                            FThreads.invokeInEdtLater(ctl::selectButtonOk);
+                            GameSessionTest.pass(ctl);
                         }
                     }
                     Assert.assertTrue(rewind.json(JSON, mine).path("note").asText().startsWith("Rewound"));
@@ -164,7 +164,7 @@ public class RewindTest {
                     wentBack = true;
                     continue;
                 }
-                FThreads.invokeInEdtLater(ctl::selectButtonOk);
+                GameSessionTest.pass(ctl);
             }
             Assert.assertTrue(undone, "undid the land");
             Assert.assertTrue(wentBack, "went back a turn");
@@ -225,7 +225,7 @@ public class RewindTest {
                     CardView play = land;
                     FThreads.invokeInEdtLater(() -> ctl.selectCard(play, null, null));
                 } else {
-                    FThreads.invokeInEdtLater(ctl::selectButtonOk);
+                    GameSessionTest.pass(ctl);
                 }
             }
             Assert.assertTrue(asked, "saw an attack");
@@ -263,7 +263,7 @@ public class RewindTest {
                 var input = ((forge.player.PlayerControllerHuman) ctl).getInputQueue().getInput();
                 boolean myTurn = me.equals(gv.getPlayerTurn());
                 if (input instanceof forge.gamemodes.match.input.InputPayMana) {
-                    FThreads.invokeInEdtLater(ctl::selectButtonOk);   // auto-pay
+                    GameSessionTest.pass(ctl);   // auto-pay
                     continue;
                 }
                 if (myTurn && gv.getPhase() == PhaseType.MAIN1 && landTurn != gv.getTurn() && me.getHand() != null) {
@@ -307,7 +307,7 @@ public class RewindTest {
                                 && session.game().getPhaseHandler().getCombat().isAttacking(d0(session, isamaruId(session))));
                         step = 4;
                         Thread.sleep(300);   // Forge's input handler catches up with the new prompt
-                        FThreads.invokeInEdtLater(ctl::selectButtonOk);
+                        GameSessionTest.pass(ctl);
                         continue;
                     }
                     if (step == 5) {
@@ -333,7 +333,7 @@ public class RewindTest {
                         continue;
                     }
                 }
-                FThreads.invokeInEdtLater(ctl::selectButtonOk);
+                GameSessionTest.pass(ctl);
             }
             GameView end = session.view();
             Player you = session.game().getPlayers().get(0);
@@ -448,7 +448,7 @@ public class RewindTest {
                         CardView play = land;
                         FThreads.invokeInEdtLater(() -> ctl.selectCard(play, null, null));
                     } else {
-                        FThreads.invokeInEdtLater(ctl::selectButtonOk);
+                        GameSessionTest.pass(ctl);
                     }
                 }
             } catch (InterruptedException ignored) {

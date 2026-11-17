@@ -91,7 +91,7 @@ public class UpkeepStopTest {
             });
 
             // Pass everything until it's your next turn (starting with the main phase we're in).
-            FThreads.invokeInEdtLater(ctl::selectButtonOk);
+            GameSessionTest.pass(ctl);
             boolean stoppedInUpkeep = false;
             long deadline = System.currentTimeMillis() + 120_000;
             while (System.currentTimeMillis() < deadline) {
@@ -104,7 +104,7 @@ public class UpkeepStopTest {
                     stoppedInUpkeep = gv.getPhase() == PhaseType.UPKEEP;
                     break;
                 }
-                FThreads.invokeInEdtLater(ctl::selectButtonOk);
+                GameSessionTest.pass(ctl);
             }
             Assert.assertTrue(stoppedInUpkeep, "the game stops in your upkeep");
             Assert.assertEquals(onGameThread(g, () -> UpkeepStop.reason(g, me)).getName(), "Undead Gladiator");

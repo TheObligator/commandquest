@@ -99,7 +99,7 @@ public class RecordingTest {
                     landTurn = gv.getTurn();
                     FThreads.invokeInEdtLater(() -> ctl.selectCard(land, null, null));
                 } else {
-                    FThreads.invokeInEdtLater(ctl::selectButtonOk);
+                    GameSessionTest.pass(ctl);
                 }
             }
             Assert.assertNotNull(session.recording());

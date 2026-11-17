@@ -98,7 +98,7 @@ public class PaymentTest {
                     && session.game().getStack().isEmpty()) {
                 return me;
             }
-            FThreads.invokeInEdtLater(ctl::selectButtonOk);
+            GameSessionTest.pass(ctl);
         }
         Assert.fail("never reached your main phase");
         return null;

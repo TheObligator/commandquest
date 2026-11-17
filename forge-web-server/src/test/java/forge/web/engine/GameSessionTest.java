@@ -2,6 +2,7 @@ package forge.web.engine;
 
 import forge.deck.Deck;
 import forge.deck.DeckSection;
+import forge.game.GameStage;
 import forge.game.GameView;
 import forge.game.card.CardView;
 import forge.game.phase.PhaseType;
@@ -13,6 +14,7 @@ import forge.gamemodes.net.event.IdentifiableNetEvent;
 import forge.gamemodes.net.event.NetEvent;
 import forge.gui.FThreads;
 import forge.interfaces.IGameController;
+import forge.player.PlayerControllerHuman;
 import forge.trackable.TrackableCollection;
 import forge.util.MyRandom;
 import java.util.ArrayList;
@@ -32,6 +34,22 @@ import org.testng.annotations.Test;
 public class GameSessionTest {
 
     /** Stands in for the browser: records prompts, answers blocking questions with defaults. */
+    /**
+     * Presses OK for the human seat (keep the hand, pass priority), on Forge's UI thread. Winning
+     * the coin toss in a multiplayer game has no OK: you click who goes first, so this picks you.
+     */
+    static void pass(IGameController ctl) {
+        FThreads.invokeInEdtLater(() -> {
+            if (ctl instanceof PlayerControllerHuman h && h.getGame() != null && h.getPlayer() != null
+                    && h.getGame().getAge() == GameStage.BeforeMulligan && h.getGame().getPlayers().size() > 2) {
+                System.out.println("PICKED-SELF");
+                h.selectPlayer(h.getPlayer().getView(), null);
+            } else {
+                ctl.selectButtonOk();
+            }
+        });
+    }
+
     static final class ScriptedBrowser implements IRemote {
         final BlockingQueue<Object[]> buttonPrompts = new LinkedBlockingQueue<>();
         final List<String> asked = new ArrayList<>();
@@ -126,7 +144,7 @@ public class GameSessionTest {
                 } else if (landsPlayed >= 2 && gv.getTurn() >= 9) {
                     break;
                 } else {
-                    FThreads.invokeInEdtLater(controller::selectButtonOk); // keep / pass priority
+                    GameSessionTest.pass(controller); // keep / pass priority
                 }
             }
 
