@@ -11,7 +11,7 @@ import type { CardDetails } from "./useLiveGame";
 import type { CardView } from "./view";
 
 /** How long the pointer rests on a card before it's shown large. */
-export const HOVER_ZOOM_MS = 2000;
+export const HOVER_ZOOM_MS = 1000;
 
 function bigImage(card: CardView): string | undefined {
   if (card.hidden) return undefined;
@@ -38,6 +38,9 @@ export function HoverZoom({ preview }: { preview: Preview | null }) {
     setShown(null);
     setPos(null);
     if (!preview) return;
+    // Fetch the large image while waiting, so it's there when the zoom opens.
+    const src = bigImage(preview.card);
+    if (src) new Image().src = src;
     const t = window.setTimeout(() => setShown(preview), HOVER_ZOOM_MS);
     const hide = () => setShown(null);
     window.addEventListener("pointerdown", hide, true);

@@ -11,7 +11,10 @@ import forge.game.player.Player;
 import forge.game.player.PlayerView;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
+import forge.gamemodes.match.input.InputConfirm;
+import forge.gamemodes.match.input.InputSelectEntitiesFromList;
 import forge.player.PlayerControllerHuman;
+import forge.util.collect.FCollection;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -70,6 +73,41 @@ public class WebPlayerController extends PlayerControllerHuman {
             notice.accept("Stopped in upkeep: " + card.getName() + " has an ability you can only use now.");
         }
         return false;
+    }
+
+    /**
+     * Whoever wins the die roll is asked whether to play first: Yes (OK, Space) and they do. No in a
+     * two-player game hands it to the opponent; with more players, you then click the seat of the
+     * player who goes first, or Cancel to be asked again. (Forge asks "play or draw" in 1v1 and goes
+     * straight to a player list in multiplayer.)
+     */
+    @Override
+    public Player chooseStartingPlayer(boolean isFirstGame) {
+        List<Player> others = new ArrayList<>(getGame().getPlayersInTurnOrder());
+        others.remove(player);
+        if (others.isEmpty()) {
+            return player;
+        }
+        String why = isFirstGame ? "You won the die roll." : "You lost the last game, so you choose who starts.";
+        while (true) {
+            InputConfirm first = new InputConfirm(this, "Do you want to play first?\n" + why, "Yes", "No", true);
+            first.showAndWait();
+            if (first.getResult()) {
+                return player;
+            }
+            if (others.size() == 1) {
+                return others.get(0);
+            }
+            // Forge formats this message with String.format, so it must not contain a percent sign.
+            InputSelectEntitiesFromList<Player> pick = new InputSelectEntitiesFromList<>(this, 1, 1, new FCollection<>(others));
+            pick.setMessage("Who plays first?\nClick the player who goes first, or Cancel to go back.");
+            pick.setCancelAllowed(true);
+            pick.showAndWait();
+            Player chosen = pick.hasCancelled() ? null : pick.getFirstSelected();
+            if (chosen != null) {
+                return chosen;
+            }
+        }
     }
 
     /** How many cards keeping this hand costs, given Forge's count. */
