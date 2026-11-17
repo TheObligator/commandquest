@@ -90,6 +90,7 @@ function Game({ count, start, layout, myName }: { count: number; start: "new" | 
     autoEndOfTurn: () => (playing ? setAutoPass("END_OF_TURN") : false),
     autoBeforeMyTurn: () => (playing ? setAutoPass("BEFORE_MY_TURN") : false),
     autoUntilMyTurn: () => (playing ? setAutoPass("UNTIL_MY_TURN") : false),
+    autoUntilMyTurnAll: () => (playing ? setAutoPass("UNTIL_MY_TURN_ALL") : false),
     autoActionOrEnd: () => (playing ? setAutoPass("ACTION_OR_END_STEP") : false),
     holdPriority: () => st.setHoldPriority(!st.holdPriority),
   });

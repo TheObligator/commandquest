@@ -100,6 +100,11 @@ test("auto-pass: end of turn expires next turn, R stops at this turn's end step,
   assert.equal(shouldStop(s, { ...at("o1", "COMBAT_DECLARE_ATTACKERS", 5), autoPass: ap }), false);
   assert.equal(shouldStop(s, { ...at("o1", "COMBAT_DECLARE_ATTACKERS", 5), autoPass: ap, stackNonEmpty: true }), true);
   assert.equal(shouldStop(s, { ...at("o3", "END_OF_TURN", 7), autoPass: ap }), true);
+  // Until my turn, ignoring the stack (F6): passes even with something on the stack, until your turn.
+  const f6 = { mode: "UNTIL_MY_TURN_ALL" as const, turn: 5 };
+  assert.equal(shouldStop(s, { ...at("o2", "MAIN1", 6), autoPass: f6, stackNonEmpty: true }), false);
+  assert.equal(shouldStop(s, { ...at("o3", "END_OF_TURN", 7), autoPass: f6, stackNonEmpty: true }), false);
+  assert.equal(shouldStop(s, { ...at("me", "UPKEEP", 8), autoPass: f6, stackNonEmpty: true }), true);
   // Once expired, the normal stops apply again.
   assert.equal(shouldStop(s, { ...at("o1", "COMBAT_DECLARE_ATTACKERS", 6), autoPass: { mode: "END_OF_TURN", turn: 5 } }), true);
 });

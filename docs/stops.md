@@ -29,6 +29,11 @@ The game screen has a vertical phase strip on the right. Every step is a tile sp
   - **Before my turn (B):** skip until the end step of the player right before you.
   - **Until my turn (M):** skip everything, that end step included, until your next turn starts;
     your own stops apply from there. Chosen on your own turn, it skips the rest of that turn too.
+  - **My turn, ignore stack (N):** like Until my turn, but it keeps passing when anyone puts
+    something on the stack (MTGO's F6). Decisions only you can make (blockers, your triggers'
+    choices) still ask you. Server side it's not a Forge yield, since Forge ends those when an
+    opponent casts a spell: `WebPlayerController.setPassUntilMyTurn` passes every priority until
+    your next turn starts (mode `UNTIL_MY_TURN_ALL`).
   - **Action / end step (R):** skip until someone casts something, or this turn's end step.
 - **Hold priority (Shift, under the phase strip):** off, casting a spell or activating an ability
   passes priority once it's on the stack, as on MTGO. On, you keep priority, so you can cast more

@@ -375,7 +375,8 @@ public final class BrowserSeat implements IRemote {
         }
         view.put("autoYieldsOff", ctl.getYieldController().getDisableAutoYields());
         // An auto-pass (until end of turn, or until a step) is still going; Forge ends it when it gets there or something needs you.
-        view.put("autoPassing", ctl.getYieldController().isYieldActive());
+        view.put("autoPassing", ctl.getYieldController().isYieldActive()
+                || (ctl instanceof WebPlayerController w && w.passingUntilMyTurn()));
         if (gv.getStack() == null) {
             return;
         }

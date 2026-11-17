@@ -22,6 +22,7 @@ import forge.interfaces.IGameController;
 import forge.web.engine.AutoPass;
 import forge.web.engine.BrowserSeat;
 import forge.web.engine.Decks;
+import forge.web.engine.WebPlayerController;
 import forge.web.engine.Explain;
 import forge.web.engine.ManualActions;
 import forge.web.engine.AutoPay;
@@ -1015,7 +1016,7 @@ public final class GameHub {
         });
     }
 
-    /** Auto-pass: END_OF_TURN, BEFORE_MY_TURN, UNTIL_MY_TURN, ACTION_OR_END_STEP, or null to cancel. */
+    /** Auto-pass: END_OF_TURN, BEFORE_MY_TURN, UNTIL_MY_TURN, UNTIL_MY_TURN_ALL, ACTION_OR_END_STEP, or null to cancel. */
     private void autoPass(Conn c, String mode) {
         Hosted h = c.game;
         if (h != null) {
@@ -1030,6 +1031,21 @@ public final class GameHub {
             }
             ctl.applyYieldUpdate(new YieldUpdate.ClearMarker(me));
             ctl.applyYieldUpdate(new YieldUpdate.SetAutoPassUntilEndOfTurn(me, false));
+            WebPlayerController web = ctl instanceof WebPlayerController w ? w : null;
+            if (web != null) {
+                web.setPassUntilMyTurn(false);
+            }
+            if ("UNTIL_MY_TURN_ALL".equals(mode) && web != null) {
+                web.setPassUntilMyTurn(true);
+                // Pass the priority you have now, too.
+                if (web.getInputProxy().getInput() instanceof InputPassPriority pass) {
+                    pass.passPriority();
+                }
+                if (seat != null) {
+                    seat.refresh();
+                }
+                return;
+            }
             if (mode == null || mode.equals("null")) {
                 if (seat != null) {
                     seat.refresh();

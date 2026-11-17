@@ -133,9 +133,11 @@ export interface PriorityContext {
  *  - END_OF_TURN (E): skip the rest of this turn. Your stops apply again from the next turn.
  *  - BEFORE_MY_TURN (B): skip until the end step of the player right before you.
  *  - UNTIL_MY_TURN (M): skip until your next turn starts; your stops apply again from there.
+ *  - UNTIL_MY_TURN_ALL (N): like UNTIL_MY_TURN, but passes even when something goes on the stack
+ *    (MTGO's F6). Only decisions that are yours alone (blockers, your triggers' choices) stop it.
  *  - ACTION_OR_END_STEP (R): skip until someone does something, or this turn's end step.
  */
-export type AutoPassMode = "END_OF_TURN" | "BEFORE_MY_TURN" | "UNTIL_MY_TURN" | "ACTION_OR_END_STEP";
+export type AutoPassMode = "END_OF_TURN" | "BEFORE_MY_TURN" | "UNTIL_MY_TURN" | "UNTIL_MY_TURN_ALL" | "ACTION_OR_END_STEP";
 
 export interface AutoPass {
   mode: AutoPassMode;
@@ -157,6 +159,7 @@ export function autoPassStatus(ap: AutoPass, ctx: { activePlayer: string; step: 
       return ctx.activePlayer === before && ctx.step === "END_OF_TURN" ? "stop" : "running";
     }
     case "UNTIL_MY_TURN":
+    case "UNTIL_MY_TURN_ALL":
       return ctx.activePlayer === ctx.me && ctx.turn > ap.turn ? "expired" : "running";
   }
 }
@@ -164,12 +167,13 @@ export function autoPassStatus(ap: AutoPass, ctx: { activePlayer: string; step: 
 /** Should the client stop and let this player act, or auto-pass priority? */
 export function shouldStop(stops: TableStops, ctx: PriorityContext): boolean {
   if (!PRIORITY_IDS.has(ctx.step)) return false;
+  const ap = ctx.autoPass && ctx.me && ctx.turnOrder && ctx.turn !== undefined
+    ? autoPassStatus(ctx.autoPass, { activePlayer: ctx.activePlayer, step: ctx.step, turn: ctx.turn, me: ctx.me, turnOrder: ctx.turnOrder })
+    : undefined;
+  if (ctx.autoPass?.mode === "UNTIL_MY_TURN_ALL" && ap === "running") return false; // even with the stack in use
   if (ctx.stackNonEmpty) return true; // always get a chance to respond
   if (ctx.passingTurn) return false;
-  if (ctx.autoPass && ctx.me && ctx.turnOrder && ctx.turn !== undefined) {
-    const status = autoPassStatus(ctx.autoPass, { activePlayer: ctx.activePlayer, step: ctx.step, turn: ctx.turn, me: ctx.me, turnOrder: ctx.turnOrder });
-    if (status !== "expired") return status === "stop";
-  }
+  if (ap && ap !== "expired") return ap === "stop";
   return stops.get(ctx.activePlayer)?.has(ctx.step) ?? false;
 }
 

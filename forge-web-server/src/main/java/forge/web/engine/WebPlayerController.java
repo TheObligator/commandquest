@@ -47,9 +47,39 @@ public class WebPlayerController extends PlayerControllerHuman {
         this.notice = notice;
     }
 
+    /**
+     * "Pass until my turn, through everything" (MTGO's F6): the turn it was chosen on, or -1 when off.
+     * Unlike Forge's yields, an opponent casting something doesn't end it; it passes every priority
+     * until this player's next turn starts. Decisions only you can make (blockers, choices for your
+     * triggers) still ask you.
+     */
+    private volatile int passingFrom = -1;
+
+    public void setPassUntilMyTurn(boolean on) {
+        passingFrom = on ? getGame().getPhaseHandler().getTurn() : -1;
+    }
+
+    /** Whether {@link #setPassUntilMyTurn} is still going; it ends when this player's next turn starts. */
+    public boolean passingUntilMyTurn() {
+        int from = passingFrom;
+        if (from < 0) {
+            return false;
+        }
+        var ph = getGame().getPhaseHandler();
+        if (ph.getTurn() > from && ph.isPlayerTurn(player)) {
+            passingFrom = -1;
+            return false;
+        }
+        return true;
+    }
+
     /** Runs on the game thread each time this player gets priority, before Forge decides whether to skip. */
     @Override
     public List<SpellAbility> chooseSpellAbilityToPlay() {
+        if (passingUntilMyTurn()) {
+            getGui().awaitNextInput();
+            return null; // pass
+        }
         Card found = null;
         try {
             found = UpkeepStop.reason(getGame(), player);

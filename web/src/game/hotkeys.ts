@@ -10,6 +10,7 @@ export type HotkeyAction =
   | "autoEndOfTurn"
   | "autoBeforeMyTurn"
   | "autoUntilMyTurn"
+  | "autoUntilMyTurnAll"
   | "autoActionOrEnd";
 
 export const HOTKEY_ACTIONS: { id: HotkeyAction; label: string; hint: string; key: string }[] = [
@@ -20,6 +21,7 @@ export const HOTKEY_ACTIONS: { id: HotkeyAction; label: string; hint: string; ke
   { id: "autoEndOfTurn", label: "Auto-pass: end of turn", hint: "Skip the rest of this turn.", key: "E" },
   { id: "autoBeforeMyTurn", label: "Auto-pass: before my turn", hint: "Skip until the end step of the player right before you.", key: "B" },
   { id: "autoUntilMyTurn", label: "Auto-pass: until my turn", hint: "Skip everything until your next turn starts, including the end step before it.", key: "M" },
+  { id: "autoUntilMyTurnAll", label: "Auto-pass: until my turn, ignore the stack", hint: "Like until my turn, but keeps passing when opponents cast spells or use abilities (MTGO's F6). Blocks and your own choices still ask you.", key: "N" },
   { id: "autoActionOrEnd", label: "Auto-pass: action / end step", hint: "Skip until someone casts something, or this turn's end step.", key: "R" },
 ];
 

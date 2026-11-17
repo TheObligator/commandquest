@@ -770,6 +770,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
           { label: "Pass until end of turn", onSelect: () => setAutoPass("END_OF_TURN") },
           { label: "Pass until before my turn", onSelect: () => setAutoPass("BEFORE_MY_TURN") },
           { label: "Pass until my turn", onSelect: () => setAutoPass("UNTIL_MY_TURN") },
+          { label: "Pass until my turn, ignoring the stack", onSelect: () => setAutoPass("UNTIL_MY_TURN_ALL") },
         ],
       },
     ];
@@ -854,6 +855,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
     autoEndOfTurn: () => setAutoPass("END_OF_TURN"),
     autoBeforeMyTurn: () => setAutoPass("BEFORE_MY_TURN"),
     autoUntilMyTurn: () => setAutoPass("UNTIL_MY_TURN"),
+    autoUntilMyTurnAll: () => setAutoPass("UNTIL_MY_TURN_ALL"),
     autoActionOrEnd: () => setAutoPass("ACTION_OR_END_STEP"),
     holdPriority: () => st.setHoldPriority(!st.holdPriority),
     castCommander: () => (commander ? click(commander.id) : false),

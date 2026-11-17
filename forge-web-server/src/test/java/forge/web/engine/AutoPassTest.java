@@ -98,4 +98,63 @@ public class AutoPassTest {
             session.abort();
         }
     }
+
+    /**
+     * "Until my turn, ignoring the stack" (F6), chosen in your main phase: you're not asked anything
+     * until your next turn's upkeep, whatever goes on the stack in between.
+     */
+    @Test(timeOut = 240_000)
+    public void untilMyTurnIgnoringTheStack() throws Exception {
+        MyRandom.setRandom(new Random(13));
+        GameSessionTest.ScriptedBrowser browser = new GameSessionTest.ScriptedBrowser();
+        GameSession session = GameSession.startCommander(List.of(
+                new GameSession.Seat("You", deck("Ezuri, Renegade Leader", "Forest"), browser),
+                new GameSession.Seat("AI 1", deck("Talrand, Sky Summoner", "Island"), null)));
+        try {
+            PlayerView meView = PaymentTest.untilMyMain(session, browser);
+            IGameController ctl = session.controller("You", meView);
+            Assert.assertTrue(ctl instanceof WebPlayerController, "a browser seat has the web controller");
+            WebPlayerController web = (WebPlayerController) ctl;
+            Game g = session.game();
+            int myTurn = g.getPhaseHandler().getTurn();
+            CompletableFuture<Void> trimmed = new CompletableFuture<>();
+            g.getAction().invoke(() -> {
+                for (Card c : g.getPlayer(meView.getId()).getCardsIn(ZoneType.Hand).threadSafeIterable()) {
+                    g.getAction().moveToLibrary(c, -1, null);
+                }
+                trimmed.complete(null);
+            });
+            trimmed.get(10, TimeUnit.SECONDS);
+
+            browser.buttonPrompts.clear();
+            CompletableFuture<Void> set = new CompletableFuture<>();
+            FThreads.invokeInEdtLater(() -> {
+                web.setPassUntilMyTurn(true);
+                ctl.selectButtonOk(); // pass this main phase
+                set.complete(null);
+            });
+            set.get(10, TimeUnit.SECONDS);
+            Assert.assertTrue(web.passingUntilMyTurn(), "on for the rest of this turn");
+
+            String first = null;
+            long deadline = System.currentTimeMillis() + 120_000;
+            while (first == null && System.currentTimeMillis() < deadline) {
+                Object[] prompt = browser.buttonPrompts.poll(5, TimeUnit.SECONDS);
+                if (prompt == null || !meView.equals(prompt[0]) || !"OK".equals(prompt[1]) || !Boolean.TRUE.equals(prompt[3])) {
+                    continue;
+                }
+                Thread.sleep(200); // a real priority prompt stays; Forge's button resets don't
+                if (web.getInputProxy().getInput() instanceof forge.gamemodes.match.input.InputPassPriority) {
+                    first = "T" + g.getPhaseHandler().getTurn() + " " + g.getPhaseHandler().getPlayerTurn() + " " + g.getPhaseHandler().getPhase();
+                }
+            }
+            Assert.assertNotNull(first, "asked again eventually");
+            Assert.assertTrue(g.getPhaseHandler().getTurn() > myTurn && meView.equals(g.getPhaseHandler().getPlayerTurn().getView()),
+                    "first asked on your next turn: " + first);
+            Assert.assertEquals(g.getPhaseHandler().getPhase(), PhaseType.UPKEEP, "at its start: " + first);
+            Assert.assertFalse(web.passingUntilMyTurn(), "and it's over");
+        } finally {
+            session.abort();
+        }
+    }
 }
