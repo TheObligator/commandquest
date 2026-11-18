@@ -8,7 +8,8 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { CardBack, CardBadges, CardFace, CostOverlay, previewFor, usePreview } from "./cards";
 import type { OpenMenu } from "./TableBoard";
-import { arrange, moveCards, ROW_LABELS, usedCols, type Arrangement, type CardView, type Pile, type PlayerView, type Row } from "./view";
+import { boxSelection, useBoxSelect } from "./boxSelect";
+import { arrange, moveCards, moveSelection, ROW_LABELS, usedCols, type Arrangement, type CardView, type Pile, type PlayerView, type Row } from "./view";
 
 export type ZoneName = "graveyard" | "exile" | "command" | "library";
 
@@ -17,6 +18,8 @@ export interface DragData {
   from: "hand" | "battlefield";
   seat: string;
   ids: number[];
+  /** A drag-selection of several piles: each pile's ids, in board order (each keeps its own cell). */
+  piles?: number[][];
 }
 export const DRAG_TYPE = "application/x-commandquest-card";
 let currentDrag: DragData | null = null; // dragover can't read dataTransfer contents
@@ -66,7 +69,7 @@ export function SeatBoard(props: {
   /** Short seat: battlefield groups side by side instead of three rows. */
   line?: boolean;
   /** Live games: a click on any card goes to the game (Forge decides what it does). `pile`: every
-   *  card in the clicked pile, the top one first. */
+   *  card in the clicked pile, the top one first, or every selected card when it's selected. */
   onCardClick?: (cardId: number, pile: number[]) => void;
   /** Live games: click a player's name to pick them (targets). */
   onPlayerClick?: (playerId: string) => void;
@@ -235,6 +238,16 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
   const ref = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 600, h: 300 });
   const [dropAt, setDropAt] = useState<{ row: Row; col: number } | null>(null);
+  // Cards picked with a selection box: they drag (and, declaring attackers, click) together.
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const base = useRef(selected);
+  const boxSel = useBoxSelect((ids, additive) => setSelected(boxSelection(base.current, ids, additive)));
+  const here = new Set(p.battlefield.map((c) => c.id));
+  const sel = new Set([...selected].filter((id) => here.has(id))); // cards that left drop out
+  const selPiles = rows.flat().filter((pile) => pile.cards.some((c) => sel.has(c.id)));
+  /** A selected pile's drag or click covers every selected card. */
+  const groupOf = (pile: (typeof selPiles)[number]) =>
+    selPiles.length > 1 && selPiles.includes(pile) ? selPiles : null;
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -259,7 +272,7 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
     if (!accepts(d) || !d) return;
     e.preventDefault();
     // A card from hand lands in the cell you dropped it on once it's in play.
-    props.onArrange(moveCards(p.battlefield, arrangement, d.ids, row, col));
+    props.onArrange(d.piles ? moveSelection(p.battlefield, arrangement, d.piles, row, col) : moveCards(p.battlefield, arrangement, d.ids, row, col));
     if (d.from === "hand") props.onPlayFromHand?.(d.ids[0]);
   };
 
@@ -269,7 +282,12 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
       className={`battlefield${props.line ? " line" : ""}${cw <= MIN_CW ? " cramped" : ""}`}
       style={{ "--cw": `${cw}px` } as React.CSSProperties}
       onContextMenu={props.onMenu && ((e) => props.onMenu!(e, { kind: "board", owner: p.id }))}
+      onPointerDown={(e) => {
+        base.current = sel;
+        boxSel.onPointerDown(e);
+      }}
     >
+      {boxSel.overlay}
       {rows.map((piles, r) => {
         const cols = usedCols(piles) + SPARE;
         return (
@@ -293,22 +311,25 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
             {piles.map((pile) => {
               const c = pile.cards[0];
               const n = pile.cards.length;
+              const group = groupOf(pile);
+              const ids = group ? group.flatMap((x) => x.cards.map((y) => y.id)) : pile.cards.map((x) => x.id);
               return (
                 <div
                   key={pile.key}
-                  className={["slot", c.tapped && "tapped", props.selectable?.has(c.id) && "selectable", props.playable?.has(c.id) && "playable"].filter(Boolean).join(" ")}
+                  className={["slot", c.tapped && "tapped", props.selectable?.has(c.id) && "selectable", props.playable?.has(c.id) && "playable", pile.cards.some((x) => sel.has(x.id)) && "picked"].filter(Boolean).join(" ")}
                   style={{ gridColumn: pile.col + 1 }}
                   data-card-ids={pile.cards.map((x) => x.id).join(" ")}
+                  data-sel={pile.cards.map((x) => x.id).join(" ")}
                   draggable
                   onDragStart={(e) => {
-                    const d: DragData = { from: "battlefield", seat: p.id, ids: pile.cards.map((x) => x.id) };
+                    const d: DragData = { from: "battlefield", seat: p.id, ids, piles: group ? group.map((x) => x.cards.map((y) => y.id)) : undefined };
                     setDrag(d);
                     e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(d));
                     e.dataTransfer.effectAllowed = "move";
                   }}
                   onDragEnd={() => (setDrag(null), setDropAt(null))}
                   title={props.onCardClick ? `${c.name ?? "Face-down card"}: click to use or choose it, right-click for more, drag to move` : isMe && props.onTap ? `${c.name ?? "Face-down card"}: click to ${c.tapped ? "untap" : "tap"}, drag to move` : undefined}
-                  onClick={() => (props.onCardClick ? props.onCardClick(c.id, pile.cards.map((x) => x.id)) : isMe && props.onTap?.(c.id))}
+                  onClick={() => (props.onCardClick ? props.onCardClick(c.id, ids) : isMe && props.onTap?.(c.id))}
                   onContextMenu={props.onMenu && ((e) => props.onMenu!(e, { kind: "card", card: c, where: "battlefield" }))}
                   {...props.hover(c)}
                 >

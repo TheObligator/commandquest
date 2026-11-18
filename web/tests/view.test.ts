@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { arrange, moveCards, prune, redact, viewFor, type CardState, type GameState } from "../src/game/view.ts";
+import { arrange, moveCards, moveSelection, prune, redact, viewFor, type CardState, type GameState } from "../src/game/view.ts";
 
 const card = (id: number, name: string, extra: Partial<CardState> = {}): CardState => ({
   id, name, owner: "me", controller: "me", zone: "battlefield", types: ["Creature"], ...extra,
@@ -81,6 +81,15 @@ test("moving cards to any cell; a taken cell swaps; new cards fill the first fre
   assert.deepEqual(arr[9], { row: 0, col: 1 });
   assert.deepEqual(arr[2], { row: 0, col: 3 });
   assert.deepEqual(Object.keys(prune(arr, cards.slice(1), [9])).map(Number).sort(), [2, 3, 9]);
+});
+
+test("a drag-selection moves together, each pile to the next free cell", () => {
+  const cards = [card(1, "A"), card(2, "B"), card(3, "C"), card(4, "Sol Ring", { types: ["Artifact"] })].map((c) => redact(c, "me"));
+  const ids = (r: ReturnType<typeof arrange>[number]) => r.map((p) => [p.cards[0].id, p.col]);
+  // A and C into the artifact row at Sol Ring's cell: Sol Ring stays, they fill the cells after it.
+  const arr = moveSelection(cards, {}, [[1], [3]], 1, 0);
+  assert.deepEqual(ids(arrange(cards, arr)[1]), [[4, 0], [1, 1], [3, 2]]);
+  assert.deepEqual(ids(arrange(cards, arr)[0]), [[2, 1]]);
 });
 
 test("a new copy of a card joins its pile wherever that pile was moved", () => {

@@ -180,11 +180,13 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
     const now = performance.now();
     if (lastClick.current.id === id && now - lastClick.current.at < 500) return;
     lastClick.current = { id, at: now };
-    // Declaring attackers, a click on a pile of creatures toggles all of them. A pile's cards are
-    // all attacking or all not (attacking is part of what makes cards pile up), so each click
-    // flips them the same way.
-    if (pile && pile.length > 1 && declaringAttackers && view.players[0].battlefield.some((c) => c.id === id)) {
-      for (const c of pile) game.clickCard(c);
+    // Declaring attackers, a click on a pile of creatures, or on one of several selected, toggles
+    // all of them: they all end up attacking or all not, whichever the clicked one switches to.
+    const mine = view.players[0].battlefield;
+    const clicked = mine.find((c) => c.id === id);
+    if (pile && pile.length > 1 && declaringAttackers && clicked) {
+      const flip = mine.filter((c) => pile.includes(c.id) && !!c.attacking === !!clicked.attacking);
+      for (const c of flip) game.clickCard(c.id);
       return;
     }
     castFrom.current ??= view.stack.length;

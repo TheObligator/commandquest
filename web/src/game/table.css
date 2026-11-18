@@ -380,3 +380,9 @@ dialog.counter-dialog { width: min(360px, calc(100vw - 32px)); background: var(-
 .counter-dialog label { display: grid; gap: 4px; font-size: .8rem; color: var(--muted); }
 .counter-dialog input { padding: 7px 9px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg-2, #12151d); color: var(--text); font-size: .95rem; }
 .cd-btns { display: flex; gap: 8px; }
+
+/* Drag-selecting: the box, and the cards it picked. */
+.select-box { position: fixed; z-index: 50; pointer-events: none; border: 1px solid var(--accent-2); background: rgb(243 199 124 / 14%); border-radius: 3px; }
+.slot.picked .bf-card { outline: 2px dashed var(--accent-2); outline-offset: 2px; }
+.battlefield { user-select: none; }
+

@@ -330,6 +330,31 @@ export function moveCards(cards: CardView[], arr: Arrangement, ids: number[], ro
   return next;
 }
 
+/**
+ * Moves several piles at once (a drag-selection) into a row, starting at `col`: each pile keeps
+ * its own cell, in the order given, filling the free cells from `col` rightwards so nothing else
+ * moves.
+ */
+export function moveSelection(cards: CardView[], arr: Arrangement, piles: number[][], row: Row, col: number): Arrangement {
+  const rows = arrange(cards, arr);
+  const moving = new Set(piles.flat());
+  const next: Arrangement = { ...arr };
+  const taken = new Set<number>();
+  rows.forEach((ps, r) => {
+    for (const pile of ps) {
+      for (const c of pile.cards) next[c.id] = { row: r as Row, col: pile.col };
+      if (r === row && !pile.cards.some((c) => moving.has(c.id))) taken.add(pile.col);
+    }
+  });
+  let at = Math.max(0, Math.floor(col));
+  for (const pile of piles) {
+    while (taken.has(at)) at++;
+    for (const id of pile) next[id] = { row, col: at };
+    taken.add(at);
+  }
+  return next;
+}
+
 /** Drops placements for cards that left the battlefield (keeping `keep`, e.g. cards being played from hand). */
 export function prune(arr: Arrangement, cards: CardView[], keep: Iterable<number> = []): Arrangement {
   const here = new Set([...cards.map((c) => c.id), ...keep]);
