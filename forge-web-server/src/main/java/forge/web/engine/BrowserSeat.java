@@ -175,6 +175,7 @@ public final class BrowserSeat implements IRemote {
             view.set("playable", playable());
             view.put("landDrop", landDrop());
             untapLocks(live, view);
+            turnsTaken(live, view);
             yields(gv, view);
             o.set("view", view);
             state = json.writeValueAsString(o);
@@ -206,6 +207,20 @@ public final class BrowserSeat implements IRemote {
             }
         }
         return cycle;
+    }
+
+    /** Each player's `turns`: how many turns they've taken, extra turns included. */
+    private static void turnsTaken(Game live, ObjectNode view) {
+        if (live == null) {
+            return;
+        }
+        for (JsonNode node : view.get("players")) {
+            for (Player p : live.getRegisteredPlayers()) {
+                if (String.valueOf(p.getId()).equals(node.get("id").asText())) {
+                    ((ObjectNode) node).put("turns", p.getTurn());
+                }
+            }
+        }
     }
 
     private boolean landDrop() {

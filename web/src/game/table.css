@@ -145,6 +145,7 @@ button.zone-tile:hover .zt-card { outline: 2px solid var(--accent-2); }
 .ps-turn { text-align: center; padding: 4px; border-radius: 6px; border: 1px solid color-mix(in srgb, var(--active) 55%, var(--line)); background: color-mix(in srgb, var(--active) 8%, #12151d); }
 .ps-turn strong { display: block; color: var(--active); letter-spacing: .14em; text-transform: uppercase; font-size: .7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ps-turn span { font: 600 .72rem ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); }
+.ps-turn .ps-own { display: block; color: var(--active); }
 .ps-priority { text-align: center; padding: 3px; border-radius: 6px; border: 1px solid var(--line); font-size: .64rem; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
 .ps-priority i { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; vertical-align: 1px; margin-right: 3px; }
 .ps-priority.on { color: var(--accent); border-color: var(--accent); background: rgb(224 168 79 / 10%); }

@@ -321,6 +321,7 @@ export function TableBoard(props: {
             activePlayer={v.active}
             step={v.step}
             cycle={v.cycle}
+            activeTurns={v.players.find((p) => p.id === v.active)?.turns}
             priority={props.priority}
             perOpponent={st.perOpponent}
             onPerOpponent={st.setPerOpponent}

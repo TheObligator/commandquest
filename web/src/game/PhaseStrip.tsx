@@ -36,12 +36,14 @@ export function PhaseStrip(props: {
   step: StepId;
   /** Times play has gone round the table. */
   cycle: number;
+  /** Turns the active player has taken, extra turns included. Shown only when it differs from `cycle`. */
+  activeTurns?: number;
   /** You have priority right now. */
   priority: boolean;
   perOpponent: boolean;
   onPerOpponent: (on: boolean) => void;
 }) {
-  const { me, opponents, stops, onChange, activePlayer, step: current, cycle, priority, perOpponent } = props;
+  const { me, opponents, stops, onChange, activePlayer, step: current, cycle, activeTurns, priority, perOpponent } = props;
   const oppIds = opponents.map((o) => o.id);
   const active = activePlayer === me.id ? me : opponents.find((o) => o.id === activePlayer);
   const myTurn = activePlayer === me.id;
@@ -51,6 +53,11 @@ export function PhaseStrip(props: {
       <div className="ps-turn">
         <strong>{myTurn ? "Your turn" : `${active?.name ?? "Opp"}'s turn`}</strong>
         <span title={`Cycle ${cycle}: goes up when play comes back round to the starting player`}>Cycle {cycle}</span>
+        {activeTurns !== undefined && activeTurns !== cycle && (
+          <span className="ps-own" title={`${myTurn ? "Your" : `${active?.name ?? "Their"}'s`} turn ${activeTurns}, counting extra turns`}>
+            {myTurn ? "Your" : "Their"} turn {activeTurns}
+          </span>
+        )}
       </div>
       <div className={`ps-priority${priority ? " on" : ""}`} role="status">
         <i /> {priority ? "Priority" : "Waiting"}

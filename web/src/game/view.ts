@@ -115,6 +115,8 @@ export interface PlayerView extends PlayerState {
   graveyard: CardView[];
   exile: CardView[];
   command: CardView[];
+  /** Live games: turns this player has taken, extra turns included. */
+  turns?: number;
 }
 
 export interface StackItemView extends StackItem {
