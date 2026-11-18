@@ -145,8 +145,10 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
     const all = new Set<string>();
     for (const p of view.players) for (const z of [p.hand, p.battlefield, p.graveyard, p.exile, p.command]) for (const c of z) if (c.name) all.add(c.name);
     for (const s of view.stack) if (s.card?.name) all.add(s.card.name);
+    // Cards a question shows that aren't on the table (scry, surveil, the top of your library).
+    for (const o of game.ask?.options ?? []) if (o.card?.name) all.add(o.card.name);
     return [...all].sort();
-  }, [view]);
+  }, [view, game.ask]);
   useCardData(names);
 
   // Send your stops to the server at the start and whenever you change them.

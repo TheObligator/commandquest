@@ -25,6 +25,8 @@ export function AskDialog(props: { ask: LiveAsk; game: LiveGame; nameOf: (id: st
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     if (!ref.current?.open) ref.current?.showModal();
+    // showModal focuses the first button (a card's ◀); Enter should confirm instead.
+    ref.current?.querySelector<HTMLButtonElement>(".ask-actions .primary")?.focus();
   }, []);
   const [title, ...rest] = (ask.title ? [ask.title, ask.message] : ask.message.split("\n"));
   return (
