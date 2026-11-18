@@ -55,7 +55,7 @@ server, counting games waiting for their player.
 | `state` | `view`: the game as you see it, in the client's `GameView` shape (`web/src/game/view.ts`), plus `gameOver` and `playable` (your cards you can cast, play or activate right now, not counting mana abilities; empty unless you have priority) and `landDrop` (it's your turn and a land in your hand could still be played this turn, timing aside, so the browser can ask before you pass your turn with it unplayed). `autoYieldsOff`: you've disabled all your auto-yields. Stack items carry `text` and `targets` (`[{label, cardId?, playerId?}]`); abilities on the stack also carry your yield settings: `yieldKey`, `autoYield`, and for your own "you may" triggers `optional` and `decision` (`ASK` / `ACCEPT` / `DECLINE`). Sent whenever it changes. Hidden information is already removed (below). Tokens carry `tokenArt` (the Scryfall id from their owner's deck, when it has that kind of token), `tokenKey` (Forge's image key) and, when Forge knows the printing, `tokenSet` / `tokenNumber` (Scryfall's), for their art. |
 | `prompt` | Forge is waiting for you: `message`, and two buttons `ok` / `cancel`, each `{label, enabled}` with Forge's labels ("OK", "Keep", "Mulligan", "End Turn"…). Answer with a button or by clicking a card or player. |
 | `waiting` | No prompt for you right now (others are deciding). |
-| `ask` | A question that blocks the game: `{id, kind, title?, message, options?, selected?, min, max, card?}`. `kind` is `choose` (pick `min`–`max` of `options`, each `{label, cardId?, playerId?, card?}`), `info` (Forge reveals `options` to you: look, then answer with an empty `choice`), or `text` (`initial`, `numeric`). |
+| `ask` | A question that blocks the game: `{id, kind, title?, message, options?, selected?, min, max, card?}`. `kind` is `choose` (pick `min`–`max` of `options`, each `{label, cardId?, playerId?, card?}`), `info` (Forge reveals `options` to you: look, then answer with an empty `choice`), `text` (`initial`, `numeric`), or `arrange`: sort `options` into `piles` (`[{label, ordered, min, max}]`, `max` -1 for no limit), starting from `start` (option indexes, one list per pile); answer with one list per pile, in order (for the library, top first). Scry (Top / Bottom of library) and surveil (Top of library / Graveyard) are one `arrange` each, and so are Forge's "put these in order" and "choose several" lists (one pile, or the chosen pile and "Not chosen"). An answer that misses a card, repeats one, or breaks a pile's count is ignored. The browser shows `arrange` questions, and `choose` / `info` ones about cards that aren't on the battlefield, in a window with the cards. |
 | `over` | The game ended. |
 | `details` | Answer to `details` (below). Battlefield cards in `state` also carry `untapLock` (`next` or `never`) when kept from untapping by hand. |
 | `notice` | `message`: why your last card click did nothing (e.g. "You can only play a land in a main phase. It's your Upkeep now: press OK to move on."). Forge itself ignores such clicks silently. |
@@ -78,7 +78,7 @@ server, counting games waiting for their player.
 | `counter` `{id, type, delta}` | Manual override: put `delta` counters of `type` (Forge's counter name, e.g. `+1/+1`, `Loyalty`, `Charge`; letters, digits, `+ - /` and spaces, up to 24) on a permanent, or take them off when `delta` is negative (±99 at most). Outside the rules, on any permanent; the game log records it ("… (by hand)"). |
 | `yieldsOff` `{off}` | Disable all your auto-yields (or turn them back on) without forgetting them. |
 | `player` `{id}` | Click a player (targets, attacking a player). |
-| `answer` `{id, choice, text?}` | Answer `ask` `id`: `choice` is a list of option indexes (empty for none/cancel), `text` for a `text` question. |
+| `answer` `{id, choice, text?}` | Answer `ask` `id`: `choice` is a list of option indexes (empty for none/cancel), a list of them per pile for `arrange`, `text` for a `text` question. |
 | `stops` `{stops: {"<player id>": ["UPKEEP", …]}}` | The steps on each player's turn where you want priority (Forge `PhaseType` names). Every other step is skipped. Sent at the start and on every change. |
 | `autopass` `{mode}` | `END_OF_TURN`, `BEFORE_MY_TURN` (until the end step of the player before you), `ACTION_OR_END_STEP` (until this turn's end step), or `null` to cancel. Forge still stops when something needs you. |
 | `concede` | Concede. |
@@ -99,7 +99,7 @@ The server builds each player's view from Forge's views and removes what that pl
 
 ## Not yet
 
-- Ordering simultaneous triggers, dividing combat damage among blockers, and dividing an amount
+- Dividing combat damage among blockers, and dividing an amount
   (e.g. "deal 5 damage divided as you choose"): Forge's default is used, with no question asked.
 - Keeping games across a game server restart.
 - Multiplayer tables with other people (lobby).

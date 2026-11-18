@@ -384,5 +384,42 @@ dialog.counter-dialog { width: min(360px, calc(100vw - 32px)); background: var(-
 /* Drag-selecting: the box, and the cards it picked. */
 .select-box { position: fixed; z-index: 50; pointer-events: none; border: 1px solid var(--accent-2); background: rgb(243 199 124 / 14%); border-radius: 3px; }
 .slot.picked .bf-card { outline: 2px dashed var(--accent-2); outline-offset: 2px; }
-.battlefield { user-select: none; }
+.battlefield, .arrange, .ask-grid { user-select: none; }
 
+/* Questions about cards, in a window (AskDialog). */
+dialog.ask-dialog { width: min(1100px, calc(100vw - 32px)); max-height: 90vh; overflow: auto; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 14px; padding: 18px; box-shadow: var(--shadow); }
+dialog.ask-dialog::backdrop { background: rgb(0 0 0 / 60%); }
+.ask-dialog .dialog-head { flex-direction: column; align-items: flex-start; }
+.ask-dialog .dialog-head p { margin: 4px 0 0; white-space: pre-line; }
+.ask-grid { position: relative; padding: 4px; min-height: 120px; }
+.ask-tile { margin: 0; display: grid; gap: 4px; align-content: start; width: 140px; }
+.ask-grid .ask-tile { width: auto; }
+.ask-tile figcaption { font-size: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ask-tile.clickable { cursor: pointer; }
+.ask-tile.clickable:hover .zv-card { filter: brightness(1.1); }
+.ask-tile.on .zv-card { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.ask-tile[draggable=true] { cursor: grab; }
+.ask-tile-text { display: grid; place-items: center; height: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: #221b12; font-size: .85rem; text-align: center; }
+.ask-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; }
+.ask-spacer { flex: 1; }
+.ar-btn.small { padding: 3px 8px; font-size: .78rem; }
+
+.arrange { position: relative; display: grid; gap: 12px; }
+.arrange-pile { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: rgb(0 0 0 / 18%); }
+.arrange-pile.drop { border-color: var(--accent-2); }
+.arrange-pile.bad header .muted { color: #e2766a; }
+.arrange-pile header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.arrange-pile h4 { margin: 0; }
+.arrange-cards { display: flex; flex-wrap: wrap; gap: 12px; min-height: 120px; align-items: flex-start; }
+.arrange-empty { align-self: center; margin: 0 auto; }
+.arrange-slot { position: relative; }
+.arrange-slot.before::before, .arrange-slot.after::after { content: ""; position: absolute; top: 0; bottom: 0; width: 3px; border-radius: 2px; background: var(--accent-2); }
+.arrange-slot.before::before { left: -8px; }
+.arrange-slot.after::after { right: -8px; }
+.arrange-moves { display: flex; flex-wrap: wrap; gap: 4px; }
+.arrange-moves button { padding: 2px 6px; border-radius: 5px; border: 1px solid #6a5434; background: #2a2116; color: #f0e2c4; font-size: .75rem; cursor: pointer; }
+.arrange-moves button:disabled { opacity: .4; cursor: default; }
+@media (max-width: 600px) {
+  .ask-tile { width: 104px; }
+  .ask-tile .zv-card { --cw: 104px; }
+}

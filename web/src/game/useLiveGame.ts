@@ -35,8 +35,11 @@ export interface AskOption {
 /** A question that blocks the game until answered. */
 export interface LiveAsk {
   id: number;
-  /** choose: pick min..max options; text: type an answer; info: a list to look at, then OK. */
-  kind: "choose" | "text" | "info";
+  /**
+   * choose: pick min..max options; text: type an answer; info: a list to look at, then OK;
+   * arrange: sort the options into `piles` (scry, surveil, putting cards in order).
+   */
+  kind: "choose" | "text" | "info" | "arrange";
   title?: string;
   message: string;
   options?: AskOption[];
@@ -46,6 +49,17 @@ export interface LiveAsk {
   card?: CardView;
   initial?: string;
   numeric?: boolean;
+  /** arrange: where the options can go, and where each starts (option indexes, per pile). */
+  piles?: AskPile[];
+  start?: number[][];
+}
+
+/** One pile of an arrange question: whether its order matters, and how many cards it takes (max -1: any). */
+export interface AskPile {
+  label: string;
+  ordered: boolean;
+  min: number;
+  max: number;
 }
 
 /** One thing a card can do (Forge's wording), from the game server's `actions` answer. */
@@ -340,7 +354,7 @@ export function useLiveGame() {
     useAbility: (id: number, a: CardAction) => send({ t: "ability", id, ability: a.ability, label: a.label }),
     clickPlayer: (id: string) => send({ t: "player", id: Number(id) }),
     concede: () => send({ t: "concede" }),
-    answer(id: number, choice: number[] | null, text?: string) {
+    answer(id: number, choice: number[] | number[][] | null, text?: string) {
       setAsk(null);
       send({ t: "answer", id, choice: choice ?? [], text });
     },

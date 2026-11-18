@@ -2,6 +2,7 @@
 // prompt (with Forge's own button labels) or question, and the auto-pass skips.
 import { useEffect, useState } from "react";
 import { AUTO_PASS } from "./ActionRail";
+import { AskDialog, isPopupAsk } from "./AskDialog";
 import { Kbd, useHotkeys } from "./useHotkeys";
 import { cardImage, previewFor, usePreview, type Preview } from "./cards";
 import type { LiveAsk, LiveGame } from "./useLiveGame";
@@ -17,7 +18,9 @@ export function LiveRail(props: {
     <aside className="action-rail">
 
       {/* At the bottom, by your hand: what the game wants now, then the skips. */}
-      {game.ask ? <AskPanel ask={game.ask} game={game} nameOf={nameOf} /> : <PromptPanel game={game} />}
+      {game.ask ? (
+        isPopupAsk(game.ask) ? <PopupAskPanel key={game.ask.id} ask={game.ask} game={game} nameOf={nameOf} /> : <AskPanel ask={game.ask} game={game} nameOf={nameOf} />
+      ) : <PromptPanel game={game} />}
 
       <section className="ar-autopass">
         <header>
@@ -78,6 +81,25 @@ function PromptPanel({ game }: { game: LiveGame }) {
           </button>
         )}
       </div>
+    </section>
+  );
+}
+
+/** A question about cards, answered in a window (AskDialog); here, a way back to it once hidden. */
+function PopupAskPanel({ ask, game, nameOf }: { ask: LiveAsk; game: LiveGame; nameOf: (id: string) => string }) {
+  const [shown, setShown] = useState(true);
+  useHotkeys({ ok: () => (shown ? false : setShown(true)) });
+  return (
+    <section className="ar-decision live ar-ask">
+      <div className="ar-ribbon">Decision</div>
+      <h3>{ask.title || ask.message.split("\n")[0] || "Choose"}</h3>
+      <div className="ar-actions">
+        <button className="ar-btn primary" onClick={() => setShown(true)}>
+          Show the cards
+          <Kbd action="ok" />
+        </button>
+      </div>
+      {shown && <AskDialog ask={ask} game={game} nameOf={nameOf} onHide={() => setShown(false)} />}
     </section>
   );
 }

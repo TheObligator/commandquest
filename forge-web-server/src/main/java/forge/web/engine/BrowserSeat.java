@@ -72,8 +72,21 @@ public final class BrowserSeat implements IRemote {
     private record Preferred(int id, String label) {
     }
 
-    /** A question waiting for the browser, with how to turn its answer into Forge's value. */
-    private record Pending(CompletableFuture<Object> answer, List<?> options, GuiGameEvent ev, ObjectNode ask) {
+    /**
+     * A question waiting for the browser, with how to turn its answer into Forge's value: by
+     * {@code ev}'s method, or for an arrange question ({@code ev} null) by {@code piles}.
+     */
+    private record Pending(CompletableFuture<Object> answer, List<?> options, GuiGameEvent ev, ObjectNode ask, List<Pile> piles) {
+    }
+
+    /**
+     * One pile of an arrange question: where cards can go ("Top of library", "Graveyard"), whether
+     * its order matters, and how many cards it must end up with ({@code max} -1: no limit).
+     */
+    public record Pile(String label, boolean ordered, int min, int max) {
+        public Pile(String label, boolean ordered) {
+            this(label, ordered, 0, -1);
+        }
     }
 
     public BrowserSeat(ObjectMapper json, Consumer<String> sink) {
@@ -386,6 +399,9 @@ public final class BrowserSeat implements IRemote {
                 o.set("options", options(gv, options, null));
                 o.putArray("selected").add((Integer) a[4]);
             }
+            case order -> {
+                return order(gv, ev, a);
+            }
             case showInputDialog -> {
                 o.put("title", str(a[1]));
                 o.put("message", str(a[0]));
@@ -412,9 +428,18 @@ public final class BrowserSeat implements IRemote {
         }
         o.put("min", min);
         o.put("max", max);
+        Object answer = await(o, options, ev, null);
+        return answer == NO_ANSWER ? defaultAnswer(ev) : answer;
+    }
+
+    /** What {@link #await} returns when the seat closed or the wait was interrupted. */
+    private static final Object NO_ANSWER = new Object();
+
+    /** Sends question {@code o} and blocks the game thread until the browser answers it. */
+    private Object await(ObjectNode o, List<?> options, GuiGameEvent ev, List<Pile> piles) {
         int id = askIds.incrementAndGet();
         o.put("id", id);
-        Pending p = new Pending(new CompletableFuture<>(), options, ev, o);
+        Pending p = new Pending(new CompletableFuture<>(), options, ev, o, piles);
         pending.put(id, p);
         pushState();
         emit(o);
@@ -422,12 +447,87 @@ public final class BrowserSeat implements IRemote {
             return p.answer().get();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return defaultAnswer(ev);
+            return NO_ANSWER;
         } catch (ExecutionException e) {
-            return defaultAnswer(ev);
+            return NO_ANSWER;
         } finally {
             pending.remove(id);
         }
+    }
+
+    /**
+     * Asks the browser to sort {@code items} into {@code piles} in one window, putting the ordered
+     * piles in order: scry is "Top of library" and "Bottom of library", surveil "Top of library"
+     * and "Graveyard". {@code start} is where the items begin, one list per pile. Returns each
+     * pile's items, first = first in the pile (for the library, nearest the top). Without an
+     * answer (the browser left), the start.
+     */
+    public <T> List<List<T>> arrange(String title, String message, List<T> items, List<Pile> piles, List<List<T>> start) {
+        if (closed) {
+            return start;
+        }
+        GameView gv = gui == null ? null : gui.getGameView();
+        ObjectNode o = msg("ask");
+        o.put("kind", "arrange");
+        o.put("title", title);
+        o.put("message", message);
+        o.set("options", options(gv, items, null));
+        ArrayNode ps = o.putArray("piles");
+        for (Pile p : piles) {
+            ObjectNode n = ps.addObject();
+            n.put("label", p.label());
+            n.put("ordered", p.ordered());
+            n.put("min", p.min());
+            n.put("max", p.max());
+        }
+        ArrayNode st = o.putArray("start");
+        for (List<T> pile : start) {
+            ArrayNode n = st.addArray();
+            pile.forEach(item -> n.add(items.indexOf(item)));
+        }
+        o.put("min", 0);
+        o.put("max", items.size());
+        Object answer = await(o, items, null, piles);
+        if (answer == NO_ANSWER) {
+            return start;
+        }
+        @SuppressWarnings("unchecked")
+        List<List<T>> result = (List<List<T>>) answer;
+        return result;
+    }
+
+    /**
+     * Forge's "put these in order" and "choose some of these" lists (Forge's {@code order}, which
+     * its {@code many} also uses): an arrange question. Ordering only is one pile; choosing is the
+     * chosen pile (in order) and the rest.
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private Object order(GameView gv, GuiGameEvent ev, Object[] a) {
+        String title = str(a[0]);
+        String top = a[1] == null || str(a[1]).isBlank() ? "Chosen" : str(a[1]);
+        int remainingMin = (Integer) a[2];
+        int remainingMax = (Integer) a[3];
+        List<Object> source = a[4] == null ? new ArrayList<>() : new ArrayList<>((List<?>) a[4]);
+        List<Object> dest = a[5] == null ? new ArrayList<>() : new ArrayList<>((List<?>) a[5]);
+        List<Object> items = new ArrayList<>(dest);
+        items.addAll(source);
+        int n = items.size();
+        if (closed || n == 0) {
+            return defaultAnswer(ev);
+        }
+        boolean orderOnly = dest.isEmpty() && remainingMin == 0 && remainingMax == 0;
+        List<List<Object>> result;
+        if (orderOnly) {
+            result = arrange(title, "Put them in order: the first one is " + top.toLowerCase() + ".", items,
+                    List.of(new Pile(top, true, n, n)), List.of(items));
+        } else {
+            int chosenMin = remainingMax >= 0 ? Math.max(0, n - remainingMax) : 0;
+            int chosenMax = remainingMin >= 0 ? n - remainingMin : -1;
+            result = arrange(title, "", items,
+                    List.of(new Pile(top, true, chosenMin, chosenMax), new Pile("Not chosen", false)),
+                    List.of(dest, source));
+        }
+        return new IGuiGame.OrderResult(result.get(0), false);
     }
 
     private ArrayNode options(GameView gv, List<?> items, FSerializableFunction<Object, String> display) {
@@ -488,6 +588,13 @@ public final class BrowserSeat implements IRemote {
         if (p == null) {
             return;
         }
+        if (p.piles() != null) {
+            List<List<Object>> sorted = piles(p, choice);
+            if (sorted != null) {
+                p.answer().complete(sorted);
+            }
+            return;
+        }
         List<Integer> picked = new ArrayList<>();
         if (choice != null && choice.isArray()) {
             for (JsonNode n : choice) {
@@ -507,6 +614,36 @@ public final class BrowserSeat implements IRemote {
             default -> null;
         };
         p.answer().complete(value);
+    }
+
+    /**
+     * An arrange answer: one list of item indexes per pile. Null unless every item is in exactly
+     * one pile and every pile has an allowed number of them.
+     */
+    private static List<List<Object>> piles(Pending p, JsonNode choice) {
+        if (choice == null || !choice.isArray() || choice.size() != p.piles().size()) {
+            return null;
+        }
+        List<?> items = p.options();
+        Set<Integer> seen = new HashSet<>();
+        List<List<Object>> out = new ArrayList<>();
+        for (int i = 0; i < choice.size(); i++) {
+            JsonNode pile = choice.get(i);
+            Pile spec = p.piles().get(i);
+            if (!pile.isArray() || pile.size() < spec.min() || (spec.max() >= 0 && pile.size() > spec.max())) {
+                return null;
+            }
+            List<Object> cards = new ArrayList<>();
+            for (JsonNode n : pile) {
+                int k = n.asInt(-1);
+                if (k < 0 || k >= items.size() || !seen.add(k)) {
+                    return null;
+                }
+                cards.add(items.get(k));
+            }
+            out.add(cards);
+        }
+        return seen.size() == items.size() ? out : null;
     }
 
     /** What Forge gets when there's no browser answer (closed seat, or a question the browser can't ask yet). */
@@ -529,8 +666,10 @@ public final class BrowserSeat implements IRemote {
             case showOptionDialog -> a[4];
             case showInputDialog -> a[3];
             case order -> {
-                List all = new ArrayList((List<?>) a[5]);
-                all.addAll((List<?>) a[4]);
+                List all = a[5] == null ? new ArrayList() : new ArrayList((List<?>) a[5]);
+                if (a[4] != null && (Integer) a[2] == 0 && (Integer) a[3] == 0) {
+                    all.addAll((List<?>) a[4]); // ordering only: everything, in Forge's order
+                }
                 yield new IGuiGame.OrderResult(all, false);
             }
             case manipulateCardList -> {
