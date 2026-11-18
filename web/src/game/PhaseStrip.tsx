@@ -34,13 +34,14 @@ export function PhaseStrip(props: {
   onChange: (stops: TableStops) => void;
   activePlayer: string;
   step: StepId;
-  turn: number;
+  /** Times play has gone round the table. */
+  cycle: number;
   /** You have priority right now. */
   priority: boolean;
   perOpponent: boolean;
   onPerOpponent: (on: boolean) => void;
 }) {
-  const { me, opponents, stops, onChange, activePlayer, step: current, turn, priority, perOpponent } = props;
+  const { me, opponents, stops, onChange, activePlayer, step: current, cycle, priority, perOpponent } = props;
   const oppIds = opponents.map((o) => o.id);
   const active = activePlayer === me.id ? me : opponents.find((o) => o.id === activePlayer);
   const myTurn = activePlayer === me.id;
@@ -49,7 +50,7 @@ export function PhaseStrip(props: {
     <aside className="phase-strip" style={{ "--active": active?.color } as React.CSSProperties} aria-label="Phases and stops">
       <div className="ps-turn">
         <strong>{myTurn ? "Your turn" : `${active?.name ?? "Opp"}'s turn`}</strong>
-        <span>T{turn}</span>
+        <span title={`Cycle ${cycle}: goes up when play comes back round to the starting player`}>Cycle {cycle}</span>
       </div>
       <div className={`ps-priority${priority ? " on" : ""}`} role="status">
         <i /> {priority ? "Priority" : "Waiting"}

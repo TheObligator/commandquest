@@ -171,6 +171,7 @@ public final class BrowserSeat implements IRemote {
                 manual.keepLocked(live);
             }
             ObjectNode view = views.game(gv, me);
+            view.put("cycle", cycle(live));
             view.set("playable", playable());
             view.put("landDrop", landDrop());
             untapLocks(live, view);
@@ -192,6 +193,21 @@ public final class BrowserSeat implements IRemote {
      * ignoring timing, so it's also true in combat. The browser asks before you pass the rest of
      * your turn with it unplayed. Lands include modal double-faced cards with a land face.
      */
+    /**
+     * How many times play has gone round the table: the most regular (not extra) turns any player
+     * has taken, so it goes up when the turn comes back to the starting player, even if they've
+     * since left the game.
+     */
+    private static int cycle(Game live) {
+        int cycle = 1;
+        if (live != null) {
+            for (Player p : live.getRegisteredPlayers()) {
+                cycle = Math.max(cycle, p.getTurn() - p.getExtraTurnsPlayed());
+            }
+        }
+        return cycle;
+    }
+
     private boolean landDrop() {
         try {
             Game g = game.get();

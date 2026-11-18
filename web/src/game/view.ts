@@ -139,7 +139,10 @@ export interface GameView {
   /** In turn order, starting with the viewer. */
   players: PlayerView[];
   stack: StackItemView[];
+  /** Counts every player's turn. */
   turn: number;
+  /** Times play has gone round the table: goes up when the turn comes back to the starting player. */
+  cycle: number;
   active: string;
   step: StepId;
   log: string[];
@@ -219,6 +222,7 @@ export function viewFor(state: GameState, viewer: string): GameView {
       return card ? { ...s, card: redact(card, viewer) } : { ...s };
     }),
     turn: state.turn,
+    cycle: Math.max(1, Math.ceil(state.turn / state.players.length)), // the sim has no extra turns
     active: state.active,
     step: state.step,
     log: state.log,

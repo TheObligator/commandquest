@@ -320,7 +320,7 @@ export function TableBoard(props: {
             onChange={(s) => st.setStops(new Map(s))}
             activePlayer={v.active}
             step={v.step}
-            turn={v.turn}
+            cycle={v.cycle}
             priority={props.priority}
             perOpponent={st.perOpponent}
             onPerOpponent={st.setPerOpponent}
