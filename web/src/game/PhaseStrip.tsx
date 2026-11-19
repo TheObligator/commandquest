@@ -52,7 +52,7 @@ export function PhaseStrip(props: {
     <aside className="phase-strip" style={{ "--active": active?.color } as React.CSSProperties} aria-label="Phases and stops">
       <div className="ps-turn">
         <strong>{myTurn ? "Your turn" : `${active?.name ?? "Opp"}'s turn`}</strong>
-        <span title={`Cycle ${cycle}: goes up when play comes back round to the starting player`}>Cycle {cycle}</span>
+        <span title={`Turn ${cycle} of the table: goes up when play comes back round to the starting player`}>Turn {cycle}</span>
         {activeTurns !== undefined && activeTurns !== cycle && (
           <span className="ps-own" title={`${myTurn ? "Your" : `${active?.name ?? "Their"}'s`} turn ${activeTurns}, counting extra turns`}>
             {myTurn ? "Your" : "Their"} turn {activeTurns}
