@@ -146,7 +146,12 @@ public final class GameSession {
         }
         hooked = true;
         g.subscribeToEvents(new Object() {
+            // AllowConcurrentEvents: as in Rewind.onEvent, a game ended from another thread (abort: setGameOver holds the
+            // game's lock while it fires events) would otherwise deadlock with the game thread, in here waiting for
+            // that lock (isGameOver). Nothing here needs the subscriber's lock: `ending` is volatile and the end itself
+            // goes through the game's action queue, which checks again.
             @Subscribe
+            @com.google.common.eventbus.AllowConcurrentEvents
             public void on(GameEvent ev) {
                 endIfNoHumansLeft(g);
             }
