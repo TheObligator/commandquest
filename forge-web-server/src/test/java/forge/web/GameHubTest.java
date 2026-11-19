@@ -486,7 +486,20 @@ public class GameHubTest {
             start.put("opponents", 3);
             start.set("deck", deck());
             ws.sendText(json.writeValueAsString(start), true);
-            Assert.assertEquals(next(b, "prompt", 60_000).path("cancel").path("label").asText(), "Mulligan");
+            // If you win the coin toss, Forge first asks whether to play first: answer that once (yes), then the
+            // mulligan. (Who wins depends on randomness other tests share, so it varies.) Tell them apart by their
+            // buttons: Forge sets those before a prompt's text.
+            boolean answeredToss = false;
+            while (true) {
+                JsonNode p = next(b, "prompt", 60_000);
+                if (p.path("cancel").path("label").asText().equals("Mulligan")) {
+                    break;
+                }
+                if (!answeredToss) {   // (it may come again with its text: answer it once)
+                    answeredToss = true;
+                    ws.sendText("{\"t\":\"ok\"}", true);
+                }
+            }
             ws.sendText("{\"t\":\"ok\"}", true);
             // Play on until the game stops for you with priority (past the mulligan), then concede.
             JsonNode prompt = null;
