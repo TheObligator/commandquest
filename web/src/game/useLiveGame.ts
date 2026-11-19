@@ -36,10 +36,16 @@ export interface LivePay {
   free: boolean;
   /** Your untapped permanents that can pay, for the table's highlight. */
   sources?: number[];
+  /** The kinds of floating mana in your pool that can pay some of it ("W", "C"…). */
+  pool?: string[];
 }
 
 export interface AskOption {
   label: string;
+  /** A color of mana to make ("W", "C"): the question is what mana an ability makes. */
+  mana?: string;
+  /** distribute: the most this option may get. */
+  max?: number;
   cardId?: number;
   playerId?: string;
   card?: CardView;
@@ -69,6 +75,8 @@ export interface LiveAsk {
   min: number;
   max: number;
   card?: CardView;
+  /** Every option is a color of mana: asked by the card being tapped (ManaChoice). */
+  mana?: boolean;
   initial?: string;
   numeric?: boolean;
 }

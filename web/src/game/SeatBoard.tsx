@@ -69,6 +69,8 @@ export function SeatBoard(props: {
   onTap?: (cardId: number) => void;
   /** While you pay a cost: use one mana of this color from your pool. */
   onPayPool?: (color: string) => void;
+  /** Which colors in the pool can pay it; all of them when missing. */
+  payPool?: string[];
   /** Cast one of your commanders (partners are two cards). */
   onCastCommander?: (id: number) => void;
   onFocus?: () => void;
@@ -130,7 +132,7 @@ export function SeatBoard(props: {
         {Object.entries(p.mana ?? {}).filter(([, n]) => n > 0).length > 0 && (
           <span className="sb-pool" title="Mana pool: floating mana, gone at the end of the step">
             {Object.entries(p.mana ?? {}).filter(([, n]) => n > 0).map(([x, n]) => (
-              props.onPayPool ? (
+              props.onPayPool && (!props.payPool || props.payPool.includes(x)) ? (
                 <button key={x} className="sb-mana" onClick={() => props.onPayPool!(x)} title={`Pay with one {${x}} from your pool`}>
                   <ManaCost cost={`{${x}}`} />{n}
                 </button>

@@ -14,8 +14,9 @@ export function PayPrompt({ prompt, game, pool }: {
   /** Your floating mana, by symbol. */
   pool?: Record<string, number>;
 }) {
-  const floating = Object.entries(pool ?? {}).filter(([, n]) => n > 0);
   const pay = prompt.pay!;
+  // only the floating mana that can pay some of this (colorless can't pay {W/U})
+  const floating = Object.entries(pool ?? {}).filter(([x, n]) => n > 0 && (!pay.pool || pay.pool.includes(x)));
   const what = pay.kind === "spell" ? "Cast" : pay.kind === "ability" ? "Activate" : "Pay for";
   return (
     <div className="pay-prompt" role="dialog" aria-label={`Pay for ${pay.card}`}>

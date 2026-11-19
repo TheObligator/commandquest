@@ -255,6 +255,8 @@ public final class BrowserSeat implements IRemote {
             pay.put("free", freePlay);
             ArrayNode sources = pay.putArray("sources");
             info.sources().forEach(sources::add);
+            ArrayNode usable = pay.putArray("pool");
+            info.pool().forEach(usable::add);
         } catch (RuntimeException e) {
             Logger.debug(e, "Couldn't describe the payment");
         }
@@ -699,7 +701,14 @@ public final class BrowserSeat implements IRemote {
                 o.put("kind", "distribute");
                 Map<Object, Integer> targets = (Map<Object, Integer>) a[1];
                 options = new ArrayList<>(targets.keySet());
-                o.set("options", options(gv, options, null));
+                ArrayNode opts = options(gv, options, null);
+                for (int i = 0; i < options.size(); i++) {
+                    Integer most = targets.get(options.get(i));
+                    if (most != null) {
+                        ((ObjectNode) opts.get(i)).put("max", most);
+                    }
+                }
+                o.set("options", opts);
                 o.put("amount", (Integer) a[2]);
                 o.put("atLeastOne", Boolean.TRUE.equals(a[3]));
                 String what = a[4] == null ? "" : str(a[4]);
@@ -723,6 +732,15 @@ public final class BrowserSeat implements IRemote {
         }
         o.put("min", min);
         o.put("max", max);
+        if (o.path("options").size() > 0) {
+            boolean mana = true;
+            for (JsonNode x : o.path("options")) {
+                mana &= x.has("mana");
+            }
+            if (mana) {
+                o.put("mana", true);   // choosing what mana an ability makes: the browser asks by the card
+            }
+        }
         // a reveal shows cards outright; any other question may let you look at some (scry, a hand)
         sawCards("info".equals(o.path("kind").asText()) ? options : null);
         int id = askIds.incrementAndGet();
@@ -759,6 +777,9 @@ public final class BrowserSeat implements IRemote {
                 o.put("playerId", ViewJson.id(p));
             } else if (item instanceof GameEntityView e) {
                 o.put("label", e.getName());
+            } else if (item instanceof forge.card.MagicColor.Color col) {
+                o.put("label", label(String.valueOf(item)));
+                o.put("mana", col.getShortName());   // a color of mana to make: the browser shows its symbol
             } else {
                 o.put("label", label(display != null ? display.apply(item) : String.valueOf(item)));
             }

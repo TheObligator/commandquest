@@ -506,3 +506,12 @@ button.sb-mana:hover { background: rgb(255 210 122 / 18%); }
 .md-cards li { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: .88rem; }
 .md-cards select { font: inherit; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; }
 .pay-btns .sym { width: 14px; height: 14px; vertical-align: -2px; }
+
+/* What mana to make (ManaChoice): a small window by the card being tapped. */
+.mana-choice { position: fixed; z-index: 45; max-width: min(320px, calc(100vw - 32px)); padding: 10px 12px; border-radius: 10px; background: linear-gradient(180deg, #2b2215, #1a150e); border: 1px solid #5a4320; box-shadow: 0 0 0 1px rgb(224 168 79 / 60%), 0 10px 30px rgb(0 0 0 / 55%); color: #f0e2c4; }
+.mana-choice-title { margin: 0 0 8px; font-size: .85rem; color: #c9a86a; }
+.mana-choice-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.mana-choice-btn { display: inline-flex; align-items: center; padding: 6px 10px; border-radius: 8px; border: 1px solid #6a5434; background: #2a2116; cursor: pointer; }
+.mana-choice-btn:hover, .mana-choice-btn:focus-visible { border-color: #e0a84f; background: #3a2d1b; }
+.mana-choice-btn .sym { width: 22px; height: 22px; }
+.mana-choice-none { margin-top: 8px; background: none; border: 0; color: #bfb39b; cursor: pointer; font-size: .8rem; padding: 0; }

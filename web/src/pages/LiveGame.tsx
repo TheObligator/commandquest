@@ -25,6 +25,8 @@ import { usePreloadZoom } from "../game/CardZoom";
 import type { MenuSection } from "../components/CardMenu";
 import { CounterDialog } from "../game/CounterDialog";
 import { PayPrompt } from "../game/PayPrompt";
+import { ManaChoice } from "../game/ManaChoice";
+import { manaChoiceFor } from "../game/manaOptions";
 import { LibraryDialog, type LibraryCountAction } from "../game/LibraryDialog";
 import { ScryDialog, type ArrangeKind } from "../game/ScryDialog";
 import { CostDialog } from "../game/CostDialog";
@@ -861,12 +863,23 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
     castCommander: () => (commander ? click(commander.id) : false),
   });
 
+  const manaChoice = manaChoiceFor(game.ask, game.prompt);
   const seatOf = (id: string) => view.players.find((p) => p.id === id);
   const nameOf = (id: string) => (id === view.viewer ? "you" : seatOf(id)?.name ?? id);
   const colorOf = (id: string) => seatOf(id)?.color ?? "#888";
 
   return (
     <>
+    {manaChoice && (
+      <ManaChoice
+        choice={manaChoice}
+        anchorId={manaChoice.cardId ?? (lastClick.current.id >= 0 ? lastClick.current.id : undefined)}
+        onPick={(answer) =>
+          manaChoice.via === "ask" ? game.answer(manaChoice.askId!, answer) : answer[0] === 0 ? game.ok() : game.cancel()
+        }
+        onCancel={manaChoice.cancellable ? () => game.answer(manaChoice.askId!, []) : undefined}
+      />
+    )}
     {game.prompt?.pay && !game.ask && <PayPrompt prompt={game.prompt} pool={view.players[0].mana} game={{ ok, cancel, payFree: game.payFree, payPool: game.payPool }} />}
     {libDialog && (
       <LibraryDialog
@@ -919,6 +932,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
       }}
       onCardClick={click}
       onPayPool={game.prompt?.pay && !game.ask ? game.payPool : undefined}
+      payPool={game.prompt?.pay?.pool}
       onPlayerClick={game.clickPlayer}
       onCastCommander={click}
       playable={playable}

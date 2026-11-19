@@ -25,8 +25,11 @@ public final class Payment {
     private Payment() {
     }
 
-    /** What you're paying for right now, or null when Forge isn't waiting for your mana. */
-    public record Info(String cost, String card, int cardId, String kind, List<Integer> sources) {
+    /**
+     * What you're paying for right now, or null when Forge isn't waiting for your mana. {@code pool}: the kinds of
+     * floating mana (W U B R G C) that can pay some of it (colorless can't pay {W/U}, say).
+     */
+    public record Info(String cost, String card, int cardId, String kind, List<Integer> sources, List<String> pool) {
     }
 
     /** Forge's current input for this seat, if it's a mana payment. */
@@ -59,7 +62,14 @@ public final class Payment {
                 sources.add(c.getId());
             }
         }
-        return new Info(cost.toString(), host == null ? "" : host.getName(), host == null ? 0 : host.getId(), kind, sources);
+        List<String> pool = new ArrayList<>();
+        for (forge.game.mana.Mana m : me.getManaPool()) {
+            String sym = forge.card.MagicColor.toShortString(m.getColor());
+            if (!pool.contains(sym) && cost.isNeeded(m, me.getManaPool()) && m.meetsManaRestrictions(sa)) {
+                pool.add(sym);
+            }
+        }
+        return new Info(cost.toString(), host == null ? "" : host.getName(), host == null ? 0 : host.getId(), kind, sources, pool);
     }
 
     /**

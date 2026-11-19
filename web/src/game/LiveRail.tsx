@@ -2,6 +2,7 @@
 // prompt (with Forge's own button labels) or question, and the auto-pass skips.
 import { useEffect, useState } from "react";
 import { AUTO_PASS } from "./ActionRail";
+import { manaChoiceFor } from "./manaOptions";
 import { RewindPanel } from "./RewindPanel";
 import { Kbd, useHotkeys } from "./useHotkeys";
 import { cardImage, previewFor, usePreview, type Preview } from "./cards";
@@ -19,7 +20,13 @@ export function LiveRail(props: {
     <aside className="action-rail">
 
       {/* At the bottom, by your hand: what the game wants now, then the skips. */}
-      {game.ask?.kind === "order" ? (
+      {manaChoiceFor(game.ask, null) ? (
+        <section className="ar-decision live">
+          <div className="ar-ribbon">Decision</div>
+          <h3>Which mana?</h3>
+          <p>Choose by the card you're tapping.</p>
+        </section>
+      ) : game.ask?.kind === "order" ? (
         <OrderPanel key={game.ask.id} ask={game.ask} game={game} />
       ) : game.ask?.kind === "arrange" ? (
         <ArrangePanel key={game.ask.id} ask={game.ask} game={game} />
