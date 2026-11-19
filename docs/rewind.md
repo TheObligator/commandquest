@@ -11,10 +11,39 @@ The host picks a level on the setup screen (the `rewind` field of `start`):
 | Level | Players may go back to |
 |---|---|
 | 0 | Nothing: rewinding is off |
-| 1 | Just before the last action |
-| 2 | Any moment in the current step or phase (or the start of the previous one) |
+| 1 | Just before your own last action, unless you've learned something since |
+| 2 | Any moment of the current turn since you last learned something (see below) |
 | 3 | Any moment of the current turn |
 | 4 | Any moment of the previous turn too: a whole turn |
+
+Each player's options are their own: what's allowed depends on who asks.
+
+## Your last action
+
+"Undo last action" goes back to just before the last thing *you* did this turn: cast a spell,
+activated an ability, played a land, declared attackers or blockers, or changed something by hand.
+A spell resolving isn't an action, so undoing a creature that has entered takes back casting it:
+it's back in your hand (or command zone) and the lands that paid for it are untapped. Anything
+other players did after it is taken back too (and they still have to agree). The game marks the
+saved moment just before an action with who did it, from Forge's events (`GameEventSpellAbilityCast`
+that isn't a trigger, `GameEventLandPlayed`, `GameEventAttackersDeclared` /
+`GameEventBlockersDeclared`) and the log's "(by hand)" lines.
+
+## New information
+
+Levels 1 and 2 stop at the last moment you learned something hidden: no taking back a spell
+because of the counterspell it drew, or a draw step because of the card you drew. You learn
+something when a card you hadn't seen face up becomes visible to you: a card you draw, scry,
+surveil or look at, a card from an opponent's hand that's cast, played or revealed, a face-down card
+turned up. A card you'd already seen doesn't count, so an opponent casting a counterspell that was
+in exile face up, or from a hand they'd revealed, or a card you put back on your library and
+draw again, isn't new. Neither is a new token.
+
+The server keeps, for each person at the table, every card id they've seen face up (Forge keeps
+a card's id from zone to zone) and how many times they've learned something; each saved moment
+notes those counts. It looks at every priority, at every zone change, whenever a question shows
+them cards (scry, a reveal) and when they search their library. What you've learned is never
+forgotten, even by a rewind. Levels 3 and 4 don't check it: everyone agreeing is enough.
 
 ## Changing attackers or blockers
 

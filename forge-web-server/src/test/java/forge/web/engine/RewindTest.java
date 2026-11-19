@@ -119,8 +119,8 @@ public class RewindTest {
                 }
                 if (landId >= 0 && !undone && myMain && has(me.getBattlefield(), landId)) {
                     // priority again after the land: undo it
-                    Rewind.Option undo = rewind.options().stream().filter(o -> o.level() == 1).findFirst().orElse(null);
-                    Assert.assertNotNull(undo, "an undo is offered: " + rewind.options());
+                    Rewind.Option undo = rewind.options(mine).stream().filter(o -> o.level() == 1).findFirst().orElse(null);
+                    Assert.assertNotNull(undo, "an undo is offered: " + rewind.options(mine));
                     Assert.assertTrue(undo.label().startsWith("Before: "), undo.label());
                     Assert.assertNull(rewind.request(mine, undo.point()), "nobody else to ask: done at once");
                     int id = landId;
@@ -137,10 +137,10 @@ public class RewindTest {
                 if (undone && gv.getTurn() > landTurn) {
                     // the next player's turn: go back to the main phase of the last one (a level 3-4 rewind)
                     int t = landTurn;
-                    Rewind.Option back = rewind.options().stream()
+                    Rewind.Option back = rewind.options(mine).stream()
                             .filter(o -> o.turn() == t && o.phase().equals(PhaseType.MAIN1.nameForUi))
                             .findFirst().orElse(null);
-                    Assert.assertNotNull(back, "the last turn's main phase is offered: " + rewind.options());
+                    Assert.assertNotNull(back, "the last turn's main phase is offered: " + rewind.options(mine));
                     Assert.assertEquals(back.level(), 4, "a turn back needs level 4");
                     ObjectNode view = rewind.json(JSON, mine);
                     Assert.assertEquals(view.path("level").asInt(), 4);
@@ -173,6 +173,130 @@ public class RewindTest {
         }
     }
 
+    /**
+     * Undoing a creature spell that has resolved takes back casting it (the spell resolving isn't an action): it's
+     * back in the command zone and the land that paid for it is untapped, not on the stack about to resolve again.
+     */
+    @Test(timeOut = 240_000)
+    public void undoingACreatureThatEnteredTakesBackCastingIt() throws Exception {
+        MyRandom.setRandom(new Random(13));
+        GameSessionTest.ScriptedBrowser browser = new GameSessionTest.ScriptedBrowser();
+        GameSession session = GameSession.startCommander(List.of(
+                new GameSession.Seat("You", deck("Isamaru, Hound of Konda", "Plains"), browser),
+                new GameSession.Seat("AI 1", deck("Krenko, Mob Boss", "Mountain"), null)), 1);
+        try {
+            Rewind rewind = session.rewind();
+            int landTurn = -1;
+            int isamaru = -1;
+            boolean undone = false;
+            long deadline = System.currentTimeMillis() + 180_000;
+            while (System.currentTimeMillis() < deadline && !undone) {
+                Object[] prompt = browser.buttonPrompts.poll(3, TimeUnit.SECONDS);
+                GameView gv = session.view();
+                Assert.assertFalse(gv == null || gv.isGameOver(), "game still going");
+                Assert.assertTrue(gv.getTurn() < 10, "never cast Isamaru");
+                if (prompt == null || browser.me == null || !browser.me.contains((PlayerView) prompt[0])) {
+                    continue;
+                }
+                PlayerView me = (PlayerView) prompt[0];
+                IGameController ctl = session.controller("You", me);
+                Game game = session.game();
+                Player mine = game.getPlayer(me.getId());
+                var input = ((forge.player.PlayerControllerHuman) ctl).getInputQueue().getInput();
+                boolean myMain = me.equals(gv.getPlayerTurn()) && gv.getPhase() == PhaseType.MAIN1;
+                if (input instanceof forge.gamemodes.match.input.InputPayMana) {
+                    GameSessionTest.pass(ctl);   // auto-pay
+                    continue;
+                }
+                if (myMain && landTurn != gv.getTurn() && me.getHand() != null) {
+                    CardView land = me.getHand().stream().filter(c -> c.getCurrentState().getType().isLand()).findFirst().orElse(null);
+                    if (land != null) {
+                        landTurn = gv.getTurn();
+                        FThreads.invokeInEdtLater(() -> ctl.selectCard(land, null, null));
+                        continue;
+                    }
+                }
+                if (isamaru < 0 && myMain && me.getCommand() != null && !me.getCommanders().isEmpty()
+                        && me.getCommand().contains(me.getCommanders().get(0))) {
+                    CardView cmd = me.getCommanders().get(0);
+                    isamaru = cmd.getId();
+                    FThreads.invokeInEdtLater(() -> ctl.selectCard(cmd, null, null));
+                    continue;
+                }
+                Card dog = isamaru < 0 ? null : game.findById(isamaru);
+                if (myMain && dog != null && dog.isInPlay() && game.getStack().isEmpty()) {
+                    Assert.assertTrue(mine.getCardsIn(forge.game.zone.ZoneType.Battlefield).stream()
+                            .anyMatch(c -> c.isLand() && c.isTapped()), "a land paid for it");
+                    Rewind.Option undo = rewind.options(mine).stream().filter(Rewind.Option::last).findFirst().orElse(null);
+                    Assert.assertNotNull(undo, "an undo is offered: " + rewind.options(mine));
+                    Assert.assertEquals(undo.level(), 1);
+                    Assert.assertTrue(undo.label().contains("cast"), undo.label());
+                    Assert.assertNull(rewind.request(mine, undo.point()));
+                    int id = isamaru;
+                    waitFor("Isamaru back in the command zone", () -> has(me.getCommand(), id));
+                    Assert.assertTrue(game.getStack().isEmpty(), "not on the stack to resolve again");
+                    Assert.assertTrue(mine.getCardsIn(forge.game.zone.ZoneType.Battlefield).stream()
+                            .filter(Card::isLand).noneMatch(Card::isTapped), "the land untapped");
+                    undone = true;
+                    continue;
+                }
+                GameSessionTest.pass(ctl);
+            }
+            Assert.assertTrue(undone, "undid casting Isamaru");
+        } finally {
+            session.abort();
+        }
+    }
+
+    /** Level 2: no going back past something you learned, like the card you drew; level 3 can. */
+    @Test(timeOut = 240_000)
+    public void noRewindingPastADrawUnlessTheHostAllowsTheWholeTurn() throws Exception {
+        for (int level : new int[] {2, 3}) {
+            MyRandom.setRandom(new Random(5));
+            GameSessionTest.ScriptedBrowser browser = new GameSessionTest.ScriptedBrowser();
+            GameSession session = GameSession.startCommander(List.of(
+                    new GameSession.Seat("You", deck("Isamaru, Hound of Konda", "Plains"), browser),
+                    new GameSession.Seat("AI 1", deck("Krenko, Mob Boss", "Mountain"), null)), level);
+            try {
+                Rewind rewind = session.rewind();
+                boolean checked = false;
+                long deadline = System.currentTimeMillis() + 180_000;
+                while (System.currentTimeMillis() < deadline && !checked) {
+                    Object[] prompt = browser.buttonPrompts.poll(3, TimeUnit.SECONDS);
+                    GameView gv = session.view();
+                    Assert.assertFalse(gv == null || gv.isGameOver(), "game still going");
+                    if (prompt == null || browser.me == null || !browser.me.contains((PlayerView) prompt[0])) {
+                        continue;
+                    }
+                    PlayerView me = (PlayerView) prompt[0];
+                    IGameController ctl = session.controller("You", me);
+                    Player mine = session.game().getPlayer(me.getId());
+                    // your first turn that has a draw (the game's first turn has none): its main phase
+                    if (me.equals(gv.getPlayerTurn()) && gv.getTurn() >= 2 && gv.getPhase() == PhaseType.MAIN1) {
+                        int turn = gv.getTurn();
+                        List<Rewind.Option> opts = rewind.options(mine);
+                        boolean beforeDraw = opts.stream().anyMatch(o -> o.turn() == turn
+                                && (o.phase().equals(PhaseType.UPKEEP.nameForUi) || o.phase().equals(PhaseType.UNTAP.nameForUi)));
+                        if (level == 2) {
+                            Assert.assertFalse(beforeDraw, "you drew a card since: " + opts);
+                            Assert.assertTrue(opts.stream().allMatch(o -> o.turn() == turn), "this turn only: " + opts);
+                        } else {
+                            Assert.assertTrue(beforeDraw, "the whole turn: " + opts);
+                            Assert.assertTrue(opts.stream().filter(o -> o.turn() == turn && o.phase().equals(PhaseType.UPKEEP.nameForUi))
+                                    .allMatch(o -> o.level() == 3), opts.toString());
+                        }
+                        checked = true;
+                        continue;
+                    }
+                    GameSessionTest.pass(ctl);
+                }
+                Assert.assertTrue(checked, "reached a main phase after a draw (level " + level + ")");
+            } finally {
+                session.abort();
+            }
+        }
+    }
+
     @Test(timeOut = 240_000)
     public void attackersCanBeDeclaredAgainUntilDamage() throws Exception {
         MyRandom.setRandom(new Random(9));
@@ -199,10 +323,10 @@ public class RewindTest {
                 Player mine = session.game().getPlayer(me.getId());
                 if (!asked && gv.getPhase() == PhaseType.COMBAT_DECLARE_ATTACKERS && gv.getCombat() != null
                         && gv.getCombat().getAttackers().iterator().hasNext()) {
-                    Rewind.Option again = rewind.options().stream().filter(o -> o.kind().equals(Rewind.ATTACKERS)).findFirst().orElse(null);
-                    Assert.assertNotNull(again, "attackers can be declared again: " + rewind.options());
+                    Rewind.Option again = rewind.options(mine).stream().filter(o -> o.kind().equals(Rewind.ATTACKERS)).findFirst().orElse(null);
+                    Assert.assertNotNull(again, "attackers can be declared again: " + rewind.options(mine));
                     Assert.assertEquals(again.phase(), PhaseType.COMBAT_BEGIN.nameForUi);
-                    Assert.assertTrue(rewind.options().stream().noneMatch(o -> o.kind().equals(Rewind.BLOCKERS)), "no blocks yet");
+                    Assert.assertTrue(rewind.options(mine).stream().noneMatch(o -> o.kind().equals(Rewind.BLOCKERS)), "no blocks yet");
                     int notes = rewind.json(JSON, mine).path("noteId").asInt();
                     Assert.assertNull(rewind.request(mine, again.point(), Rewind.ATTACKERS));
                     asked = true;
@@ -321,7 +445,7 @@ public class RewindTest {
                 if (gv.getPhase() == PhaseType.COMBAT_DECLARE_ATTACKERS && combat != null && dog != null && combat.isAttacking(dog)
                         && input instanceof forge.gamemodes.match.input.InputPassPriority) {
                     if (step == 2) {
-                        Rewind.Option again = rewind.options().stream().filter(o -> o.kind().equals(Rewind.ATTACKERS)).findFirst().orElseThrow();
+                        Rewind.Option again = rewind.options(mine).stream().filter(o -> o.kind().equals(Rewind.ATTACKERS)).findFirst().orElseThrow();
                         Assert.assertNull(rewind.request(mine, again.point(), Rewind.ATTACKERS));
                         step = 3;
                         continue;
@@ -386,7 +510,9 @@ public class RewindTest {
             Player a = game.getPlayer(alice.me.iterator().next().getId());
             Player b = game.getPlayer(bob.me.iterator().next().getId());
 
-            Rewind.Option target = rewind.options().get(rewind.options().size() - 1);
+            waitFor("somewhere to rewind to", () -> !rewind.options(a).isEmpty());
+            List<Rewind.Option> opts = rewind.options(a);
+            Rewind.Option target = opts.get(opts.size() - 1);
             Assert.assertNull(rewind.request(a, target.point()));
             ObjectNode bobSees = rewind.json(JSON, b);
             Assert.assertTrue(bobSees.path("pending").path("needsMe").asBoolean(), bobSees.toString());
@@ -399,8 +525,9 @@ public class RewindTest {
             Assert.assertTrue(rewind.json(JSON, a).path("note").asText().contains("Bob declined"));
 
             int before = session.view().getTurn();
-            Rewind.Option again = rewind.options().stream().filter(o -> o.level() == 3).reduce((x, y) -> y)
-                    .orElse(rewind.options().get(0));
+            waitFor("somewhere to rewind to", () -> !rewind.options(a).isEmpty());
+            Rewind.Option again = rewind.options(a).stream().filter(o -> o.level() == 3).reduce((x, y) -> y)
+                    .orElse(rewind.options(a).get(0));
             Assert.assertNull(rewind.request(a, again.point()));
             Assert.assertNull(rewind.vote(b, true));
             waitFor("the rewind", () -> game.getGameLog().getAllEntries().stream()

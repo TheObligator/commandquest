@@ -131,8 +131,8 @@ public class StandInsTest {
             Assert.assertTrue(onField.getOracleText().contains("draw a card"), "it keeps its rules text");
             // Rewind puts a game with a stand-in in it back: undo putting it onto the battlefield.
             Rewind rewind = session.rewind();
-            Rewind.Option undo = rewind.options().stream().filter(o -> o.level() == 1).findFirst().orElse(null);
-            Assert.assertNotNull(undo, "an undo is offered: " + rewind.options());
+            Rewind.Option undo = rewind.options(me).stream().filter(Rewind.Option::last).findFirst().orElse(null);
+            Assert.assertNotNull(undo, "an undo is offered: " + rewind.options(me));
             Assert.assertNull(rewind.request(me, undo.point()), "nobody else to ask: done at once");
             long end = System.currentTimeMillis() + 20_000;
             while (session.game().getCardsIn(ZoneType.Battlefield).stream().anyMatch(c -> c.getName().equals(NEW_CARD))) {

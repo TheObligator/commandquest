@@ -9,6 +9,7 @@ import forge.game.Game;
 import forge.game.GameLogEntry;
 import forge.game.GameLogEntryType;
 import forge.game.card.Card;
+import forge.game.card.CardView;
 import forge.game.event.GameEvent;
 import forge.game.event.GameEventCardStatsChanged;
 import forge.game.event.GameEventPlayerPriority;
@@ -32,9 +33,10 @@ import org.tinylog.Logger;
 /**
  * Rewinding the game (docs/rewind.md). The host picks how far back players may ask to go, from 0 (off) to 4:
  * <ol>
- * <li>undo the last action,</li>
- * <li>back to the start of this step or phase,</li>
- * <li>back to any step or phase earlier this turn,</li>
+ * <li>undo your last action (a spell, an ability, a land, a declaration), unless you've learned something since,</li>
+ * <li>back to any moment this turn since you last learned something hidden (a card drawn, scryed, looked at, or
+ * one played from a hand you couldn't see),</li>
+ * <li>back to any moment this turn,</li>
  * <li>back into the previous turn (a whole turn).</li>
  * </ol>
  * The game is saved (Forge's {@link GameMemento}, which keeps only what changed) each time a player is about to get
@@ -51,18 +53,38 @@ public final class Rewind {
     private static final int MAX_POINTS = 800;
     private static final long MAX_BYTES = Math.min(512L << 20, Runtime.getRuntime().maxMemory() / 6);
 
-    /** A saved moment: a player was about to get priority. */
+    /**
+     * A saved moment: a player was about to get priority. {@code knew}: how many times each player had learned
+     * something hidden by then ({@link #learned}). {@code actor}: who acted right after it (cast a spell, activated an
+     * ability, played a land, declared attackers or blockers), if anyone did.
+     */
     private record Point(int id, GameMemento memento, int logSize, int turn, PhaseType phase, String turnPlayer,
-            String priorityPlayer, CombatState combat) {
+            String priorityPlayer, CombatState combat, java.util.Map<Player, Integer> knew, Player[] actor) {
         boolean sameStep(int t, PhaseType p) {
             return turn == t && phase == p;
         }
     }
 
-    /** Somewhere a player may rewind to now: the point, the level that allows it, and what to show. */
+    /**
+     * Somewhere a player may rewind to now: the point, the level that allows it, and what to show. {@code last}: it's
+     * the moment just before their own last action (what "Undo last action" takes back).
+     */
     public record Option(int point, int level, String label, int turn, String phase, String player, boolean stepStart,
-            String kind) {
+            String kind, boolean last) {
+        public Option(int point, int level, String label, int turn, String phase, String player, boolean stepStart, String kind) {
+            this(point, level, label, turn, phase, player, stepStart, kind, false);
+        }
     }
+
+    // ---- what each player knows ----
+
+    /** Every card each player has seen face up (by id: a card keeps its id from zone to zone). */
+    private final java.util.Map<Player, Set<Integer>> seen = new java.util.HashMap<>();
+    /** Every card seen anywhere, hidden or not: one that isn't new (a token) was hidden from whoever hadn't seen it. */
+    private final Set<Integer> known = new java.util.HashSet<>();
+    /** How many times each player has seen a card they couldn't see before. Never goes back down, even on a rewind. */
+    private final java.util.Map<Player, Integer> learned = new java.util.HashMap<>();
+    private boolean looked;
 
     private final class Request {
         final Player by;
@@ -143,9 +165,114 @@ public final class Rewind {
         }
         if (ev instanceof GameEventPlayerPriority) {
             onPriority();
-        } else {
-            dirty = true;
+            return;
         }
+        dirty = true;
+        if (ev instanceof forge.game.event.GameEventSpellAbilityCast c && !c.si().isTrigger()) {
+            acted(c.si().getActivatingPlayer());
+        } else if (ev instanceof forge.game.event.GameEventLandPlayed l) {
+            acted(l.player());
+        } else if (ev instanceof forge.game.event.GameEventAttackersDeclared a && !a.attackersMap().isEmpty()) {
+            acted(a.player());
+        } else if (ev instanceof forge.game.event.GameEventBlockersDeclared b && !b.blockers().isEmpty()) {
+            acted(b.defendingPlayer());
+        } else if (ev instanceof forge.game.event.GameEventCardChangeZone z && z.card() != null) {
+            Card c = game.findById(z.card().getId());
+            if (c != null) {
+                synchronized (this) {
+                    if (looked) {
+                        lookAt(c, humans());
+                    }
+                }
+            }
+        }
+    }
+
+    /** {@code who} did something after the newest point: undoing their last action goes back there. */
+    private synchronized void acted(PlayerView who) {
+        Player p = who == null ? null : game.getPlayer(who.getId());
+        if (p != null && !points.isEmpty()) {
+            Player[] actor = points.get(points.size() - 1).actor();
+            if (actor[0] == null) {
+                actor[0] = p;
+            }
+        }
+    }
+
+    /** Who moved a card or changed something by hand ({@link ManualActions}) since the log was that long. */
+    private Player byHand(int from) {
+        List<GameLogEntry> log = game.getGameLog().getAllEntries();
+        for (int i = from; i < log.size(); i++) {
+            String m = log.get(i).message();
+            if (m.endsWith(" (by hand)")) {
+                for (Player p : game.getPlayers()) {
+                    if (m.startsWith(p.getName() + " ")) {
+                        return p;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /** The people at the table (AI seats never ask to rewind). */
+    private List<Player> humans() {
+        List<Player> out = new ArrayList<>();
+        for (Player p : game.getPlayers()) {
+            if (p.getController() instanceof PlayerControllerHuman) {
+                out.add(p);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Notes every card each person can see now (game thread; e.g. a prompt is showing them cards from a library).
+     * A card they hadn't seen before, that isn't new to the game, is something they've learned.
+     */
+    public synchronized void look() {
+        if (level == 0 || restoring) {
+            return;
+        }
+        List<Player> people = humans();
+        for (Card c : game.getCardsInGame()) {
+            lookAt(c, people);
+        }
+        looked = true;
+    }
+
+    /** {@code who} was shown these cards (by id), e.g. revealed from a hand. */
+    public synchronized void saw(PlayerView who, Iterable<Integer> ids) {
+        Player p = who == null ? null : game.getPlayer(who.getId());
+        if (level == 0 || restoring || p == null) {
+            return;
+        }
+        for (int id : ids) {
+            see(p, id, known.contains(id));
+        }
+    }
+
+    private void lookAt(Card c, List<Player> people) {
+        CardView v = c.getView();
+        boolean old = known.contains(c.getId());
+        for (Player p : people) {
+            PlayerView pv = p.getView();
+            if (v.canBeShownTo(pv) && v.canFaceDownBeShownTo(pv)) {
+                see(p, c.getId(), old && looked);
+            }
+        }
+        known.add(c.getId());
+    }
+
+    private void see(Player p, int id, boolean wasHidden) {
+        if (seen.computeIfAbsent(p, x -> new java.util.HashSet<>()).add(id) && wasHidden) {
+            learned.merge(p, 1, Integer::sum);
+        }
+    }
+
+    /** {@code p} has learned something hidden since point {@code pt}. */
+    private boolean learnedSince(Point pt, Player p) {
+        return learned.getOrDefault(p, 0) > pt.knew().getOrDefault(p, 0);
     }
 
     /** A player is about to get priority: rewind now if that was agreed, else save this moment if it's new. */
@@ -171,8 +298,12 @@ public final class Rewind {
             return;
         }
         PhaseHandler ph = game.getPhaseHandler();
+        look();
         synchronized (this) {
             Point last = points.isEmpty() ? null : points.get(points.size() - 1);
+            if (last != null && last.actor()[0] == null) {
+                last.actor()[0] = byHand(last.logSize());
+            }
             if (!dirty && last != null && last.sameStep(ph.getTurn(), ph.getPhase())) {
                 return;   // only priority moved on: rewinding to the newest point gives the same game
             }
@@ -190,7 +321,8 @@ public final class Rewind {
             try {
                 GameMemento m = recorder.capture(game);
                 points.add(new Point(nextId++, m, game.getGameLog().size(), ph.getTurn(), ph.getPhase(),
-                        name(ph.getPlayerTurn()), name(ph.getPriorityPlayer()), CombatState.of(ph.getCombat())));
+                        name(ph.getPlayerTurn()), name(ph.getPriorityPlayer()), CombatState.of(ph.getCombat()),
+                        java.util.Map.copyOf(learned), new Player[1]));
                 dirty = false;
             } catch (RuntimeException | OutOfMemoryError e) {
                 Logger.warn(e, "Couldn't save the game for rewinding");
@@ -205,13 +337,10 @@ public final class Rewind {
     /** Keeps only the points someone could still rewind to, within the size limits. */
     private void prune() {
         int keepFrom = points.size() - 1;
-        for (Option o : options()) {
-            keepFrom = Math.min(keepFrom, indexOf(o.point()));
-        }
-        if (level >= 2) {
-            // the start of this step: next step it's where "back to the previous step" goes
-            int start = stepStart(points.size() - 1);
-            keepFrom = Math.min(keepFrom, start);
+        for (Player p : game.getPlayers()) {
+            for (Option o : options(p)) {
+                keepFrom = Math.min(keepFrom, indexOf(o.point()));
+            }
         }
         if (pending != null) {
             // while people decide, the game goes on: keep where they're deciding about
@@ -500,7 +629,7 @@ public final class Rewind {
             if (why != null) {
                 return why;
             }
-            Option target = options().stream().filter(o -> o.point() == point && o.kind().equals(kind)).findFirst().orElse(null);
+            Option target = options(by).stream().filter(o -> o.point() == point && o.kind().equals(kind)).findFirst().orElse(null);
             if (target == null) {
                 return "You can't rewind to there.";
             }
@@ -543,7 +672,7 @@ public final class Rewind {
             }
             boolean attacking = combat.getAttackingPlayer() == by;
             String kind = attacking ? ATTACKERS : BLOCKERS;
-            Option target = options().stream().filter(o -> o.kind().equals(kind)).findFirst().orElse(null);
+            Option target = options(by).stream().filter(o -> o.kind().equals(kind)).findFirst().orElse(null);
             if (target == null) {
                 return attacking ? "Attackers can only be changed until combat damage." : "Blockers can only be changed in the declare blockers step.";
             }
@@ -737,10 +866,17 @@ public final class Rewind {
     // ---- what players see ----
 
     /**
-     * The timeline players may rewind along now, newest first: every saved moment within the host's limit, with the
+     * The timeline {@code me} may rewind along now, newest first: every saved moment within the host's limit, with the
      * level that allows it and what happened right after it (what rewinding there takes back).
+     * <ul>
+     * <li>1: just before {@code me}'s own last action this turn (a spell resolving isn't an action: undoing a creature
+     * that has entered takes the spell back to hand, not just its resolving), if they've learned nothing since;</li>
+     * <li>2: any other moment this turn since they last learned something hidden;</li>
+     * <li>3: any moment this turn;</li>
+     * <li>4: any moment of the previous turn.</li>
+     * </ul>
      */
-    synchronized List<Option> options() {
+    synchronized List<Option> options(Player me) {
         List<Option> out = new ArrayList<>();
         int n = points.size();
         if (level == 0 || n == 0 || game.isGameOver()) {
@@ -755,35 +891,44 @@ public final class Rewind {
         if (newest < 0) {
             return out;
         }
-        int thisStep = stepStart(newest);
+        Point top = points.get(n - 1);
+        if (top.actor()[0] == null) {
+            top.actor()[0] = byHand(top.logSize());   // (actions by hand are only in the log)
+        }
+        int lastAction = -1;
+        for (int i = newest; i >= 0 && points.get(i).turn() == turn; i--) {
+            if (me != null && points.get(i).actor()[0] == me) {
+                lastAction = i;
+                break;
+            }
+        }
         List<GameLogEntry> log = game.getGameLog().getAllEntries();
         for (int i = newest; i >= 0; i--) {
             Point p = points.get(i);
             int needs;
-            if (i == newest) {
-                needs = 1;
-            } else if (i >= thisStep || p.sameStep(turn, phase)) {
-                needs = 2;
-            } else if (p.turn() == turn) {
-                needs = 3;
+            if (p.turn() == turn) {
+                needs = me != null && learnedSince(p, me) ? 3 : i == lastAction ? 1 : 2;
             } else if (p.turn() == turn - 1) {
                 needs = 4;
             } else {
                 break;   // older than any level reaches
             }
             if (needs > level) {
-                break;
+                if (needs >= 3) {
+                    break;   // everything older is at least as far
+                }
+                continue;   // level 1: only the last action
             }
             int logEnd = i + 1 < n ? points.get(i + 1).logSize() : log.size();
             String did = action(log, p.logSize(), logEnd);
             boolean start = stepStart(i) == i;
-            if (did == null && !start && !out.isEmpty()) {
+            if (did == null && !start && !out.isEmpty() && i != lastAction) {
                 continue;   // nothing to show: priority just moved on (the step's start or the action before covers it)
             }
             String label = did != null ? "Before: " + did
                     : start ? "Start of " + where(p, turn)
                     : p.priorityPlayer() + " had priority";
-            out.add(new Option(p.id(), needs, label, p.turn(), stepName(p), p.turnPlayer(), start, TIMELINE));
+            out.add(new Option(p.id(), needs, label, p.turn(), stepName(p), p.turnPlayer(), start, TIMELINE, i == lastAction));
         }
         combat(out, turn, phase);
         return out;
@@ -895,7 +1040,7 @@ public final class Rewind {
             return o;
         }
         ArrayNode opts = o.putArray("options");
-        for (Option opt : options()) {
+        for (Option opt : options(me)) {
             ObjectNode x = opts.addObject();
             x.put("point", opt.point());
             x.put("level", opt.level());
@@ -905,6 +1050,7 @@ public final class Rewind {
             x.put("player", opt.player());
             x.put("stepStart", opt.stepStart());
             x.put("kind", opt.kind());
+            x.put("last", opt.last());
         }
         if (pending != null) {
             ObjectNode p = o.putObject("pending");

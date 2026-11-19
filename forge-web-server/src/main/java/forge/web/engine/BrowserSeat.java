@@ -114,8 +114,34 @@ public final class BrowserSeat implements IRemote {
         return rewind.get();
     }
 
+    /**
+     * Rewinding keeps track of what each person has seen (docs/rewind.md): these cards were shown to this seat, and
+     * anything else they can see now, e.g. cards of a library a prompt lets them look at.
+     */
+    private void sawCards(Iterable<?> shown) {
+        Rewind rw = rewind.get();
+        if (rw == null || me == null) {
+            return;
+        }
+        try {
+            List<Integer> ids = new ArrayList<>();
+            if (shown != null) {
+                for (Object x : shown) {
+                    if (x instanceof CardView cv) {
+                        ids.add(cv.getId());
+                    }
+                }
+            }
+            rw.saw(me, ids);
+            rw.look();
+        } catch (RuntimeException e) {
+            org.tinylog.Logger.debug(e, "Couldn't note what was shown");
+        }
+    }
+
     /** A card of yours shown face up to you (your library, while you search it). */
     public ObjectNode revealedCard(CardView c) {
+        sawCards(List.of(c));
         IGuiGame g = gui;
         GameView gv = g == null ? null : g.getGameView();
         return views.card(gv, c, me, true);
@@ -185,6 +211,7 @@ public final class BrowserSeat implements IRemote {
                     });
                 }
                 revealed = shown;
+                sawCards(shown);
                 pushState();
             }
             case hideRevealedCards -> {
@@ -696,6 +723,8 @@ public final class BrowserSeat implements IRemote {
         }
         o.put("min", min);
         o.put("max", max);
+        // a reveal shows cards outright; any other question may let you look at some (scry, a hand)
+        sawCards("info".equals(o.path("kind").asText()) ? options : null);
         int id = askIds.incrementAndGet();
         o.put("id", id);
         Pending p = new Pending(new CompletableFuture<>(), options, ev, o);

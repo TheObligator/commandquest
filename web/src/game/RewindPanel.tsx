@@ -8,8 +8,8 @@ import type { RewindLevel, RewindPoint, RewindView } from "./view";
 /** What each host setting allows, for the setup screen and the rail. */
 export const REWIND_LEVELS: { level: RewindLevel; label: string; hint: string }[] = [
   { level: 0, label: "Off", hint: "No rewinding in this game." },
-  { level: 1, label: "Last action", hint: "Take back the last thing that happened." },
-  { level: 2, label: "This step", hint: "Back to any moment in the current step or phase." },
+  { level: 1, label: "Last action", hint: "Take back your last spell, ability, land or attack, unless it showed you something new (a card drawn, an opponent's card from their hand)." },
+  { level: 2, label: "Until new information", hint: "Back to any moment this turn since you last learned something hidden: a card you drew, scryed or looked at, or one an opponent played from their hand." },
   { level: 3, label: "This turn", hint: "Back to any moment of the current turn." },
   { level: 4, label: "Last turn", hint: "Back into the previous turn: replay a whole turn." },
 ];
@@ -49,14 +49,14 @@ export function RewindPanel({ game, rewind }: { game: LiveGame; rewind: RewindVi
     setOpen(false);
     game.rewindTo(o.point, o.kind);
   };
-  const undo = options[0];
+  const undo = options.find((o) => o.last);
   return (
     <section className="rewind-panel">
       <header>
         <h3>Rewind</h3>
         <span className="ar-sub">{REWIND_LEVELS[rewind.level]?.label.toLowerCase()}</span>
       </header>
-      <button className="ar-skip" disabled={!undo} title={undo?.label} onClick={() => undo && ask(undo)}>
+      <button className="ar-skip" disabled={!undo} title={undo?.label ?? "Nothing of yours to take back this turn (or it showed you something new)"} onClick={() => undo && ask(undo)}>
         Undo last action
       </button>
       {combat.map((o) => (

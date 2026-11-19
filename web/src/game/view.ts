@@ -190,6 +190,8 @@ export interface RewindPoint {
   stepStart: boolean;
   /** `timeline`: a moment of the game. `attackers` / `blockers`: declare them again (until combat damage). */
   kind: "timeline" | "attackers" | "blockers";
+  /** Just before your own last action this turn: what "Undo last action" goes back to. */
+  last?: boolean;
 }
 
 export interface RewindView {
