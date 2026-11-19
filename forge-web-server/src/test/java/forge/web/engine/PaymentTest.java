@@ -211,4 +211,84 @@ public class PaymentTest {
             session.abort();
         }
     }
+
+    /** Your lands and rocks already in play are tapped, so only the ones a test makes can pay. */
+    private static void tapTheRest(Player me) {
+        for (Card c : me.getCardsIn(ZoneType.Battlefield)) {
+            if (c.isUntapped() && (c.isLand() || c.isArtifact())) {
+                c.setTapped(true);
+            }
+        }
+    }
+
+    /** Cast {@code spell} from hand with Auto-pay, until it's on the stack. */
+    private static void autoPayFor(Game g, IGameController controller, Player me, Card spell) throws Exception {
+        onUiThread(() -> controller.selectCard(spell.getView(), null, null));
+        waitFor(() -> Payment.info(controller, me) != null, "the mana payment");
+        onUiThread(() -> {
+            AutoPay.run(controller, me, controller::selectButtonOk);
+            return null;
+        });
+        waitFor(() -> Payment.info(controller, me) == null && !g.getStack().isEmpty(), spell.getName() + " on the stack");
+    }
+
+    @Test(timeOut = 240_000)
+    public void autoPayTapsAManaRockBeforeAFilterLand() throws Exception {
+        MyRandom.setRandom(new Random(5));
+        GameSessionTest.ScriptedBrowser browser = new GameSessionTest.ScriptedBrowser();
+        GameSession session = GameSession.startCommander(List.of(
+                new GameSession.Seat("You", deck("Ezuri, Renegade Leader", "Forest"), browser),
+                new GameSession.Seat("AI 1", deck("Talrand, Sky Summoner", "Island"), null)));
+        try {
+            PlayerView meView = untilMyMain(session, browser);
+            IGameController controller = session.controller("You", meView);
+            Game g = session.game();
+            Player me = g.getPlayer(meView.getId());
+            Card[] cards = onGameThread(g, () -> {
+                tapTheRest(me);
+                return new Card[] {
+                    make(me, "Mystic Gate", ZoneType.Battlefield),
+                    make(me, "Island", ZoneType.Battlefield),
+                    make(me, "Plains", ZoneType.Battlefield),
+                    make(me, "Mind Stone", ZoneType.Battlefield),
+                    make(me, "Teferi, Time Raveler", ZoneType.Hand),
+                };
+            });
+            autoPayFor(g, controller, me, cards[4]);
+            Assert.assertTrue(cards[1].isTapped() && cards[2].isTapped(), "the Island and the Plains pay {W}{U}");
+            Assert.assertTrue(cards[3].isTapped(), "Mind Stone pays the {1}");
+            Assert.assertFalse(cards[0].isTapped(), "the filter land stays up");
+        } finally {
+            session.abort();
+        }
+    }
+
+    @Test(timeOut = 240_000)
+    public void autoPayKeepsUpTheColorYourHandNeeds() throws Exception {
+        MyRandom.setRandom(new Random(5));
+        GameSessionTest.ScriptedBrowser browser = new GameSessionTest.ScriptedBrowser();
+        GameSession session = GameSession.startCommander(List.of(
+                new GameSession.Seat("You", deck("Ezuri, Renegade Leader", "Forest"), browser),
+                new GameSession.Seat("AI 1", deck("Talrand, Sky Summoner", "Island"), null)));
+        try {
+            PlayerView meView = untilMyMain(session, browser);
+            IGameController controller = session.controller("You", meView);
+            Game g = session.game();
+            Player me = g.getPlayer(meView.getId());
+            Card[] cards = onGameThread(g, () -> {
+                tapTheRest(me);
+                return new Card[] {
+                    make(me, "Plains", ZoneType.Battlefield),   // made first: without the hand, it would pay
+                    make(me, "Island", ZoneType.Battlefield),
+                    make(me, "Sol Ring", ZoneType.Hand),
+                    make(me, "Swords to Plowshares", ZoneType.Hand),
+                };
+            });
+            autoPayFor(g, controller, me, cards[2]);
+            Assert.assertTrue(cards[1].isTapped(), "the Island pays for Sol Ring");
+            Assert.assertFalse(cards[0].isTapped(), "the Plains stays up for Swords to Plowshares");
+        } finally {
+            session.abort();
+        }
+    }
 }

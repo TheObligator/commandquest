@@ -25,9 +25,10 @@ import org.tinylog.Logger;
 /**
  * The Auto-pay button: pays a mana cost the way a careful player taps lands. Among your untapped
  * sources that just tap for one mana (no damage, sacrifice or life), it picks the cheapest set:
- * sources that make fewer colors first (basics before dual and any-color lands), creatures last,
- * so the colors you may need later stay open. It taps them through Forge's own payment, in an
- * order where each tap's color is unambiguous. When it can't plan a payment (hybrid or Phyrexian
+ * sources that can make fewer colors first (basics before dual and any-color lands, a mana rock
+ * before a filter land), creatures last, and what's left untapped should still cast as many of the
+ * spells in your hand as it can (keep a Plains up for the Swords to Plowshares). It taps them
+ * through Forge's own payment, in an order where each tap's color is unambiguous. When it can't plan a payment (hybrid or Phyrexian
  * costs, floating mana, only sources with drawbacks left), Forge's own auto-payment does it.
  */
 public final class AutoPay {
@@ -53,7 +54,7 @@ public final class AutoPay {
         List<Tap> plan = null;
         try {
             if (input != null && cost != null && me.getManaPool().isEmpty() && !paidFor.tracksManaSpent()) {
-                plan = plan(sources(me, paidFor), shards(cost));
+                plan = plan(sources(me, paidFor), shards(cost), hand(me, paidFor));
             }
         } catch (RuntimeException e) {
             Logger.debug(e, "Couldn't plan the payment");
@@ -117,7 +118,14 @@ public final class AutoPay {
             if (byColor.isEmpty()) {
                 continue;
             }
-            int colors = (int) byColor.keySet().stream().filter(k -> k != ManaAtom.COLORLESS).count();
+            // every color it could make, its other mana abilities too (a filter land's {W/U}: add {W}{U})
+            int colors = 0;
+            for (byte color : COLORS) {
+                if (byColor.containsKey(color) || InputPayMana.getAllManaAbilities(c, me).stream()
+                        .anyMatch(ma -> ma.canProduce(MagicColor.toShortString(color)))) {
+                    colors++;
+                }
+            }
             boolean otherAbilities = c.getSpellAbilities().stream().anyMatch(sa -> !sa.isManaAbility() && sa.isActivatedAbility());
             int penalty = 1 + 2 * colors + (c.isCreature() ? 20 : 0) + (otherAbilities ? 3 : 0) + (anyColor ? 1 : 0);
             out.add(new Source(c, byColor, penalty, anyColor));
@@ -141,12 +149,96 @@ public final class AutoPay {
         return tap && !(c.isCreature() && c.isSick());
     }
 
+    /** A spell in your hand, by what it costs: colored shards (color -> count) and generic. */
+    record HandSpell(Map<Byte, Integer> colored, int generic) {
+    }
+
     /**
-     * The cheapest taps that pay {@code need} (color -> count, 0 = generic), or null. Colored shards
-     * are assigned by search (fewest candidates first), generic gets the cheapest sources left.
-     * Any-color sources only pay colored shards (for generic Forge would ask which color).
+     * What it's worth (in source penalties) to leave one more spell in hand castable: more than a
+     * dual land over a basic, less than tapping a creature.
      */
+    static final int KEEP_CASTABLE = 6;
+
+    /** The spells in {@code me}'s hand with plain costs (no hybrid, Phyrexian or X), not the one being paid for. */
+    static List<HandSpell> hand(Player me, SpellAbility paidFor) {
+        List<HandSpell> out = new ArrayList<>();
+        Card paying = paidFor == null ? null : paidFor.getHostCard();
+        for (Card c : me.getCardsIn(ZoneType.Hand)) {
+            if (c == paying || c.isLand()) {
+                continue;
+            }
+            forge.card.mana.ManaCost mc = c.getManaCost();
+            if (mc == null || mc.isNoCost() || mc.hasHybrid() || mc.hasPhyrexian() || mc.countX() > 0) {
+                continue;
+            }
+            Map<Byte, Integer> colored = new LinkedHashMap<>();
+            for (byte color : COLORS) {
+                ManaCostShard shard = switch (color) {
+                    case MagicColor.WHITE -> ManaCostShard.WHITE;
+                    case MagicColor.BLUE -> ManaCostShard.BLUE;
+                    case MagicColor.BLACK -> ManaCostShard.BLACK;
+                    case MagicColor.RED -> ManaCostShard.RED;
+                    default -> ManaCostShard.GREEN;
+                };
+                int n = mc.getShardCount(shard);
+                if (n > 0) {
+                    colored.put(color, n);
+                }
+            }
+            if (mc.getShardCount(ManaCostShard.COLORLESS) > 0) {
+                continue;   // {C}: rare, leave it out
+            }
+            out.add(new HandSpell(colored, mc.getGenericCost()));
+        }
+        return out;
+    }
+
+    /** Could these sources (the ones not {@code used}) pay for this spell? */
+    static boolean canPay(List<Source> sources, boolean[] used, HandSpell spell) {
+        List<Byte> colored = new ArrayList<>();
+        spell.colored().forEach((col, n) -> {
+            for (int i = 0; i < n; i++) {
+                colored.add(col);
+            }
+        });
+        int free = 0;
+        for (boolean u : used) {
+            free += u ? 0 : 1;
+        }
+        if (colored.size() + spell.generic() > free) {
+            return false;
+        }
+        return match(sources, used.clone(), colored, 0);
+    }
+
+    private static boolean match(List<Source> sources, boolean[] used, List<Byte> colored, int i) {
+        if (i == colored.size()) {
+            return true;
+        }
+        for (int k = 0; k < sources.size(); k++) {
+            if (!used[k] && sources.get(k).byColor().containsKey(colored.get(i))) {
+                used[k] = true;
+                if (match(sources, used, colored, i + 1)) {
+                    return true;
+                }
+                used[k] = false;
+            }
+        }
+        return false;
+    }
+
     static List<Tap> plan(List<Source> sources, Map<Byte, Integer> need) {
+        return plan(sources, need, List.of());
+    }
+
+    /**
+     * The cheapest taps that pay {@code need} (color -> count, 0 = generic), or null. The cost of a
+     * plan is its sources' penalties, plus {@link #KEEP_CASTABLE} for each spell in {@code hand}
+     * the sources left untapped couldn't pay for. Colored shards are assigned by search (fewest
+     * candidates first), then generic. Any-color sources only pay colored shards (for generic Forge
+     * would ask which color).
+     */
+    static List<Tap> plan(List<Source> sources, Map<Byte, Integer> need, List<HandSpell> hand) {
         if (need == null || need.isEmpty()) {
             return null;
         }
@@ -165,7 +257,7 @@ public final class AutoPay {
             return null;
         }
         colored.sort(Comparator.comparingLong(col -> sources.stream().filter(s -> s.byColor().containsKey(col)).count()));
-        Search s = new Search(sources, colored, generic);
+        Search s = new Search(sources, colored, generic, hand);
         s.go(0, new boolean[sources.size()], new ArrayList<>(), 0);
         return s.best;
     }
@@ -174,14 +266,48 @@ public final class AutoPay {
         final List<Source> sources;
         final List<Byte> colored;
         final int generic;
+        final List<HandSpell> hand;
         List<Tap> best;
         int bestCost = Integer.MAX_VALUE;
         int nodes;
 
-        Search(List<Source> sources, List<Byte> colored, int generic) {
+        Search(List<Source> sources, List<Byte> colored, int generic, List<HandSpell> hand) {
             this.sources = sources;
             this.colored = colored;
             this.generic = generic;
+            this.hand = hand;
+        }
+
+        /** Generic: the cheapest sources left first, trying other sets too (each set once, in source order). */
+        void generic(int from, int left, boolean[] used, List<Tap> taps, int cost) {
+            if (++nodes > 50_000 || cost >= bestCost) {
+                return;
+            }
+            if (left == 0) {
+                int total = cost;
+                for (HandSpell h : hand) {
+                    if (!canPay(sources, used, h)) {
+                        total += KEEP_CASTABLE;
+                    }
+                }
+                if (total < bestCost) {
+                    bestCost = total;
+                    best = new ArrayList<>(taps);
+                }
+                return;
+            }
+            for (int k = from; k < sources.size(); k++) {
+                Source src = sources.get(k); // cheapest first
+                if (used[k] || src.anyColor()) {
+                    continue;
+                }
+                SpellAbility ab = src.byColor().getOrDefault((byte) ManaAtom.COLORLESS, src.byColor().values().iterator().next());
+                used[k] = true;
+                taps.add(new Tap(src, ab, (byte) 0));
+                generic(k + 1, left - 1, used, taps, cost + src.penalty());
+                taps.remove(taps.size() - 1);
+                used[k] = false;
+            }
         }
 
         void go(int i, boolean[] used, List<Tap> taps, int cost) {
@@ -189,23 +315,7 @@ public final class AutoPay {
                 return;
             }
             if (i == colored.size()) {
-                List<Tap> all = new ArrayList<>(taps);
-                int total = cost;
-                int left = generic;
-                for (int k = 0; k < sources.size() && left > 0; k++) {
-                    Source src = sources.get(k); // cheapest first
-                    if (used[k] || src.anyColor()) {
-                        continue;
-                    }
-                    SpellAbility ab = src.byColor().getOrDefault((byte) ManaAtom.COLORLESS, src.byColor().values().iterator().next());
-                    all.add(new Tap(src, ab, (byte) 0));
-                    total += src.penalty();
-                    left--;
-                }
-                if (left == 0 && total < bestCost) {
-                    bestCost = total;
-                    best = all;
-                }
+                generic(0, generic, used, taps, cost);
                 return;
             }
             byte col = colored.get(i);
