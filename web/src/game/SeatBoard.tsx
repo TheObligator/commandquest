@@ -384,8 +384,16 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
   );
 }
 
-/** A line from an aura on the battlefield to the player it enchants (their name on their board). */
+/** A line from an aura on the battlefield to the player it enchants (their name on their board), and a glow round their board. */
 function CurseArrow({ from, player, color }: { from: HTMLElement; player: string; color: string }) {
+  // Their board lights up too (every copy of it: the table's and an enlarged one).
+  useEffect(() => {
+    const boards = [...document.querySelectorAll<HTMLElement>(`[data-player-id="${player}"]`)]
+      .map((el) => el.closest<HTMLElement>(".seat-board"))
+      .filter((b): b is HTMLElement => !!b);
+    for (const b of boards) b.classList.add("targeted");
+    return () => boards.forEach((b) => b.classList.remove("targeted"));
+  }, [player]);
   const to = document.querySelector<HTMLElement>(`[data-player-id="${player}"]`);
   if (!to || !from.isConnected) return null;
   const f = from.getBoundingClientRect();

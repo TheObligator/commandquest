@@ -29,6 +29,8 @@
   transition: box-shadow .25s, border-color .25s;
 }
 .seat-board.active { border-color: color-mix(in srgb, var(--seat) 70%, var(--line)); box-shadow: 0 0 0 1px var(--seat), 0 0 24px -8px var(--seat); }
+/* Pointed at by a curse you're hovering: a glow round the whole board, in that player's colour (the arrow's). */
+.seat-board.targeted { outline: 3px solid color-mix(in srgb, var(--seat) 70%, #e0b04a); outline-offset: 2px; box-shadow: 0 0 28px 2px color-mix(in srgb, var(--seat) 60%, transparent); }
 .sb-head { display: flex; align-items: center; gap: 8px; min-height: 26px; }
 .sb-name { font-weight: 700; color: var(--seat); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .sb-life { font-weight: 800; font-size: 1.2rem; font-variant-numeric: tabular-nums; }
