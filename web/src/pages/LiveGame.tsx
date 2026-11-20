@@ -1,4 +1,5 @@
-// A live game against Forge AI on the game server (#/game?deck=<id>). The table is the same board
+// A live game against Forge AI on the game server (#/game?deck=<id>). Before the game starts this
+// is the table's lobby, where you pick your deck (the choice is kept in the URL and remembered). The table is the same board
 // as the preview; the server sends this player's view and Forge's prompts (docs/game-protocol.md).
 import { useConvexAuth, useQuery } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -64,8 +65,19 @@ const EOT_GROUPS: { label: string; creature?: boolean; items: [string, string][]
 
 export function LiveGame() {
   const { query } = useRoute();
-  const deckId = query.get("deck") ?? "";
   const { isAuthenticated } = useConvexAuth();
+  // Decks that can't start a game aren't offered here; the Decks page marks them and says why.
+  const decks = useQuery(api.decks.forPlay, isAuthenticated ? {} : "skip");
+  const checks = useGameChecks(decks);
+  const ready = checks && decks ? decks.filter((d) => !checks.get(d._id)?.problems.length) : undefined;
+  const notReady = checks && decks ? decks.length - (ready?.length ?? 0) : 0;
+  const [lastDeck, setLastDeck] = useStored<string>("cq.game.deck", "");
+  const urlDeck = query.get("deck") ?? "";
+  const deckId = urlDeck || (ready?.some((d) => d._id === lastDeck) ? lastDeck : ready?.[0]?._id) || "";
+  const pickDeck = (id: string) => {
+    setLastDeck(id);
+    navigate(`/game?deck=${encodeURIComponent(id)}`, true);
+  };
   const deck = useQuery(api.decks.get, isAuthenticated && deckId ? { id: deckId } : "skip");
   const me = useQuery(api.users.me, isAuthenticated ? {} : "skip");
   const [layout, setLayout] = useStored<LayoutId>("cq.table.layout", "pod");
@@ -205,10 +217,10 @@ export function LiveGame() {
         <LiveTable game={game} view={game.view!} layout={layout} gameMenu={gameMenu} />
       ) : (
         <div className="card live-start">
-          {!deckId ? (
-            <p>Pick a deck on the <a className="link" href="#/play">Play page</a> first.</p>
-          ) : deck === null ? (
-            <p>That deck wasn't found. <a className="link" href="#/play">Back to Play</a></p>
+          {decks === undefined || (decks.length > 0 && !ready) ? (
+            <p className="muted">Checking your decks…</p>
+          ) : !decks.length ? (
+            <p>You have no decks yet. <a className="link" href="#/decks">Build or import one first</a></p>
           ) : (
             <>
               <h2>Quick game</h2>
@@ -216,6 +228,24 @@ export function LiveGame() {
                 You and Forge AI opponents playing Commander precons that ship with Forge. The game runs on the CommandQuest
                 game server. If you lose your connection or reload the page, come back within 5 minutes to carry on.
               </p>
+              <label className="live-deck">
+                Your deck{" "}
+                <select value={deckId} disabled={!ready?.length} onChange={(e) => pickDeck(e.target.value)}>
+                  {!ready?.length && !urlDeck && <option value="">None of your decks can be played yet</option>}
+                  {urlDeck && !ready?.some((d) => d._id === urlDeck) && <option value={urlDeck}>{deck?.name ?? "This deck"}</option>}
+                  {ready?.map((d) => (
+                    <option key={d._id} value={d._id}>
+                      {`${d.name}${d.commanders.length ? ` (${d.commanders.join(" & ")})` : ""}${checks?.get(d._id)?.needsFreePlay.length ? " · needs free play" : ""}`}
+                    </option>
+                  ))}
+                </select>
+                {notReady > 0 && (
+                  <span className="muted small">
+                    {" "}{notReady} {notReady === 1 ? "deck can't" : "decks can't"} be played yet: they're marked on <a className="link" href="#/decks">your Decks page</a>.
+                  </span>
+                )}
+              </label>
+              {urlDeck && deck === null && <p className="form-error">That deck wasn't found. Pick another one.</p>}
               <label>
                 Opponents{" "}
                 <select value={opponents} onChange={(e) => setOpponents(Number(e.target.value))}>

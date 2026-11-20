@@ -4,6 +4,7 @@ import { api } from "../../convex/_generated/api";
 import { bracketName } from "../brackets";
 import { Loading } from "../components/Spinner";
 import { artistOf, cachedById, cardsById } from "../scryfall";
+import { useGameChecks } from "../useGameDecks";
 
 export const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -18,6 +19,9 @@ export function ago(ms: number) {
 
 export function DeckList() {
   const decks = useQuery(api.decks.list);
+  // Which decks can start a game: the table's deck picker only offers those, so the rest are marked here.
+  const playDecks = useQuery(api.decks.forPlay);
+  const checks = useGameChecks(playDecks);
   const [, setArtLoaded] = useState(0);
 
   // Cover art is Scryfall's art crop of the commander. Scryfall requires the artist credit
@@ -57,6 +61,7 @@ export function DeckList() {
           {decks.map((d) => {
             const card = d.coverScryfallId ? cachedById(d.coverScryfallId) : undefined;
             const art = card && (card.card_faces?.[0]?.image_uris?.art_crop ?? card.image_uris?.art_crop);
+            const check = checks?.get(d._id);
             return (
               <a key={d._id} className="deck-tile" href={`#/decks/${d._id}`}>
                 <div className="deck-cover" style={art ? { backgroundImage: `url("${art}")` } : undefined}>
@@ -69,6 +74,14 @@ export function DeckList() {
                     {capitalize(d.format)}
                     {d.format === "commander" && d.bracket ? ` · Bracket ${d.bracket} (${bracketName(d.bracket)})` : ""} · {d.cardCount} cards · {ago(d.updatedAt)}
                   </p>
+                  {check?.problems.length ? (
+                    <div className="deck-unplayable" title={check.problems.join("\n")}>
+                      <strong>⚠ Can't be played yet</strong>
+                      <ul className="small">{check.problems.map((p) => <li key={p}>{p}</li>)}</ul>
+                    </div>
+                  ) : check?.needsFreePlay.length ? (
+                    <p className="deck-freeplay small" title={`Not in the rules engine yet: ${check.needsFreePlay.join(", ")}`}>✋ Needs free play</p>
+                  ) : null}
                 </div>
               </a>
             );

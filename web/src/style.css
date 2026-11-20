@@ -166,13 +166,7 @@ label.inline select { width: auto; padding: 5px 8px; }
 .status[data-state="open"] { color: var(--ok); }
 .status[data-state="connecting"] { color: var(--accent); }
 .status[data-state="closed"] { color: var(--danger); }
-.play-deck { display: flex; align-items: end; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
-.play-deck label { flex: 1; min-width: 240px; max-width: 480px; }
-.play-deck .not-ready { flex-basis: 100%; }
 .free-play-note { flex-basis: 100%; margin: 0; padding: 8px 12px; border-radius: 8px; background: var(--bg-2); border: 1px solid var(--line); }
-.play-deck .not-ready summary { cursor: pointer; }
-.play-deck .not-ready > ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; }
-.play-deck .not-ready ul ul { margin: 2px 0 0; padding-left: 16px; }
 .modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
 .mode { display: flex; flex-direction: column; gap: 4px; }
 .mode p { color: var(--muted); flex: 1; }
@@ -187,6 +181,9 @@ label.inline select { width: auto; padding: 5px 8px; }
 .deck-meta { padding: 14px 16px; }
 .deck-meta h3 { margin: 0 0 4px; font-size: 1.05rem; }
 .deck-meta p { margin: 0; }
+.deck-unplayable { margin-top: 8px; padding: 6px 10px; border-radius: 8px; border: 1px solid rgb(239 107 107 / 40%); color: var(--danger); font-size: .85rem; }
+.deck-unplayable ul { margin: 4px 0 0; padding-left: 16px; color: var(--muted); }
+.deck-meta .deck-freeplay { margin-top: 6px; color: var(--muted); }
 
 /* ---- Precons ---- */
 .precon-search { width: min(360px, 100%); }

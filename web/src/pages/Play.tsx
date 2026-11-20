@@ -1,8 +1,6 @@
-import { useConvexAuth, useQuery } from "convex/react";
+import { useConvexAuth } from "convex/react";
 import { useEffect, useState } from "react";
-import { api } from "../../convex/_generated/api";
 import { gameSocketUrl } from "../game/useLiveGame";
-import { useGameChecks } from "../useGameDecks";
 
 type SocketState = "connecting" | "open" | "closed";
 
@@ -42,71 +40,13 @@ function useGameServerStatus(): SocketState {
 export function Play() {
   const status = useGameServerStatus();
   const { isAuthenticated } = useConvexAuth();
-  const decks = useQuery(api.decks.forPlay, isAuthenticated ? {} : "skip");
   const label = { connecting: "connecting…", open: "online", closed: "offline, retrying…" }[status];
-  const [deckId, setDeckId] = useState("");
-  // Only decks that can start a game are offered; the rest are listed with what's wrong.
-  // Decks with cards the engine doesn't have are offered too: they need free play.
-  const checks = useGameChecks(decks);
-  const checking = !!decks?.length && !checks;
-  const ready = checks ? (decks ?? []).filter((d) => !checks.get(d._id)?.problems.length) : [];
-  const notReady = checks ? (decks ?? []).filter((d) => checks.get(d._id)?.problems.length) : [];
-  const chosen = ready.some((d) => d._id === deckId) ? deckId : ready[0]?._id ?? "";
-  const needsFreePlay = checks?.get(chosen)?.needsFreePlay ?? [];
 
   return (
     <>
       <div className="page-head">
         <h1>Play</h1>
         <p className="muted">Game server: <span className="status" data-state={status}>{label}</span></p>
-      </div>
-      <div className="card play-deck">
-        <label>
-          Your deck
-          <select disabled={!ready.length} value={chosen} onChange={(e) => setDeckId(e.target.value)}>
-            {!isAuthenticated ? (
-              <option>Sign in to pick a deck</option>
-            ) : decks === undefined ? (
-              <option>Loading your decks…</option>
-            ) : !decks.length ? (
-              <option>No decks yet: build one first</option>
-            ) : checking ? (
-              <option>Checking your decks…</option>
-            ) : !ready.length ? (
-              <option>None of your decks is ready to play yet</option>
-            ) : (
-              ready.map((d) => (
-                <option key={d._id} value={d._id}>
-                  {d.name} ({d.commanders.join(" & ")}){checks?.get(d._id)?.needsFreePlay.length ? " · needs free play" : ""}
-                </option>
-              ))
-            )}
-          </select>
-        </label>
-        <a href="#/decks" className="link">Manage decks →</a>
-        {needsFreePlay.length > 0 && (
-          <p className="free-play-note small">
-            ✋ Needs free play: {needsFreePlay.join(", ")} {needsFreePlay.length === 1 ? "isn't" : "aren't"} in the rules engine yet, so you play{" "}
-            {needsFreePlay.length === 1 ? "it" : "them"} by hand (cast free, move, tap). Leave Free play on when you start.
-          </p>
-        )}
-        {notReady.length > 0 && (
-          <details className="not-ready">
-            <summary className="muted small">
-              {notReady.length} {notReady.length === 1 ? "deck isn't" : "decks aren't"} ready for a Commander game
-            </summary>
-            <ul>
-              {notReady.map((d) => (
-                <li key={d._id}>
-                  <a className="link" href={`#/decks/${d._id}`}>{d.name}</a>
-                  <ul className="muted small">
-                    {checks!.get(d._id)!.problems.map((p) => <li key={p}>{p}</li>)}
-                  </ul>
-                </li>
-              ))}
-            </ul>
-          </details>
-        )}
       </div>
       <p className="card table-preview-link">
         <strong>Set up your stops: </strong>try the game table's phase sidebar on a simulated game.{" "}
@@ -116,9 +56,9 @@ export function Play() {
         <Mode
           title="Quick game"
           tag="Against AI"
-          text="You and up to three Forge AI opponents, Commander rules."
-          href={chosen && status === "open" ? `#/game?deck=${encodeURIComponent(chosen)}` : undefined}
-          why={!isAuthenticated ? "Sign in first" : checking ? "Checking your decks…" : !chosen ? (decks?.length ? "No deck is ready to play" : "Build a deck first") : status !== "open" ? "The game server is offline" : undefined}
+          text="You and up to three Forge AI opponents, Commander rules. Pick your deck at the table."
+          href={isAuthenticated && status === "open" ? "#/game" : undefined}
+          why={!isAuthenticated ? "Sign in first" : status !== "open" ? "The game server is offline" : undefined}
         />
         <Mode title="Create a table" tag="Multiplayer" text="Open a table and invite friends with a link." />
         <Mode title="Join a table" tag="Multiplayer" text="Enter a table code from a friend." />
