@@ -117,6 +117,8 @@ export function useLiveGame() {
   const actionWaiters = useRef(new Map<number, ((a: CardActions) => void)[]>());
   const detailWaiters = useRef(new Map<number, ((d: CardDetails) => void)[]>());
   const [autoPass, setAutoPassState] = useState<AutoPassMode | null>(null);
+  /** The server is using an ability on several cards, one after another. */
+  const [batching, setBatching] = useState(false);
   const ws = useRef<WebSocket | null>(null);
   const tokenRef = useRef(token);
   tokenRef.current = token;
@@ -226,6 +228,9 @@ export function useLiveGame() {
           case "notice":
             setNotice((n) => ({ message: m.message, n: (n?.n ?? 0) + 1 }));
             break;
+          case "abilitiesDone":
+            setBatching(false);
+            break;
           case "actions": {
             const waiters = actionWaiters.current.get(m.id) ?? [];
             actionWaiters.current.delete(m.id);
@@ -265,6 +270,7 @@ export function useLiveGame() {
     reconnect.current = () => {
       parked = false;
       retryMs = 1000;
+      setBatching(false);
       setStatus("reconnecting"); // keeps the table up until the game comes back
       connect();
     };
@@ -292,6 +298,7 @@ export function useLiveGame() {
     error,
     notice,
     autoPass,
+    batching,
     signedIn: !!token,
     clearError: () => setError(null),
     /** Brings the game back to this tab after it was opened in another one. */
@@ -302,12 +309,14 @@ export function useLiveGame() {
       setPrompt(null);
       setAsk(null);
       setAutoPassState(null);
+      setBatching(false);
       setStatus("starting");
       send({ t: "start", deck, name, opponents });
     },
     ok: () => send({ t: "ok" }),
     cancel: () => send({ t: "cancel" }),
-    clickCard: (id: number) => send({ t: "card", id }),
+    /** Click a card. `others`: the rest of a selected group, which Forge treats like it (blocking with all of them, say). */
+    clickCard: (id: number, others?: number[]) => send(others?.length ? { t: "card", id, others } : { t: "card", id }),
     /** What this card can do right now (for its right-click menu). */
     actions(id: number): Promise<CardActions> {
       return new Promise((resolve) => {
@@ -352,6 +361,12 @@ export function useLiveGame() {
     setYieldsOff: (off: boolean) => send({ t: "yieldsOff", off }),
     /** Use one of the card's abilities (from `actions`). */
     useAbility: (id: number, a: CardAction) => send({ t: "ability", id, ability: a.ability, label: a.label }),
+    /** Use an ability on each of several cards, one after another (each once the last is paid for). */
+    useAbilities(uses: { id: number; action: CardAction }[]) {
+      if (!uses.length) return;
+      setBatching(true);
+      send({ t: "abilities", uses: uses.map((u) => ({ id: u.id, ability: u.action.ability, label: u.action.label })) });
+    },
     clickPlayer: (id: string) => send({ t: "player", id: Number(id) }),
     concede: () => send({ t: "concede" }),
     answer(id: number, choice: number[] | number[][] | null, text?: string) {

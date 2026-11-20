@@ -112,7 +112,8 @@ export type TableStopsState = ReturnType<typeof useTableStops>;
 
 /** What was right-clicked. */
 export type MenuTarget =
-  | { kind: "card"; card: CardView; where: "hand" | "battlefield" | "command" | "zone" }
+  /** `group`: the card's pile, or the drag-selection it's part of (every card id, it included). */
+  | { kind: "card"; card: CardView; where: "hand" | "battlefield" | "command" | "zone"; group?: number[] }
   | { kind: "zone"; owner: string; zone: ZoneName | "hand" }
   | { kind: "board"; owner: string };
 
@@ -150,6 +151,10 @@ export function TableBoard(props: {
   selectable?: Set<number>;
   /** Your cards you can use right now (a green glow). */
   playable?: Set<number>;
+  /** Cards to point out, like the attacker you're declaring blockers for. */
+  marked?: Set<number>;
+  /** Your drag-selected permanents, whenever that changes. */
+  onMySelection?: (ids: number[]) => void;
   /** The page's items for a right-click menu: right away, or once the game server answers. */
   menuFor?: (target: MenuTarget) => MenuPart | Promise<MenuPart>;
   /** Live games: Forge's text for a card (with what's changed in this game), for Card details. */
@@ -170,6 +175,7 @@ export function TableBoard(props: {
   const seatOf = (id: string) => v.players.find((p) => p.id === id);
   const nameOf = (id: string) => (id === me ? "you" : seatOf(id)?.name ?? id);
   const colorOf = (id: string) => seatOf(id)?.color ?? "#888";
+  const cardName = (id: number) => v.players.flatMap((p) => p.battlefield).find((c) => c.id === id)?.name ?? "a face-down creature";
   const meSeat: Seat = { id: me, name: v.players[0].name, color: v.players[0].color };
   const oppSeats: Seat[] = useMemo(() => v.players.slice(1).map((p) => ({ id: p.id, name: p.name, color: p.color })), [v.players]);
 
@@ -257,6 +263,9 @@ export function TableBoard(props: {
           line={layout === "stacked" && !opts.focusedView}
           selectable={props.selectable}
           playable={props.playable}
+          marked={props.marked}
+          cardName={cardName}
+          onSelection={isMe ? props.onMySelection : undefined}
           onMenu={openMenu}
         />
       </div>

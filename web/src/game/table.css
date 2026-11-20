@@ -92,6 +92,11 @@ button.zone-tile:hover .zt-card { outline: 2px solid var(--accent-2); }
 .fd-eye { position: absolute; top: 3%; right: 3%; font-size: 10px; background: rgb(0 0 0 / 65%); border-radius: 4px; padding: 0 2px; }
 .pile-count { position: absolute; top: 3%; right: 3%; padding: 0 5px; border-radius: 99px; background: var(--accent); color: var(--accent-ink); font-weight: 800; font-size: max(9px, calc(var(--cw) * .14)); }
 .atk-badge { position: absolute; z-index: 3; left: 50%; bottom: -5px; translate: -50% 0; padding: 0 5px; border-radius: 99px; background: var(--danger); color: #1a0606; font-size: 9px; font-weight: 800; white-space: nowrap; }
+/* Blocking: a blue ring and who it blocks. A curse: the enchanted player's name, in their colour. */
+.bf-card.blocking { box-shadow: 0 0 0 2px #6fa8ef, 0 0 16px rgb(111 168 239 / 55%); }
+.blk-badge { position: absolute; z-index: 3; left: 50%; bottom: -5px; translate: -50% 0; max-width: calc(var(--cw) + 20px); overflow: hidden; text-overflow: ellipsis; padding: 0 5px; border-radius: 99px; background: #6fa8ef; color: #06121f; font-size: 9px; font-weight: 800; white-space: nowrap; }
+.curse-badge { position: absolute; z-index: 3; left: 50%; top: -6px; translate: -50% 0; max-width: calc(var(--cw) + 20px); overflow: hidden; text-overflow: ellipsis; padding: 0 6px; border-radius: 99px; background: color-mix(in srgb, var(--to) 75%, #1a1712); border: 1px solid color-mix(in srgb, var(--to) 60%, #f1e9d6); color: #fff; text-shadow: 0 1px 2px rgb(0 0 0 / 70%); font-size: 9px; font-weight: 800; white-space: nowrap; }
+.curse-arrow .ca-head { fill: color-mix(in srgb, var(--seat) 70%, #e0b04a); stroke: rgb(0 0 0 / 55%); stroke-width: 1.5; }
 
 /* ---- Hand ---- */
 .hand-bar { display: flex; align-items: flex-end; gap: 10px; padding: 0 8px 6px; border: 1px solid var(--line); border-radius: 10px; background: #10131b; min-width: 0; }
@@ -385,6 +390,8 @@ dialog.counter-dialog { width: min(360px, calc(100vw - 32px)); background: var(-
 /* Drag-selecting: the box, and the cards it picked. */
 .select-box { position: fixed; z-index: 50; pointer-events: none; border: 1px solid var(--accent-2); background: rgb(243 199 124 / 14%); border-radius: 3px; }
 .slot.picked .bf-card { outline: 2px dashed var(--accent-2); outline-offset: 2px; }
+/* The attacker you're declaring blockers for. */
+.slot.marked .bf-card { outline: 3px solid #6fa8ef; outline-offset: 3px; }
 .battlefield, .arrange, .ask-grid { user-select: none; }
 
 /* Questions about cards, in a window (AskDialog). */

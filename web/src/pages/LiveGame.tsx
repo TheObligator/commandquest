@@ -1,7 +1,7 @@
 // A live game against Forge AI on the game server (#/game?deck=<id>). The table is the same board
 // as the preview; the server sends this player's view and Forge's prompts (docs/game-protocol.md).
 import { useConvexAuth, useQuery } from "convex/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useRoute } from "../app/router";
 import { toast } from "../dom";
@@ -9,7 +9,7 @@ import { useCardData } from "../game/cards";
 import { LiveRail } from "../game/LiveRail";
 import { LayoutPicker, TableBoard, useStored, useTableStops, type LayoutId, type MenuPart, type MenuTarget } from "../game/TableBoard";
 import { useHotkeys } from "../game/useHotkeys";
-import { useLiveGame, type DeckPayload } from "../game/useLiveGame";
+import { useLiveGame, type CardAction, type DeckPayload } from "../game/useLiveGame";
 import { useLandCheck } from "../game/useLandCheck";
 import type { AutoPassMode } from "../game/phases";
 import { tokenArtMap } from "../tokens";
@@ -178,6 +178,15 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
   // with a prompt that isn't the priority one you get once attackers are locked in.
   const declaringAttackers = view.step === "COMBAT_DECLARE_ATTACKERS" && view.active === view.viewer
     && !!game.prompt && !game.ask && !isPriorityPrompt(game.prompt);
+  // Forge is asking you to declare blockers (InputBlock): an opponent's attack on you. Its prompt
+  // names the attacker you're blocking for: "Select creatures to block Grizzly Bears (123) …".
+  const declaringBlockers = view.step === "COMBAT_DECLARE_BLOCKERS" && view.active !== view.viewer
+    && !!game.prompt && !game.ask && !isPriorityPrompt(game.prompt);
+  const blockingFor = declaringBlockers ? Number(/^Select creatures to block .*\((\d+)\)/.exec(game.prompt?.message ?? "")?.[1] ?? NaN) : NaN;
+  const marked = useMemo(() => new Set(Number.isNaN(blockingFor) ? [] : [blockingFor]), [blockingFor]);
+  // Your drag-selected permanents (to block one attacker with all of them).
+  const mySelection = useRef<number[]>([]);
+  const onMySelection = useCallback((ids: number[]) => (mySelection.current = ids), []);
   const click = (id: number, pile?: number[]) => {
     const now = performance.now();
     if (lastClick.current.id === id && now - lastClick.current.at < 500) return;
@@ -190,6 +199,22 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
       const flip = mine.filter((c) => pile.includes(c.id) && !!c.attacking === !!clicked.attacking);
       for (const c of flip) game.clickCard(c.id);
       return;
+    }
+    if (declaringBlockers) {
+      const attacker = view.players.slice(1).flatMap((p) => p.battlefield).find((c) => c.id === id && c.attacking);
+      const blockers = mine.filter((c) => mySelection.current.includes(c.id) && c.types?.includes("Creature"));
+      // An attacker, with some of your creatures selected: they all block it (those that can).
+      if (attacker && blockers.length) {
+        game.clickCard(id);
+        const fresh = blockers.filter((c) => !c.blocking?.includes(id)).map((c) => c.id);
+        if (fresh.length) game.clickCard(fresh[0], fresh.slice(1));
+        return;
+      }
+      // One of several selected (or a pile) of yours: Forge blocks, or stops blocking, with all of them.
+      if (clicked && pile && pile.length > 1) {
+        game.clickCard(id, pile.filter((x) => x !== id));
+        return;
+      }
     }
     castFrom.current ??= view.stack.length;
     game.clickCard(id);
@@ -267,6 +292,37 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
     return { items };
   };
 
+  /**
+   * "All N selected": each ability of the right-clicked card that other cards in the group have too
+   * (the same words, with each card's own name read as the same), used on every card that can use
+   * it right now, one after another.
+   */
+  const groupSection = (card: CardView, actions: CardAction[], others: { card: CardView; actions: CardAction[] }[]): MenuSection => {
+    const words = (c: CardView, label: string) => (c.name ? label.split(c.name).join("~") : label);
+    const items: MenuSection["items"] = [];
+    for (const a of actions) {
+      const key = words(card, a.label);
+      const uses = [
+        ...(a.enabled ? [{ id: card.id, action: a }] : []),
+        ...others.flatMap((o) => {
+          const m = o.actions.find((x) => x.enabled && words(o.card, x.label) === key);
+          return m ? [{ id: o.card.id, action: m }] : [];
+        }),
+      ];
+      const sharedBy = 1 + others.filter((o) => o.actions.some((x) => words(o.card, x.label) === key)).length;
+      if (sharedBy < 2) continue;
+      items.push({
+        label: `${a.label} (×${uses.length})`,
+        disabled: uses.length === 0 || game.batching,
+        onSelect: () => {
+          castFrom.current ??= view.stack.length;
+          game.useAbilities(uses);
+        },
+      });
+    }
+    return { title: `All ${others.length + 1} selected`, items };
+  };
+
   const menuFor = (t: MenuTarget): MenuPart | Promise<MenuPart> => {
     const passing: MenuPart["sections"] = [
       {
@@ -281,23 +337,29 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
     if (t.kind !== "card") return { sections: passing };
     const card = t.card;
     if (card.hidden) return { sections: card.zone === "battlefield" ? [manualSection(card)] : [] };
-    return game.actions(card.id).then(({ actions, reason }) => ({
-      sections: [
-        {
-          title: actions.length ? "Abilities" : undefined,
-          items: actions.map((a) => ({
-            label: a.label,
-            disabled: !a.enabled,
-            onSelect: () => {
-              castFrom.current ??= view.stack.length;
-              game.useAbility(card.id, a);
-            },
-          })),
-        },
-        manualSection(card),
-      ],
-      note: actions.length && !actions.some((a) => a.enabled) ? reason : undefined,
-    }));
+    // A pile or drag-selection of your permanents: the abilities they share, used on each of them.
+    const group = t.where === "battlefield" && t.group && card.controller === me
+      ? view.players[0].battlefield.filter((c) => t.group!.includes(c.id) && !c.hidden)
+      : [];
+    return Promise.all([game.actions(card.id), ...group.filter((c) => c.id !== card.id).map((c) => game.actions(c.id).then((r) => ({ card: c, ...r })))])
+      .then(([{ actions, reason }, ...others]) => ({
+        sections: [
+          ...(group.length > 1 ? [groupSection(card, actions, others)] : []),
+          {
+            title: actions.length ? (group.length > 1 ? "This card" : "Abilities") : undefined,
+            items: actions.map((a) => ({
+              label: a.label,
+              disabled: !a.enabled,
+              onSelect: () => {
+                castFrom.current ??= view.stack.length;
+                game.useAbility(card.id, a);
+              },
+            })),
+          },
+          manualSection(card),
+        ],
+        note: actions.length && !actions.some((a) => a.enabled) ? reason : undefined,
+      }));
   };
   const stepKey = `${view.turn}|${view.step}`;
   useEffect(() => {
@@ -310,10 +372,11 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
       castDone.current = true;
     }
     const p = game.prompt;
+    if (game.batching) return; // more of the group's abilities to come
     if (!castDone.current || !p || game.ask || !isPriorityPrompt(p)) return;
     castDone.current = false;
     if (!st.holdPriority && p.ok.enabled) game.ok();
-  }, [game.prompt, game.ask, view, st.holdPriority, game]);
+  }, [game.prompt, game.ask, game.batching, view, st.holdPriority, game]);
   // Passing your turn with a land still to play: ask first (OK past your last main phase, Forge's
   // End Turn, or an auto-pass).
   const landCheck = useLandCheck({
@@ -371,6 +434,8 @@ function LiveTable({ game, view, layout }: { game: ReturnType<typeof useLiveGame
       onPlayerClick={game.clickPlayer}
       onCastCommander={click}
       playable={playable}
+      marked={marked}
+      onMySelection={onMySelection}
       menuFor={menuFor}
       detailsFor={game.details}
       stackItemMenu={(s) => {

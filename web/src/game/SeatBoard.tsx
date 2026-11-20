@@ -5,7 +5,8 @@
 // The three battlefield rows share the board's height, and each is a grid of cells (one card or
 // pile per cell, so nothing overlaps). Cards shrink to fit so a board never scrolls until they'd
 // get unreadably small. You can drag cards to any cell on any board; that only changes your view.
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { CardBack, CardBadges, CardFace, CostOverlay, previewFor, usePreview } from "./cards";
 import type { OpenMenu } from "./TableBoard";
 import { boxSelection, useBoxSelect } from "./boxSelect";
@@ -77,6 +78,12 @@ export function SeatBoard(props: {
   selectable?: Set<number>;
   /** Your cards you can use right now. */
   playable?: Set<number>;
+  /** Cards to point out, like the attacker you're declaring blockers for. */
+  marked?: Set<number>;
+  /** A card's name by id, from any zone (for "blocking Grizzly Bears"). */
+  cardName?: (id: number) => string;
+  /** Your board: the cards you've drag-selected, whenever that changes. */
+  onSelection?: (ids: number[]) => void;
   onMenu?: OpenMenu;
 }) {
   const { player: p, viewer, nameOf, colorOf } = props;
@@ -232,7 +239,7 @@ function ZoneTile(props: {
   );
 }
 
-function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; hover: (c: CardView) => object }) {
+function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; hover: (c: CardView) => { onMouseEnter: () => void; onMouseLeave: () => void } }) {
   const { player: p, arrangement, isMe, nameOf } = props;
   const rows = arrange(p.battlefield, arrangement);
   const ref = useRef<HTMLDivElement>(null);
@@ -248,6 +255,13 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
   /** A selected pile's drag or click covers every selected card. */
   const groupOf = (pile: (typeof selPiles)[number]) =>
     selPiles.length > 1 && selPiles.includes(pile) ? selPiles : null;
+  const selKey = [...sel].sort((a, b) => a - b).join(" ");
+  const onSelection = props.onSelection;
+  useEffect(() => {
+    onSelection?.(selKey ? selKey.split(" ").map(Number) : []);
+  }, [selKey, onSelection]);
+  // A curse's arrow to the player it enchants, while you point at it.
+  const [curse, setCurse] = useState<{ el: HTMLElement; player: string } | null>(null);
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -313,10 +327,11 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
               const n = pile.cards.length;
               const group = groupOf(pile);
               const ids = group ? group.flatMap((x) => x.cards.map((y) => y.id)) : pile.cards.map((x) => x.id);
+              const hoverOf = props.hover(c);
               return (
                 <div
                   key={pile.key}
-                  className={["slot", c.tapped && "tapped", props.selectable?.has(c.id) && "selectable", props.playable?.has(c.id) && "playable", pile.cards.some((x) => sel.has(x.id)) && "picked"].filter(Boolean).join(" ")}
+                  className={["slot", c.tapped && "tapped", props.selectable?.has(c.id) && "selectable", props.playable?.has(c.id) && "playable", pile.cards.some((x) => sel.has(x.id)) && "picked", pile.cards.some((x) => props.marked?.has(x.id)) && "marked"].filter(Boolean).join(" ")}
                   style={{ gridColumn: pile.col + 1 }}
                   data-card-ids={pile.cards.map((x) => x.id).join(" ")}
                   data-sel={pile.cards.map((x) => x.id).join(" ")}
@@ -330,11 +345,18 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
                   onDragEnd={() => (setDrag(null), setDropAt(null))}
                   title={props.onCardClick ? `${c.name ?? "Face-down card"}: click to use or choose it, right-click for more, drag to move` : isMe && props.onTap ? `${c.name ?? "Face-down card"}: click to ${c.tapped ? "untap" : "tap"}, drag to move` : undefined}
                   onClick={() => (props.onCardClick ? props.onCardClick(c.id, ids) : isMe && props.onTap?.(c.id))}
-                  onContextMenu={props.onMenu && ((e) => props.onMenu!(e, { kind: "card", card: c, where: "battlefield" }))}
-                  {...props.hover(c)}
+                  onContextMenu={props.onMenu && ((e) => props.onMenu!(e, { kind: "card", card: c, where: "battlefield", group: ids.length > 1 ? ids : undefined }))}
+                  onMouseEnter={(e) => {
+                    hoverOf.onMouseEnter();
+                    if (c.enchanting) setCurse({ el: e.currentTarget, player: c.enchanting });
+                  }}
+                  onMouseLeave={() => {
+                    hoverOf.onMouseLeave();
+                    setCurse(null);
+                  }}
                 >
                   <div
-                    className={["bf-card", n > 1 && "pile", c.sick && "sick", c.attacking && "attacking"].filter(Boolean).join(" ")}
+                    className={["bf-card", n > 1 && "pile", c.sick && "sick", c.attacking && "attacking", c.blocking && "blocking"].filter(Boolean).join(" ")}
                     style={{ "--n": Math.min(n, 4) } as React.CSSProperties}
                   >
                     <CardFace card={c} size={cw > 120 ? "normal" : "small"} knownFaceDown={c.faceDown && !c.hidden} />
@@ -342,12 +364,44 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
                     {n > 1 && <span className="pile-count">×{n}</span>}
                   </div>
                   {c.attacking && <span className="atk-badge" title={`Attacking ${nameOf(c.attacking)}`}>⚔ {c.attacking === props.viewer ? "you" : nameOf(c.attacking)}</span>}
+                  {c.blocking && (() => {
+                    const names = c.blocking.map((id) => props.cardName?.(id) ?? "an attacker");
+                    return <span className="blk-badge" title={`Blocking ${names.join(", ")}`}>🛡 {names.length > 1 ? `${names.length} attackers` : names[0]}</span>;
+                  })()}
+                  {c.enchanting && (
+                    <span className="curse-badge" style={{ "--to": props.colorOf(c.enchanting) } as React.CSSProperties} title={`Enchanting ${nameOf(c.enchanting)}`}>
+                      ➜ {c.enchanting === props.viewer ? "you" : nameOf(c.enchanting)}
+                    </span>
+                  )}
                 </div>
               );
             })}
           </div>
         );
       })}
+      {curse && <CurseArrow from={curse.el} player={curse.player} color={props.colorOf(curse.player)} />}
     </div>
+  );
+}
+
+/** A line from an aura on the battlefield to the player it enchants (their name on their board). */
+function CurseArrow({ from, player, color }: { from: HTMLElement; player: string; color: string }) {
+  const to = document.querySelector<HTMLElement>(`[data-player-id="${player}"]`);
+  if (!to || !from.isConnected) return null;
+  const f = from.getBoundingClientRect();
+  const t = to.getBoundingClientRect();
+  const a = { x: f.left + f.width / 2, y: f.top + f.height / 2 };
+  const b = { x: t.left + t.width / 2, y: t.top + t.height / 2 };
+  const mid = { x: (a.x + b.x) / 2, y: Math.min(a.y, b.y) - Math.max(40, Math.abs(b.x - a.x) * 0.25) };
+  const d = `M${a.x},${a.y} Q${mid.x},${mid.y} ${b.x},${b.y}`;
+  // The arrowhead points along the curve's last stretch (from the control point to the end).
+  const ang = (Math.atan2(b.y - mid.y, b.x - mid.x) * 180) / Math.PI;
+  return createPortal(
+    <svg className="stack-arrows curse-arrow" aria-hidden style={{ "--seat": color } as React.CSSProperties}>
+      <path className="sa-glow" d={d} />
+      <path className="sa-line" d={d} />
+      <path className="ca-head" d="M0,0 L-14,-8 L-14,8 Z" transform={`translate(${b.x},${b.y}) rotate(${ang})`} />
+    </svg>,
+    document.body,
   );
 }

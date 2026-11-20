@@ -208,6 +208,22 @@ public final class ViewJson {
             } else if (defender instanceof CardView cd && cd.getController() != null) {
                 o.put("attacking", id(cd.getController()));
             }
+            // The attackers it blocks, including blocks still being declared.
+            ArrayNode blocking = null;
+            for (CardView attacker : combat.getAttackers()) {
+                var blockers = combat.getPlannedBlockers(attacker);
+                if (blockers != null && blockers.contains(c)) {
+                    if (blocking == null) {
+                        blocking = o.putArray("blocking");
+                    }
+                    blocking.add(attacker.getId());
+                }
+            }
+        }
+        // An aura (a curse, say) attached to a player.
+        PlayerView enchanted = c.getEnchantedPlayer();
+        if (enchanted != null) {
+            o.put("enchanting", id(enchanted));
         }
         return o;
     }

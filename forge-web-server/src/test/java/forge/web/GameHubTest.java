@@ -252,6 +252,53 @@ public class GameHubTest {
                 Assert.assertTrue(tapped, "tapped by hand");
                 Assert.assertTrue(locked, "set never to untap");
                 Assert.assertTrue(details != null && !details.isBlank(), "card details text: " + details);
+
+                // An ability used on several cards at once: the first land is tapped already (skipped,
+                // with a notice), the second taps for mana, then the server says it's done.
+                JsonNode other = null;
+                for (JsonNode c : state.path("players").get(0).path("battlefield")) {
+                    if (c.path("id").asInt() != landId && c.path("types").toString().contains("Land")) {
+                        other = c;
+                    }
+                }
+                Assert.assertNotNull(other, "a second land");
+                int otherId = other.path("id").asInt();
+                ws.sendText("{\"t\":\"actions\",\"id\":" + otherId + "}", true);
+                JsonNode mana = null;
+                for (JsonNode a : next(b, "actions", 10_000).path("actions")) {
+                    if (a.path("label").asText().contains("Add")) {
+                        mana = a;
+                    }
+                }
+                Assert.assertNotNull(mana, "the land has a mana ability");
+                ObjectNode batch = json.createObjectNode();
+                batch.put("t", "abilities");
+                ArrayNode uses = batch.putArray("uses");
+                for (int id : new int[] {landId, otherId}) {
+                    uses.addObject().put("id", id).put("ability", mana.path("ability").asInt()).put("label", mana.path("label").asText());
+                }
+                ws.sendText(json.writeValueAsString(batch), true);
+                boolean done = false;
+                boolean otherTapped = false;
+                wait = System.currentTimeMillis() + 30_000;
+                while (!(done && otherTapped) && System.currentTimeMillis() < wait) {
+                    String s = b.inbox.poll(500, TimeUnit.MILLISECONDS);
+                    if (s == null) {
+                        continue;
+                    }
+                    JsonNode m = json.readTree(s);
+                    if (m.path("t").asText().equals("abilitiesDone")) {
+                        done = true;
+                    } else if (m.path("t").asText().equals("state")) {
+                        for (JsonNode c : m.path("view").path("players").get(0).path("battlefield")) {
+                            if (c.path("id").asInt() == otherId) {
+                                otherTapped = c.path("tapped").asBoolean();
+                            }
+                        }
+                    }
+                }
+                Assert.assertTrue(otherTapped, "the second land tapped for mana");
+                Assert.assertTrue(done, "abilitiesDone");
                 Assert.assertTrue(prompts > 3, "Forge's prompts reached the browser");
                 Assert.assertTrue(clickedEarly && notice != null && notice.contains("land"), "a land clicked too early says why: " + notice);
                 Assert.assertTrue(landWasPlayable, "the land showed as playable in our main phase");

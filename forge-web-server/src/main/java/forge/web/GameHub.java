@@ -176,7 +176,8 @@ public final class GameHub {
             case "concede" -> act(c, IGameController::concede);
             case "card" -> {
                 int id = m.path("id").asInt();
-                act(c, ctl -> click(c, ctl, id, null, null));
+                List<Integer> others = ids(m.path("others"));
+                act(c, ctl -> click(c, ctl, id, null, null, others));
             }
             case "actions" -> {
                 int id = m.path("id").asInt();
@@ -186,7 +187,16 @@ public final class GameHub {
                 int id = m.path("id").asInt();
                 int ability = m.path("ability").asInt();
                 String label = m.path("label").asText(null);
-                act(c, ctl -> click(c, ctl, id, ability, label));
+                act(c, ctl -> click(c, ctl, id, ability, label, List.of()));
+            }
+            case "abilities" -> {
+                List<Use> uses = new ArrayList<>();
+                for (JsonNode u : m.path("uses")) {
+                    if (uses.size() < 100 && u.path("id").isInt()) {
+                        uses.add(new Use(u.path("id").asInt(), u.path("ability").asInt(), u.path("label").asText(null)));
+                    }
+                }
+                abilities(c, uses);
             }
             case "player" -> {
                 int id = m.path("id").asInt();
@@ -351,17 +361,29 @@ public final class GameHub {
      * from the card's menu, which answers Forge's "which ability?" if it asks. If the click does
      * nothing, the browser gets a {@code notice} saying why.
      */
-    private void click(Conn c, IGameController ctl, int id, Integer ability, String label) {
+    private boolean click(Conn c, IGameController ctl, int id, Integer ability, String label, List<Integer> others) {
         Game g = game(c);
         BrowserSeat seat = seat(c);
         Card card = g == null ? null : g.findById(id);
         if (card == null || seat == null) {
-            return;
+            return false;
+        }
+        // The rest of a selected group: Forge's block and attack inputs (and mana abilities) treat
+        // them like the clicked card.
+        List<forge.game.card.CardView> group = null;
+        for (int o : others) {
+            Card other = o == id ? null : g.findById(o);
+            if (other != null) {
+                if (group == null) {
+                    group = new ArrayList<>();
+                }
+                group.add(other.getView());
+            }
         }
         boolean used;
         seat.prefer(ability, label);
         try {
-            used = ctl.selectCard(card.getView(), null, null);
+            used = ctl.selectCard(card.getView(), group, null);
         } finally {
             seat.prefer(null, null);
         }
@@ -371,6 +393,79 @@ public final class GameHub {
             o.put("message", Explain.whyNot(g, me, card, priorityInput(ctl)));
             send(c, o);
         }
+        return used;
+    }
+
+    /** One ability of one card, from the browser's {@code abilities} list. */
+    private record Use(int id, int ability, String label) {}
+
+    /**
+     * Uses an ability on each of several cards, one after another: each starts once the one before
+     * is done (its targets chosen and costs paid, or cancelled) and you have priority again, so a
+     * click never lands in the middle of another card's payment. The browser gets
+     * {@code abilitiesDone} at the end.
+     */
+    private void abilities(Conn c, List<Use> uses) {
+        Thread t = new Thread(() -> {
+            try {
+                for (Use u : uses) {
+                    if (!(controller(c) instanceof PlayerControllerHuman h)) {
+                        break;
+                    }
+                    Object in = awaitInput(c, h, null);
+                    if (in == null) {
+                        break;
+                    }
+                    boolean[] used = {false};
+                    FThreads.invokeInEdtAndWait(() -> used[0] = click(c, h, u.id(), u.ability(), u.label(), List.of()));
+                    if (used[0] && awaitInput(c, h, in) == null) {
+                        break;
+                    }
+                }
+            } catch (RuntimeException e) {
+                Logger.warn(e, "Using abilities on several cards failed");
+            } finally {
+                send(c, msg("abilitiesDone"));
+            }
+        }, "web-abilities");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /**
+     * Waits (up to 10 minutes) until this player has priority with a new prompt: Forge's priority
+     * input, other than {@code not} (the one a card was just clicked on). Null if the game ended,
+     * the player left, or time ran out.
+     */
+    private Object awaitInput(Conn c, PlayerControllerHuman h, Object not) {
+        long end = System.nanoTime() + TimeUnit.MINUTES.toNanos(10);
+        while (System.nanoTime() < end) {
+            if (controller(c) != h) {
+                return null;
+            }
+            Object in = h.getInputProxy().getInput();
+            if (in instanceof InputPassPriority && in != not) {
+                return in;
+            }
+            try {
+                Thread.sleep(40);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return null;
+            }
+        }
+        return null;
+    }
+
+    /** A JSON array of card ids (at most 100). */
+    private static List<Integer> ids(JsonNode a) {
+        List<Integer> out = new ArrayList<>();
+        for (JsonNode n : a) {
+            if (n.isInt() && out.size() < 100) {
+                out.add(n.asInt());
+            }
+        }
+        return out;
     }
 
     /** The card's abilities for its menu: everything Forge lists for this player, and whether each can be used now. */
