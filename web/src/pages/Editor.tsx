@@ -14,6 +14,7 @@ import { ContextMenu, type ContextMenuState } from "../components/ContextMenu";
 import { ColorStats } from "../components/ColorStats";
 import { DeckBracket } from "../components/DeckBracket";
 import { deckAverages } from "../deckstats";
+import { FORMATS } from "../deckFormats";
 import { DeckTokens } from "../components/DeckTokens";
 import { CardViewToggle, useCardView, useStackColumns } from "../cardView";
 import { ManaCurve } from "../components/ManaCurve";
@@ -33,7 +34,6 @@ import { BOARDS, TYPE_ORDER } from "./boards";
 import { canCommand, SearchBox, SearchResults } from "./EditorSearch";
 import { capitalize } from "./DeckList";
 
-const FORMATS = ["commander", "conquest", "standard", "pioneer", "modern", "legacy", "vintage", "pauper", "other"];
 /** Up to this many main-deck planeswalkers are shown beside the commander(s). */
 const MAX_WALKERS_BESIDE_COMMANDER = 3;
 
@@ -493,6 +493,7 @@ function DeckEditor({ initial }: { initial: Draft }) {
         <select aria-label="Format" value={deck.format} onChange={(e) => change((d) => ({ ...d, format: e.target.value }))}>
           {FORMATS.map((f) => <option key={f} value={f}>{capitalize(f)}</option>)}
         </select>
+        <FolderSelect deckId={deck.id} />
         <span className="count-badge" data-ok={String(badgeOk)}>{badge}</span>
         <div className="spacer" />
         <span className={`save-state small ${saveError ? "error" : "muted"}`} role="status">{saveState}</span>
@@ -1103,6 +1104,26 @@ function Printings({ card, onPick, onClose }: { card: DeckCard; onPick: (p: scry
         </div>
       )}
     </dialog>
+  );
+}
+
+/** Which folder the deck is in. Moves straight away (not part of autosave); a deck not saved yet can't be filed. */
+function FolderSelect({ deckId }: { deckId?: Id<"decks"> }) {
+  const folders = useQuery(api.folders.list);
+  const saved = useQuery(api.decks.get, deckId ? { id: deckId } : "skip");
+  const moveDeck = useMutation(api.decks.move);
+  if (!deckId || !folders?.length || !saved) return null;
+  const current = saved.folderId ?? "";
+  return (
+    <select
+      aria-label="Folder"
+      title="The folder this deck is in"
+      value={current}
+      onChange={(e) => moveDeck({ id: deckId, folderId: (e.target.value || null) as Id<"deckFolders"> | null }).catch((err) => toast(errorMessage(err), "error"))}
+    >
+      <option value="">No folder</option>
+      {folders.map((f) => <option key={f._id} value={f._id}>📁 {f.name}</option>)}
+    </select>
   );
 }
 

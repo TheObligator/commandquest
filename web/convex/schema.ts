@@ -40,8 +40,17 @@ export default defineSchema({
     bracket: v.optional(v.number()),
     bracketTags: v.optional(v.array(v.string())),
     tokenArt: v.optional(v.array(v.object({ identity: v.string(), scryfallId: v.string() }))),
+    /** The folder the player filed this deck in (convex/folders.ts); absent = not in a folder. */
+    folderId: v.optional(v.id("deckFolders")),
     updatedAt: v.number(),
   }).index("by_user_updated", ["userId", "updatedAt"]),
+
+  /** Folders players sort their decks into (convex/folders.ts). Deleting one leaves its decks unfiled. */
+  deckFolders: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+    createdAt: v.number(),
+  }).index("by_user", ["userId"]),
 
   /** Default priority stops (docs/stops.md). One row per user; absent = the defaults. */
   stopPresets: defineTable({

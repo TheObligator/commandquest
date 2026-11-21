@@ -11,9 +11,11 @@
 import type * as auth from "../auth.js";
 import type * as crons from "../crons.js";
 import type * as decks from "../decks.js";
+import type * as folders from "../folders.js";
 import type * as http from "../http.js";
 import type * as importDeck from "../importDeck.js";
 import type * as model_deckRules from "../model/deckRules.js";
+import type * as model_folderRules from "../model/folderRules.js";
 import type * as model_importers from "../model/importers.js";
 import type * as model_replays from "../model/replays.js";
 import type * as model_tables from "../model/tables.js";
@@ -34,9 +36,11 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   crons: typeof crons;
   decks: typeof decks;
+  folders: typeof folders;
   http: typeof http;
   importDeck: typeof importDeck;
   "model/deckRules": typeof model_deckRules;
+  "model/folderRules": typeof model_folderRules;
   "model/importers": typeof model_importers;
   "model/replays": typeof model_replays;
   "model/tables": typeof model_tables;

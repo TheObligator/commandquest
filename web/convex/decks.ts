@@ -41,7 +41,7 @@ export const list = query({
       .withIndex("by_user_updated", (q) => q.eq("userId", userId))
       .order("desc")
       .take(MAX_DECKS_PER_USER);
-    return decks.map((d) => ({ _id: d._id, name: d.name, format: d.format, bracket: d.bracket, updatedAt: d.updatedAt, ...summarize(d.cards) }));
+    return decks.map((d) => ({ _id: d._id, name: d.name, format: d.format, bracket: d.bracket, folderId: d.folderId, updatedAt: d.updatedAt, ...summarize(d.cards) }));
   },
 });
 
@@ -74,14 +74,34 @@ export const get = query({
   },
 });
 
+/** Throws unless `folderId` is one of the user's folders. */
+async function checkFolder(ctx: QueryCtx, userId: Id<"users">, folderId: Id<"deckFolders">) {
+  const folder = await ctx.db.get(folderId);
+  if (!folder || folder.userId !== userId) throw new ConvexError("Folder not found.");
+}
+
 export const create = mutation({
-  args: deckArgs,
-  handler: async (ctx, args) => {
+  args: { ...deckArgs, folderId: v.optional(v.id("deckFolders")) },
+  handler: async (ctx, { folderId, ...args }) => {
     const userId = await requireUser(ctx);
     const deck = checked(args);
+    if (folderId) await checkFolder(ctx, userId, folderId);
     const count = (await ctx.db.query("decks").withIndex("by_user_updated", (q) => q.eq("userId", userId)).take(MAX_DECKS_PER_USER)).length;
     if (count >= MAX_DECKS_PER_USER) throw new ConvexError(`You can save up to ${MAX_DECKS_PER_USER} decks.`);
-    return await ctx.db.insert("decks", { userId, ...deck, updatedAt: Date.now() });
+    return await ctx.db.insert("decks", { userId, ...deck, ...(folderId ? { folderId } : {}), updatedAt: Date.now() });
+  },
+});
+
+/** Files a deck in one of your folders, or takes it out of its folder (`folderId: null`). */
+export const move = mutation({
+  args: { id: v.id("decks"), folderId: v.union(v.id("deckFolders"), v.null()) },
+  handler: async (ctx, { id, folderId }) => {
+    const userId = await requireUser(ctx);
+    const deck = await ctx.db.get(id);
+    if (!deck || deck.userId !== userId) throw new ConvexError("Deck not found.");
+    if (folderId) await checkFolder(ctx, userId, folderId);
+    // Not an edit to the deck, so `updatedAt` (the deck list's order) stays put.
+    await ctx.db.patch(id, { folderId: folderId ?? undefined });
   },
 });
 

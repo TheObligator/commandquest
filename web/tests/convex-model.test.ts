@@ -4,6 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DeckError, summarize, validateDeck } from "../convex/model/deckRules.ts";
 import { deckSource, parseArchidekt, parseMoxfield } from "../convex/model/importers.ts";
+import { cleanFolderName, FolderError, MAX_FOLDER_NAME } from "../convex/model/folderRules.ts";
 
 test("validateDeck trims, defaults the format and board, and clips printing fields", () => {
   const d = validateDeck({ name: "  Atraxa  ", cards: [{ name: " Sol Ring ", quantity: 1, board: "main", set: "  c21 ", collectorNumber: "" }] });
@@ -89,4 +90,13 @@ test("parseArchidekt: commander, excluded categories, formats", () => {
   assert.deepEqual(d.cards.map((c) => [c.name, c.board]), [["Thelon of Havenwood", "commander"], ["Forest", "main"], ["Naturalize", "side"], ["Thallid", "maybe"]]);
   assert.equal(d.cards[0].set, "tsp");
   assert.deepEqual(d.tokens, [{ name: "Saproling", scryfallId: "eeeeeeee-0000-0000-0000-000000000000", set: "ttsp", collectorNumber: "12" }]);
+});
+
+test("cleanFolderName trims, collapses spaces and rejects blanks, long names and repeats", () => {
+  assert.equal(cleanFolderName("  Casual   decks "), "Casual decks");
+  assert.equal(cleanFolderName("Testing", ["Casual"]), "Testing");
+  const bad = (name: string, taken: string[], msg: RegExp) => assert.throws(() => cleanFolderName(name, taken), (e) => e instanceof FolderError && msg.test(e.message));
+  bad("   ", [], /1-50 characters/);
+  bad("x".repeat(MAX_FOLDER_NAME + 1), [], /1-50 characters/);
+  bad("casual", ["Casual"], /already have a folder called "casual"/);
 });
