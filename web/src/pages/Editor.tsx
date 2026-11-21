@@ -57,6 +57,11 @@ interface Draft {
   bracketTags?: string[];
 }
 
+/** The editor's URL: the deck (or a new one) and the search open in it, if any. */
+function editorPath(id: Id<"decks"> | undefined, search: string | null) {
+  return `/decks/${id ?? "new"}${search ? `?${new URLSearchParams({ q: search })}` : ""}`;
+}
+
 /** Loads the deck (if editing one), then hands it to the editor once. */
 export function Editor({ id }: { id?: string }) {
   const saved = useQuery(api.decks.get, id ? { id } : "skip");
@@ -86,7 +91,10 @@ function DeckEditor({ initial }: { initial: Draft }) {
   const [loadingCards, setLoadingCards] = useState(() => initial.cards.some((c) => !scry.cachedExact(c) && !scry.cached(c)));
   const [, setCardData] = useState(0); // bumped when Scryfall data arrives, to re-render
   const [tab, setTab] = useState<"search" | "import">(query.has("import") ? "import" : "search");
-  const [searchQuery, setSearchQuery] = useState<string | null>(null);
+  // The open search is in the URL (#/decks/<id>?q=…), so a reload or a shared link reopens it.
+  const [searchQuery, setSearchQuery] = useState<string | null>(() => query.get("q") || null);
+  const searchRef = useRef(searchQuery);
+  searchRef.current = searchQuery;
   const [addTo, setAddTo] = useState<Board>("main");
   const pref = usePrintingPref();
   const [repicking, setRepicking] = useState(false);
@@ -110,6 +118,13 @@ function DeckEditor({ initial }: { initial: Draft }) {
   const inFlight = useRef(false);
   const again = useRef(false);
   const deleted = useRef(false);
+
+  const firstSearch = useRef(true);
+  useEffect(() => {
+    if (firstSearch.current) return void (firstSearch.current = false); // the URL already says it
+    if (deleted.current) return;
+    replaceQuietly(editorPath(idRef.current, searchQuery));
+  }, [searchQuery]);
 
   const markChanged = () => {
     version.current++;
@@ -360,7 +375,7 @@ function DeckEditor({ initial }: { initial: Draft }) {
           addTokenArt({ id, picks }).catch((e) => toast(`Couldn't save the deck's token art: ${errorMessage(e)}`, "error"));
         }
         setDeck((x) => ({ ...x, id }));
-        replaceQuietly(`/decks/${id}`);
+        replaceQuietly(editorPath(id, searchRef.current));
       }
       setSaveError("");
       setSavedOnce(true);
