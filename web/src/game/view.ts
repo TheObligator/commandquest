@@ -113,6 +113,8 @@ export interface CardView {
 }
 
 export interface PlayerView extends PlayerState {
+  /** Live games: out of the game (lost or conceded); Forge keeps them in the seating. */
+  lost?: boolean;
   /** Live games: mana in their pool (floating), by symbol W U B R G C. */
   mana?: Record<string, number>;
   libraryCount: number;

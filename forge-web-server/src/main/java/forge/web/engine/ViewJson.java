@@ -108,6 +108,9 @@ public final class ViewJson {
         ObjectNode o = json.createObjectNode();
         o.put("id", id(p));
         o.put("name", p.getName());
+        if (p.getHasLost()) {
+            o.put("lost", true);   // out of the game (conceded, or lost) but still in Forge's seating
+        }
         o.put("color", SEAT_COLORS[seat % SEAT_COLORS.length]);
         o.put("life", p.getLife());
         o.put("poison", p.getCounters(CounterEnumType.POISON));

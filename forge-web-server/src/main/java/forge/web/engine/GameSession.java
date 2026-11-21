@@ -154,6 +154,9 @@ public final class GameSession {
             @com.google.common.eventbus.AllowConcurrentEvents
             public void on(GameEvent ev) {
                 endIfNoHumansLeft(g);
+                if (g.isGameOver()) {
+                    fireOver();
+                }
             }
         });
         if (options.replays() != null) {
@@ -204,6 +207,31 @@ public final class GameSession {
         });
     }
 
+    private final List<Runnable> overListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final java.util.concurrent.atomic.AtomicBoolean over = new java.util.concurrent.atomic.AtomicBoolean();
+
+    /** Runs {@code r} once, when the game ends (or is aborted). At once if it already has. */
+    public void onOver(Runnable r) {
+        overListeners.add(r);
+        if (over.get() && overListeners.remove(r)) {
+            r.run();
+        }
+    }
+
+    private void fireOver() {
+        if (over.compareAndSet(false, true)) {
+            for (Runnable r : overListeners) {
+                if (overListeners.remove(r)) {
+                    try {
+                        r.run();
+                    } catch (RuntimeException e) {
+                        org.tinylog.Logger.warn(e, "A game-over listener failed");
+                    }
+                }
+            }
+        }
+    }
+
     /** This game's recording, or null when it isn't recorded. */
     public Recording recording() {
         return recording;
@@ -245,5 +273,6 @@ public final class GameSession {
         if (game != null && !game.isGameOver()) {
             game.setGameOver(GameEndReason.Draw);
         }
+        fireOver();
     }
 }

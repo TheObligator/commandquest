@@ -44,8 +44,13 @@ public final class WebServer {
      *
      * @param allowedOrigins site origins allowed to use the server from a browser; empty allows any
      * @param version reported by /health, so the site can tell which build is running
+     * @param tables where multiplayer tables' rosters come from; null: the Convex deployment each player signed in with
      */
-    public record Options(Path webDist, Set<String> allowedOrigins, String version, ConvexAuth auth, int maxGames) {
+    public record Options(Path webDist, Set<String> allowedOrigins, String version, ConvexAuth auth, int maxGames, TableRosters tables) {
+        public Options(Path webDist, Set<String> allowedOrigins, String version, ConvexAuth auth, int maxGames) {
+            this(webDist, allowedOrigins, version, auth, maxGames, null);
+        }
+
         public Options(Path webDist) {
             this(webDist, Set.of(), null);
         }
@@ -60,8 +65,14 @@ public final class WebServer {
     }
 
     public static Javalin create(Options opts) {
+        return create(opts, hub -> { });
+    }
+
+    /** {@code setup}: adjusts the game hub before it serves anyone (tests shorten its timeouts). */
+    static Javalin create(Options opts, java.util.function.Consumer<GameHub> setup) {
         ObjectMapper mapper = new ObjectMapper();
-        GameHub hub = new GameHub(opts.auth() != null ? opts.auth() : ConvexAuth.fromEnv(), opts.maxGames(), ReplayUploads.fromEnv());
+        GameHub hub = new GameHub(opts.auth() != null ? opts.auth() : ConvexAuth.fromEnv(), opts.maxGames(), ReplayUploads.fromEnv(), opts.tables());
+        setup.accept(hub);
         return Javalin.create(config -> {
             config.startup.showJavalinBanner = false;
             config.jsonMapper(new JavalinJackson(mapper, false));

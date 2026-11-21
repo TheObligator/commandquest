@@ -52,6 +52,11 @@ import org.tinylog.Logger;
  * starting another ends the old one. A game belongs to its player, not to the socket: if the
  * socket closes, the game waits {@link #reconnectGrace} for that player to sign in again (a
  * reloaded tab, a dropped connection), then ends. Signing in from another tab takes the game over.
+ *
+ * <p>Multiplayer tables (docs/tables.md): every player's browser sends {@code table} with the
+ * table's game key and their deck. The roster comes from Convex ({@link TableRosters}); once all
+ * its players are in (or {@link #gatherWait} has passed), one game starts with a human seat for
+ * each of them. A player who leaves such a game for good concedes; the others play on.
  */
 public final class GameHub {
 
@@ -62,6 +67,12 @@ public final class GameHub {
     private final Map<String, Conn> conns = new ConcurrentHashMap<>();
     /** Each user's game, by user id. */
     private final Map<String, Hosted> games = new ConcurrentHashMap<>();
+    /** Where table games' rosters come from. */
+    private final TableRosters rosters;
+    /** Table games waiting for their players, by game key. */
+    private final Map<String, Gathering> gathering = new ConcurrentHashMap<>();
+    /** How long a table's game waits for all its players before starting with whoever's there. */
+    private volatile Duration gatherWait = Duration.ofSeconds(60);
     /** How long a game waits for its player after their socket closes. */
     private volatile Duration reconnectGrace = Duration.ofMinutes(5);
     private final ScheduledExecutorService timers = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -100,6 +111,8 @@ public final class GameHub {
         volatile ScheduledFuture<?> expiry;
         /** The last auto-pass mode the player set, for a reconnecting browser. */
         volatile String autoPass;
+        /** The table this game is for (null: a quick game against AI). */
+        volatile TableGame table;
 
         Hosted(String user, String seatName, Conn conn) {
             this.user = user;
@@ -113,14 +126,58 @@ public final class GameHub {
         }
     }
 
+    /** A table's game, shared by its players' {@link Hosted}. */
+    private static final class TableGame {
+        final String issuer;
+        final String key;
+        final List<Hosted> players = new java.util.concurrent.CopyOnWriteArrayList<>();
+        final java.util.concurrent.atomic.AtomicBoolean reported = new java.util.concurrent.atomic.AtomicBoolean();
+
+        TableGame(String issuer, String key) {
+            this.issuer = issuer;
+            this.key = key;
+        }
+    }
+
+    /** A table's game waiting for its players to come in with their decks. Guarded by itself. */
+    private static final class Gathering {
+        final String issuer;
+        final String key;
+        final TableRosters.Roster roster;
+        /** By user ("issuer#id"), in the order they came in. */
+        final Map<String, Joined> joined = new java.util.LinkedHashMap<>();
+        ScheduledFuture<?> timeout;
+        boolean started;
+
+        Gathering(String issuer, String key, TableRosters.Roster roster) {
+            this.issuer = issuer;
+            this.key = key;
+            this.roster = roster;
+        }
+    }
+
+    private record Joined(Conn conn, Deck deck, Map<String, String> tokens) {}
+
+    private static final java.util.regex.Pattern GAME_KEY = java.util.regex.Pattern.compile("^[0-9a-f]{32}$");
+
     public GameHub(ConvexAuth auth, int maxGames) {
         this(auth, maxGames, null);
     }
 
     public GameHub(ConvexAuth auth, int maxGames, GameSession.ReplaySink replays) {
+        this(auth, maxGames, replays, null);
+    }
+
+    public GameHub(ConvexAuth auth, int maxGames, GameSession.ReplaySink replays, TableRosters rosters) {
         this.auth = auth;
         this.maxGames = maxGames;
         this.replays = replays;
+        this.rosters = rosters != null ? rosters : new TableRosters.Http();
+    }
+
+    /** How long a table's game waits for everyone (tests shorten it). */
+    void setGatherWait(Duration wait) {
+        this.gatherWait = wait;
     }
 
     public void onConnect(WsContext ws) {
@@ -143,19 +200,23 @@ public final class GameHub {
                 return;
             }
             if (h.running()) {
-                // Keep the game for a while: the player may be reloading the page or reconnecting.
-                h.conn = null;
-                h.expiry = timers.schedule(() -> {
-                    if (h.conn == null) {
-                        Logger.info("Game for {} ended: they didn't come back", h.user);
-                        endGame(h);
-                    }
-                }, reconnectGrace.toMillis(), TimeUnit.MILLISECONDS);
-                Logger.info("Game for {} is waiting for them to reconnect", h.user);
+                away(h);
                 return;
             }
         }
         endGame(h);
+    }
+
+    /** Keeps the game for a while: the player may be reloading the page or reconnecting. Call holding h. */
+    private void away(Hosted h) {
+        h.conn = null;
+        h.expiry = timers.schedule(() -> {
+            if (h.conn == null) {
+                Logger.info("Game for {} ended: they didn't come back", h.user);
+                endGame(h);
+            }
+        }, reconnectGrace.toMillis(), TimeUnit.MILLISECONDS);
+        Logger.info("Game for {} is waiting for them to reconnect", h.user);
     }
 
     public void onMessage(WsContext ws, String text) {
@@ -185,6 +246,7 @@ public final class GameHub {
         }
         switch (t) {
             case "start" -> start(c, m);
+            case "table" -> table(c, m);
             case "ok" -> act(c, ctl -> ok(c, ctl));
             case "cancel" -> act(c, IGameController::selectButtonCancel);
             case "concede" -> {
@@ -295,9 +357,9 @@ public final class GameHub {
         FThreads.invokeInEdtLater(h.seat::replay); // reads the game view, like every other action
     }
 
-    /** Games that haven't ended, including ones waiting for their player to reconnect. */
+    /** Games that haven't ended, including ones waiting for their players to reconnect. */
     public long activeGames() {
-        return games.values().stream().filter(Hosted::running).count();
+        return games.values().stream().filter(Hosted::running).map(h -> h.session).distinct().count();
     }
 
     private void start(Conn c, JsonNode m) {
@@ -309,8 +371,7 @@ public final class GameHub {
                 send(other, msg("replaced"));
             }
         }
-        long running = games.values().stream().filter(Hosted::running).count();
-        if (running >= maxGames) {
+        if (activeGames() >= maxGames) {
             error(c, "The game server is full right now. Try again in a few minutes.");
             return;
         }
@@ -351,6 +412,216 @@ public final class GameHub {
                 error(c, "Couldn't start the game: " + e.getMessage());
             }
         });
+    }
+
+    /**
+     * Joins a table's game: {@code {t:"table", key, deck}}. The player has to be on the roster Convex
+     * has for the key. The game starts once everyone on it has joined.
+     */
+    private void table(Conn c, JsonNode m) {
+        String key = m.path("key").asText("");
+        int hash = c.user.lastIndexOf('#');
+        if (!GAME_KEY.matcher(key).matches() || hash <= 0) {
+            error(c, "That isn't a table's game.");
+            return;
+        }
+        String issuer = c.user.substring(0, hash);
+        String userId = c.user.substring(hash + 1);
+        Hosted current = games.get(c.user);
+        if (current != null && current.table != null && current.table.key.equals(key) && current.running()) {
+            resume(c, current);   // already playing it (another tab, or a repeated message): show it here
+            return;
+        }
+        work.execute(() -> {
+            try {
+                Gathering g = gathering.get(key);
+                if (g == null) {
+                    TableRosters.Roster roster = rosters.fetch(issuer, key);
+                    if (roster == null) {
+                        ObjectNode gone = msg("tableGone");
+                        gone.put("message", "This table's game isn't on any more.");
+                        send(c, gone);
+                        return;
+                    }
+                    g = gathering.computeIfAbsent(key, k -> gather(issuer, k, roster));
+                }
+                if (!g.issuer.equals(issuer) || g.roster.players().stream().noneMatch(p -> p.user().equals(userId))) {
+                    error(c, "You're not playing at this table.");
+                    return;
+                }
+                ForgeEngine.start();
+                Deck deck = Decks.fromJson(m.path("deck"), g.roster.freePlay());
+                Map<String, String> tokens = tokenArt(m.path("deck").path("tokens"));
+                boolean everyone;
+                synchronized (g) {
+                    if (g.started) {
+                        ObjectNode gone = msg("tableGone");
+                        gone.put("message", "This table's game started without you.");
+                        send(c, gone);
+                        return;
+                    }
+                    g.joined.put(c.user, new Joined(c, deck, tokens));
+                    everyone = g.joined.size() >= g.roster.players().size();
+                }
+                if (everyone) {
+                    launch(g);
+                } else {
+                    gatherStatus(g);
+                }
+            } catch (IllegalArgumentException e) {
+                error(c, e.getMessage());
+            } catch (Exception e) {
+                Logger.warn(e, "Couldn't join a table's game");
+                error(c, "Couldn't reach the table: " + e.getMessage());
+            }
+        });
+    }
+
+    private Gathering gather(String issuer, String key, TableRosters.Roster roster) {
+        Gathering g = new Gathering(issuer, key, roster);
+        g.timeout = timers.schedule(() -> work.execute(() -> launch(g)), gatherWait.toMillis(), TimeUnit.MILLISECONDS);
+        return g;
+    }
+
+    /** Tells everyone waiting for a table's game who's still to come. */
+    private void gatherStatus(Gathering g) {
+        List<Conn> to = new ArrayList<>();
+        ObjectNode o = msg("tableWaiting");
+        synchronized (g) {
+            o.put("joined", g.joined.size());
+            o.put("total", g.roster.players().size());
+            ArrayNode waiting = o.putArray("waitingFor");
+            for (TableRosters.Player p : g.roster.players()) {
+                if (!g.joined.containsKey(g.issuer + "#" + p.user())) {
+                    waiting.add(p.name());
+                }
+            }
+            g.joined.values().forEach(j -> to.add(j.conn()));
+        }
+        o.put("seconds", gatherWait.toSeconds());
+        to.forEach(c -> send(c, o));
+    }
+
+    /** Starts a table's game with the players who came: everyone, or whoever had joined when the wait ran out. */
+    private void launch(Gathering g) {
+        List<Map.Entry<String, Joined>> joined;
+        synchronized (g) {
+            if (g.started) {
+                return;
+            }
+            g.started = true;
+            if (g.timeout != null) {
+                g.timeout.cancel(false);
+            }
+            joined = new ArrayList<>(g.joined.entrySet());
+        }
+        gathering.remove(g.key, g);
+        TableGame table = new TableGame(g.issuer, g.key);
+        if (joined.isEmpty()) {
+            tableOver(table);
+            return;
+        }
+        if (activeGames() >= maxGames) {
+            joined.forEach(e -> error(e.getValue().conn(), "The game server is full right now. Try again in a few minutes."));
+            tableOver(table);
+            return;
+        }
+        try {
+            ForgeEngine.start();
+            List<GameSession.Seat> seats = new ArrayList<>();
+            Map<String, String> users = new java.util.LinkedHashMap<>();
+            Set<String> names = new HashSet<>();
+            List<String> missing = new ArrayList<>();
+            for (TableRosters.Player p : g.roster.players()) {
+                if (joined.stream().noneMatch(e -> e.getKey().equals(g.issuer + "#" + p.user()))) {
+                    missing.add(p.name());
+                }
+            }
+            for (Map.Entry<String, Joined> e : joined) {
+                String user = e.getKey();
+                Joined j = e.getValue();
+                Hosted previous = games.get(user); // one game per user
+                if (previous != null) {
+                    Conn other = previous.conn;
+                    endGame(previous);
+                    if (other != null && other != j.conn()) {
+                        send(other, msg("replaced"));
+                    }
+                }
+                String rosterName = g.roster.players().stream().filter(p -> user.equals(g.issuer + "#" + p.user()))
+                        .map(TableRosters.Player::name).findFirst().orElse("Player");
+                String name = seatName(rosterName, names);
+                Hosted h = new Hosted(user, name, j.conn());
+                h.table = table;
+                BrowserSeat seat = new BrowserSeat(json, s -> {
+                    Conn to = h.conn;
+                    if (to != null) {
+                        sendRaw(to, s);
+                    }
+                });
+                seat.setFreePlay(g.roster.freePlay());
+                h.seat = seat;
+                seats.add(new GameSession.Seat(name, j.deck(), seat, j.tokens()));
+                users.put(name, user);
+                table.players.add(h);
+            }
+            int ai = Math.max(g.roster.ai(), seats.size() < 2 ? 2 - seats.size() : 0);
+            List<Deck> aiDecks = Decks.randomPrecons(Math.min(ai, 8 - seats.size()));
+            for (int i = 0; i < aiDecks.size(); i++) {
+                seats.add(new GameSession.Seat("AI " + (i + 1), aiDecks.get(i), null));
+            }
+            for (Hosted h : table.players) {
+                games.put(h.user, h);
+                Conn c = h.conn;
+                synchronized (h) {
+                    if (c != null && conns.get(c.ws.sessionId()) == c) {
+                        c.game = h;
+                    } else {
+                        away(h);   // their socket closed while the others were joining
+                    }
+                }
+            }
+            GameSession session = GameSession.startCommander(seats, new GameSession.Options(g.roster.rewind(), replays, users));
+            for (Hosted h : table.players) {
+                h.session = session;
+            }
+            session.onOver(() -> tableOver(table));
+            if (!missing.isEmpty()) {
+                ObjectNode note = msg("notice");
+                note.put("message", String.join(", ", missing) + " didn't join in time: the game started without them.");
+                table.players.forEach(h -> {
+                    Conn c = h.conn;
+                    if (c != null) {
+                        send(c, note);
+                    }
+                });
+            }
+            Logger.info("Table game started: {} players, {} AI", table.players.size(), aiDecks.size());
+        } catch (RuntimeException e) {
+            Logger.error(e, "Couldn't start a table's game");
+            for (Hosted h : table.players) {
+                games.remove(h.user, h);
+                Conn c = h.conn;
+                if (c != null && c.game == h) {
+                    c.game = null;
+                }
+            }
+            joined.forEach(j -> error(j.getValue().conn(), "Couldn't start the game: " + e.getMessage()));
+            tableOver(table);
+        }
+    }
+
+    /** A seat name for a player: their name, made unique at this table, never one an AI seat uses. */
+    static String seatName(String name, Set<String> taken) {
+        String base = name == null ? "" : name.trim();
+        if (base.isEmpty() || base.length() > 40 || base.regionMatches(true, 0, "AI ", 0, 3)) {
+            base = "Player";
+        }
+        String n = base;
+        for (int i = 2; !taken.add(n.toLowerCase(java.util.Locale.ROOT)); i++) {
+            n = base + " " + i;
+        }
+        return n;
     }
 
     private static final java.util.regex.Pattern SCRYFALL_ID =
@@ -1079,11 +1350,70 @@ public final class GameHub {
         if (r != null && g != null && seat != null && seat.player() != null) {
             r.playerLeft(g.getPlayer(seat.player().getId()));   // a rewind request mustn't wait on them
         }
+        TableGame table = h.table;
+        if (table != null) {
+            table.players.remove(h);
+            if (!table.players.isEmpty() && s != null && !s.isOver()) {
+                concedeFor(h, s, seat);   // the other players play on
+                return;
+            }
+        }
         if (seat != null) {
             seat.close();
         }
         if (s != null) {
             s.abort();
+        }
+        if (table != null) {
+            tableOver(table);
+        }
+    }
+
+    /** A player left a table's game for good: they concede, and their seat stops asking them anything. */
+    private void concedeFor(Hosted h, GameSession s, BrowserSeat seat) {
+        PlayerView me = seat == null ? null : seat.player();
+        IGameController ctl = me == null ? null : s.controller(h.seatName, me);
+        if (seat != null) {
+            seat.answerOpenWithDefaults(); // Forge can't take the concession while it waits on a question
+        }
+        Logger.info("{} left their table's game: they concede", h.user);
+        FThreads.invokeInEdtLater(() -> {
+            try {
+                if (ctl != null && !s.isOver()) {
+                    ctl.concede();
+                }
+            } catch (RuntimeException e) {
+                Logger.warn(e, "Conceding for a player who left failed");
+            } finally {
+                if (seat != null) {
+                    seat.close();
+                }
+            }
+            releaseInput(ctl, s, 20);
+        });
+    }
+
+    /**
+     * Forge frees a waiting player's input only when the whole game ends, so a player who conceded
+     * while the game waited on them (their priority, a mulligan...) would hold up everyone else.
+     * Stop whatever it waits on them for; check again for a while, in case one more comes.
+     */
+    private void releaseInput(IGameController ctl, GameSession s, int checks) {
+        if (!(ctl instanceof PlayerControllerHuman human) || s.isOver()) {
+            return;
+        }
+        if (human.getInputQueue().getInput() instanceof forge.gamemodes.match.input.InputSyncronizedBase waiting) {
+            waiting.stop();
+        }
+        if (checks > 1) {
+            timers.schedule(() -> FThreads.invokeInEdtLater(() -> releaseInput(ctl, s, checks - 1)), 500, TimeUnit.MILLISECONDS);
+        }
+    }
+
+    /** Tells Convex a table's game is over, once: the table goes back to its lobby. */
+    private void tableOver(TableGame table) {
+        if (table.reported.compareAndSet(false, true)) {
+            rosters.ended(table.issuer, table.key);
         }
     }
 
