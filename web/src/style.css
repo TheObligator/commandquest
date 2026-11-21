@@ -207,6 +207,19 @@ label.inline select { width: auto; padding: 5px 8px; }
 .deck-unplayable ul { margin: 4px 0 0; padding-left: 16px; color: var(--muted); }
 .deck-meta .deck-freeplay { margin-top: 6px; color: var(--muted); }
 
+/* ---- Turn-over button for double-faced cards (src/components/FlipButton.tsx) ----
+   Bottom middle of the card image, kept above the artist and copyright line. Its parent is a size
+   container, so cqw is the card's width (the image is 139.3cqw tall). */
+.flip-host { position: relative; container-type: inline-size; min-width: 0; }
+.search-card { position: relative; }
+.flip-btn { position: absolute; left: 50%; top: calc(118cqw - max(0px, 30px - 16cqw)); transform: translateX(-50%); z-index: 1; width: max(30px, 16cqw); height: max(30px, 16cqw); display: grid; place-items: center; padding: 0; border-radius: 50%; border: 2px solid rgb(255 255 255 / 85%); background: rgb(14 16 22 / 72%); color: #fff; cursor: pointer; box-shadow: 0 2px 8px rgb(0 0 0 / 50%); transition: background .12s, transform .25s; }
+.flip-btn:hover, .flip-btn:focus-visible { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.flip-btn.flipped svg { transform: scaleX(-1); }
+/* Clear of the "Not playable" mark, which sits along the bottom left. */
+.card-tile:has(.tile-nw) .flip-btn, .search-card:has(.tile-nw) .flip-btn { top: calc(127cqw - 1.6em - max(30px, 16cqw) - 6px); }
+/* Overlapping stacks: each card's button stays under the next card, like the rest of the card. */
+.stack .flip-btn { z-index: auto; }
+
 /* ---- Deck folders ---- */
 .folder-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .folder-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); cursor: pointer; font-size: .9rem; max-width: 100%; }
@@ -462,6 +475,12 @@ dialog.card-detail { width: min(860px, calc(100vw - 32px)); max-height: 90vh; ba
 .dialog-close:hover { background: var(--panel-2); color: var(--text); }
 
 .detail-grid { display: grid; grid-template-columns: minmax(0, 320px) 1fr; gap: 24px; align-items: start; }
+/* Double-faced cards: front and back side by side, then the text. */
+dialog.card-detail.two-faces { width: min(1180px, calc(100vw - 32px)); }
+.two-faces .detail-grid { grid-template-columns: minmax(0, 560px) 1fr; }
+.detail-image.faces { grid-template-columns: 1fr 1fr; align-items: start; }
+.detail-face { display: grid; gap: 4px; justify-items: center; margin: 0; min-width: 0; }
+.detail-face figcaption { font-size: .8rem; color: var(--muted); text-align: center; }
 .detail-image { display: grid; gap: 8px; justify-items: center; }
 .detail-img { width: 100%; aspect-ratio: 488 / 680; border-radius: 4.75% / 3.5%; background: var(--panel-2); display: block; }
 .face + .face { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; }
@@ -496,9 +515,14 @@ dialog.card-detail { width: min(860px, calc(100vw - 32px)); max-height: 90vh; ba
 .printings .result-img { gap: 2px; }
 .printings .result-img:hover img { transform: none; outline: 2px solid var(--accent-2); }
 
+@media (max-width: 900px) {
+  .two-faces .detail-grid { grid-template-columns: 1fr; }
+  .detail-image.faces { max-width: 560px; width: 100%; margin: 0 auto; }
+}
 @media (max-width: 640px) {
   .detail-grid { grid-template-columns: 1fr; }
   .detail-image { max-width: 280px; margin: 0 auto; }
+  .detail-image.faces { max-width: none; gap: 8px; }
 }
 
 /* ---- Format legality ---- */

@@ -13,6 +13,7 @@ import { Loading } from "../components/Spinner";
 import { cardCount, cardImage, cardKey, deckCards, loadPreconCards, loadPrecons, matches, releaseLabel, type Precon, type PreconCardData } from "../precons";
 import * as scry from "../scryfall";
 import { useCardPreview } from "../useCardPreview";
+import { FlipButton, useFlips } from "../components/FlipButton";
 import { TYPE_ORDER } from "./boards";
 
 type Kind = Precon["kind"];
@@ -222,6 +223,7 @@ function PreconList({ precon, addButton, onClose }: { precon: Precon; addButton:
   const [baked, setBaked] = useState<Map<string, scry.ScryCard> | null>(null);
   const [opening, setOpening] = useState(false);
   const preview = useCardPreview();
+  const flips = useFlips();
   useEffect(() => ref.current?.showModal(), []);
   useEffect(() => {
     let live = true;
@@ -272,13 +274,17 @@ function PreconList({ precon, addButton, onClose }: { precon: Precon; addButton:
           <div key={i} className={`stack ${view}`}>
             {cards.map((c) => {
               const s = lookup(c);
-              const img = s && scry.imageUrl(s, "normal");
+              const face = flips.face(s);
+              const img = s && scry.imageUrl(s, "normal", face);
               return (
-                <button key={c.name} className="stack-card" title={s ? undefined : c.name} disabled={!s} onClick={() => void details(c)} aria-label={`${c.quantity} × ${c.name}: card details`} {...preview.handlers(s)}>
-                  {img ? <img src={img} alt="" loading="lazy" /> : <span className="noimg">{c.name}</span>}
-                  {img && <span className="tile-name" aria-hidden="true">{c.name}</span>}
-                  {c.quantity > 1 && <span className="stack-qty">×{c.quantity}</span>}
-                </button>
+                <div key={c.name} className="flip-host">
+                  <button className="stack-card" title={s ? undefined : c.name} disabled={!s} onClick={() => void details(c)} aria-label={`${c.quantity} × ${c.name}: card details`} {...preview.handlers(s, face)}>
+                    {img ? <img src={img} alt="" loading="lazy" /> : <span className="noimg">{c.name}</span>}
+                    {img && <span className="tile-name" aria-hidden="true">{c.name}</span>}
+                    {c.quantity > 1 && <span className="stack-qty">×{c.quantity}</span>}
+                  </button>
+                  <FlipButton card={s} face={face} onFlip={flips.toggle} />
+                </div>
               );
             })}
           </div>

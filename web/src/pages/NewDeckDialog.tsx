@@ -10,6 +10,7 @@ import { errorMessage } from "../app/errors";
 import { navigate } from "../app/router";
 import { closeOnBackdrop } from "../carddetails";
 import { useCardSupport } from "../cardsupport";
+import { FlipButton, useFlips } from "../components/FlipButton";
 import { FORMATS, hasCommander } from "../deckFormats";
 import * as scry from "../scryfall";
 import { printingPref } from "../usePrintingPref";
@@ -122,6 +123,7 @@ function CommanderPicker({ format, picked, onPick }: { format: string; picked: s
   const [results, setResults] = useState<scry.ScryCard[] | null>(null);
   const [error, setError] = useState("");
   const support = useCardSupport();
+  const flips = useFlips();
   const seq = useRef(0);
 
   useEffect(() => {
@@ -169,11 +171,15 @@ function CommanderPicker({ format, picked, onPick }: { format: string; picked: s
         <div className="commander-results">
           {results.map((c) => {
             const st = support?.status(c);
+            const face = flips.face(c);
             return (
-              <button type="button" key={c.id} className="commander-result" title={st && !st.works ? `${c.name}: ${st.reason}` : `Make ${c.name} the commander`} onClick={() => onPick(c)}>
-                {scry.imageUrl(c, "normal") ? <img src={scry.imageUrl(c, "normal")} alt={c.name} loading="lazy" /> : <span className="noimg">{c.name}</span>}
-                {st && !st.works && <span className="small form-error">{st.missing ? "Not playable yet" : "Known issue"}</span>}
-              </button>
+              <div key={c.id} className="flip-host">
+                <button type="button" className="commander-result" title={st && !st.works ? `${c.name}: ${st.reason}` : `Make ${c.name} the commander`} onClick={() => onPick(c)}>
+                  {scry.imageUrl(c, "normal", face) ? <img src={scry.imageUrl(c, "normal", face)} alt={c.name} loading="lazy" /> : <span className="noimg">{c.name}</span>}
+                  {st && !st.works && <span className="small form-error">{st.missing ? "Not playable yet" : "Known issue"}</span>}
+                </button>
+                <FlipButton card={c} face={face} onFlip={flips.toggle} />
+              </div>
             );
           })}
         </div>

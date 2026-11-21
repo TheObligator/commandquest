@@ -20,10 +20,11 @@ export function useCardPreview() {
     const y = Math.min(Math.max(8, e.clientY - h / 2), innerHeight - h - 8);
     return { x, y };
   };
-  const handlers = (c: scry.ScryCard | undefined) => ({
+  /** `face`: which face to preview (1 = the back of a double-faced card that's turned over). */
+  const handlers = (c: scry.ScryCard | undefined, face = 0) => ({
     onMouseEnter: (e: React.MouseEvent) => {
       if (!c || matchMedia("(hover: none)").matches) return;
-      const url = scry.imageUrl(c, "normal");
+      const url = scry.imageUrl(c, "normal", face);
       if (url) setPreview({ url, ...position(e) });
     },
     // Measure now: React clears the event's currentTarget once the handler returns, and a state

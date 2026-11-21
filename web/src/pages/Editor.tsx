@@ -16,6 +16,7 @@ import { DeckBracket } from "../components/DeckBracket";
 import { deckAverages } from "../deckstats";
 import { FORMATS } from "../deckFormats";
 import { DeckTokens } from "../components/DeckTokens";
+import { FlipButton, useFlips } from "../components/FlipButton";
 import { CardViewToggle, useCardView, useStackColumns } from "../cardView";
 import { ManaCurve } from "../components/ManaCurve";
 import { columnSpans, columnsOf, stackColClass } from "../stackLayout";
@@ -674,6 +675,7 @@ function DeckView(props: {
   const gameChanger = (s: scry.ScryCard | undefined, className: string) =>
     deck.format === "commander" && s?.game_changer ? <span className={className} title="Game Changer: Exhibition and Core decks allow none, Upgraded up to 3">GC</span> : null;
   const preview = useCardPreview();
+  const flips = useFlips();
   const [printingsFor, setPrintingsFor] = useState<DeckCard | null>(null);
   const [pickingPartner, setPickingPartner] = useState(false);
   /** The right-clicked card's menu: where it opened and which entry (by `key`), rebuilt each render. */
@@ -806,14 +808,16 @@ function DeckView(props: {
   /** `overlapped`: only the card's top shows, so hovering previews the whole card. */
   const tileOf = (c: DeckCard, i: number, overlapped: boolean) => {
     const s = scry.cached(c);
-    const img = s && scry.imageUrl(s, "normal");
+    const face = flips.face(s);
+    const img = s && scry.imageUrl(s, "normal", face);
     return (
-      <div key={key(c, i)} className={`card-tile${s ? "" : " unresolved"}${brokenClass(c, s)}`} {...(overlapped ? preview.handlers(s) : {})} onContextMenu={onContextMenu(c)}>
+      <div key={key(c, i)} className={`card-tile${s ? "" : " unresolved"}${brokenClass(c, s)}`} {...(overlapped ? preview.handlers(s, face) : {})} onContextMenu={onContextMenu(c)}>
         <button className="tile-img" title={overlapped ? undefined : s ? `${c.name}: card details` : c.name} aria-label={`${c.quantity} × ${c.name}: card details`} disabled={!s} onClick={() => s && openDetails(c, s)}>
           {img ? <img src={img} alt={c.name} loading="lazy" /> : <span className="noimg">{c.name}{missing.includes(c.name) ? " (not found)" : ""}</span>}
         </button>
         {/* The name as invisible text over the printed one, so the browser's find (Ctrl+F) finds and highlights cards. */}
         {img && <span className="tile-name" aria-hidden="true">{c.name}</span>}
+        <FlipButton card={s} face={face} onFlip={flips.toggle} />
         {notWorking(c, s, "nw-badge tile-nw")}
         {gameChanger(s, "gc-badge tile-gc")}
         {c.quantity > 1 && <span className="tile-qty" aria-label={`${c.quantity} copies`}>×{c.quantity}</span>}
@@ -1074,6 +1078,7 @@ function Printings({ card, onPick, onClose }: { card: DeckCard; onPick: (p: scry
   const ref = useRef<HTMLDialogElement>(null);
   const [prints, setPrints] = useState<scry.ScryCard[] | null>(null);
   const [error, setError] = useState("");
+  const flips = useFlips();
   useEffect(() => {
     ref.current?.showModal();
     scry.printings(card.name).then(setPrints).catch((e) => setError(errorMessage(e)));
@@ -1087,19 +1092,21 @@ function Printings({ card, onPick, onClose }: { card: DeckCard; onPick: (p: scry
       {error ? <p className="form-error">{error}</p> : !prints ? <p className="muted">Loading…</p> : (
         <div className="results">
           {prints.map((p) => (
-            <button
-              key={p.id}
-              className={p.id === card.scryfallId ? "result-img selected" : "result-img"}
-              title={`${p.set_name} #${p.collector_number}`}
-              onClick={() => {
-                onPick(p);
-                ref.current?.close();
-              }}
-            >
-              <img src={scry.imageUrl(p, "normal") ?? ""} alt={p.set_name} loading="lazy" />
-              <span className="small muted">{p.set.toUpperCase()} #{p.collector_number}</span>
-              {scry.artistOf(p) && <span className="small muted">{scry.artistOf(p)}</span>}
-            </button>
+            <div key={p.id} className="flip-host">
+              <button
+                className={p.id === card.scryfallId ? "result-img selected" : "result-img"}
+                title={`${p.set_name} #${p.collector_number}`}
+                onClick={() => {
+                  onPick(p);
+                  ref.current?.close();
+                }}
+              >
+                <img src={scry.imageUrl(p, "normal", flips.face(p)) ?? ""} alt={p.set_name} loading="lazy" />
+                <span className="small muted">{p.set.toUpperCase()} #{p.collector_number}</span>
+                {scry.artistOf(p) && <span className="small muted">{scry.artistOf(p)}</span>}
+              </button>
+              <FlipButton card={p} face={flips.face(p)} onFlip={flips.toggle} />
+            </div>
           ))}
         </div>
       )}
@@ -1135,6 +1142,7 @@ function PartnerPicker({ commander, label, onPick, onClose }: { commander: scry.
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const support = useCardSupport();
+  const flips = useFlips();
   const fits = (cs: scry.ScryCard[]) => cs.filter((c) => canPair(commander, c));
   useEffect(() => {
     ref.current?.showModal();
@@ -1170,20 +1178,23 @@ function PartnerPicker({ commander, label, onPick, onClose }: { commander: scry.
         <div className="results">
           {cards.map((c) => {
             const st = support?.status(c);
+            const face = flips.face(c);
             return (
-              <button
-                key={c.id}
-                className="result-img"
-                title={st && !st.works ? `${c.name}: ${st.reason}` : `Add ${c.name} as a commander`}
-                onClick={() => {
-                  onPick(c);
-                  ref.current?.close();
-                }}
-              >
-                {scry.imageUrl(c, "normal") ? <img src={scry.imageUrl(c, "normal")} alt={c.name} loading="lazy" /> : <span className="noimg">{c.name}</span>}
-                <span className="small">{c.name}</span>
-                {st && !st.works && <span className="small form-error">{st.missing ? "Not playable yet" : "Known issue"}</span>}
-              </button>
+              <div key={c.id} className="flip-host">
+                <button
+                  className="result-img"
+                  title={st && !st.works ? `${c.name}: ${st.reason}` : `Add ${c.name} as a commander`}
+                  onClick={() => {
+                    onPick(c);
+                    ref.current?.close();
+                  }}
+                >
+                  {scry.imageUrl(c, "normal", face) ? <img src={scry.imageUrl(c, "normal", face)} alt={c.name} loading="lazy" /> : <span className="noimg">{c.name}</span>}
+                  <span className="small">{c.name}</span>
+                  {st && !st.works && <span className="small form-error">{st.missing ? "Not playable yet" : "Known issue"}</span>}
+                </button>
+                <FlipButton card={c} face={face} onFlip={flips.toggle} />
+              </div>
             );
           })}
           {next && (

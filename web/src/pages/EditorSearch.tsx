@@ -7,6 +7,7 @@ import { errorMessage } from "../app/errors";
 import { showCardDetails } from "../carddetails";
 import { useCardSupport } from "../cardsupport";
 import { CardMenu } from "../components/CardMenu";
+import { FlipButton, useFlips } from "../components/FlipButton";
 import { cardLegality, fitsIdentity, isCommanderEligible } from "../formats/conquest";
 import { bestExtraColor, identityQuery, mentionsIdentity, offIdentity } from "../formats/rulebreakers";
 import { commanderCards } from "../edhrec";
@@ -211,6 +212,7 @@ export function SearchResults(props: {
   const [next, setNext] = useState<string>();
   const [loadingMore, setLoadingMore] = useState(false);
   const support = useCardSupport();
+  const flips = useFlips();
   const [allColors, setAllColors] = useState(false);
   /** The player's pick for ranking by the commander's EDHREC list; null = the default. Kept across searches. */
   const [rankChoice, setRankChoice] = useState<boolean | null>(null);
@@ -366,7 +368,8 @@ export function SearchResults(props: {
     const count = inDeck.reduce((n, e) => n + e.quantity, 0);
     const verdict = props.format === "conquest" ? cardLegality(c) : { ok: true, reason: undefined };
     const playable = support?.status(c);
-    const img = scry.imageUrl(c, "normal");
+    const face = flips.face(c);
+    const img = scry.imageUrl(c, "normal", face);
     const commander = canCommand(c, props.format);
     const details = () =>
       showCardDetails(c, [
@@ -378,6 +381,7 @@ export function SearchResults(props: {
         <button className="tile-img" title={`${c.name}: card details`} onClick={details}>
           {img ? <img src={img} alt={c.name} loading="lazy" /> : <span className="noimg">{c.name}</span>}
         </button>
+        <FlipButton card={c} face={face} onFlip={flips.toggle} />
         {!verdict.ok && <span className="legal-badge" title={`Not legal in Conquest: ${verdict.reason}`}>Not legal</span>}
         {playable && !playable.works && (
           <span className={`nw-badge tile-nw${playable.missing ? " missing" : ""}`} title={playable.reason}>{playable.missing ? "Not playable" : "Known issue"}</span>
