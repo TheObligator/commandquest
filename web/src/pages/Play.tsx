@@ -1,5 +1,10 @@
-import { useConvexAuth } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
+import { api } from "../../convex/_generated/api";
+import { parseCode } from "../../convex/model/tables";
+import { errorMessage } from "../app/errors";
+import { navigate } from "../app/router";
+import { toast } from "../dom";
 import { gameSocketUrl } from "../game/useLiveGame";
 
 type SocketState = "connecting" | "open" | "closed";
@@ -60,10 +65,72 @@ export function Play() {
           href={isAuthenticated && status === "open" ? "#/game" : undefined}
           why={!isAuthenticated ? "Sign in first" : status !== "open" ? "The game server is offline" : undefined}
         />
-        <Mode title="Create a table" tag="Multiplayer" text="Open a table and invite friends with a link." />
-        <Mode title="Join a table" tag="Multiplayer" text="Enter a table code from a friend." />
+        <CreateTable signedIn={isAuthenticated} />
+        <JoinTableBox signedIn={isAuthenticated} />
       </div>
     </>
+  );
+}
+
+/** Your table, if you're at one: shown instead of "Create a table". */
+function CreateTable({ signedIn }: { signedIn: boolean }) {
+  const mine = useQuery(api.tables.mine, signedIn ? {} : "skip");
+  const create = useMutation(api.tables.create);
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    if (mine && !confirm(`You're at "${mine.name}". Leave it and open a new table?`)) return;
+    setBusy(true);
+    try {
+      navigate(`/tables/${await create({})}`);
+    } catch (e) {
+      toast(errorMessage(e), "error");
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mode card">
+      <span className="tag">Multiplayer</span>
+      <h3>{mine ? mine.name : "Create a table"}</h3>
+      <p>
+        {mine
+          ? mine.status === "playing" ? "Your table's game is on." : "You're seated at this table."
+          : "Open a table, invite friends with a link, and play Commander together. Forge AI can fill the empty seats."}
+      </p>
+      {mine ? (
+        <div className="mode-actions">
+          <a className="btn" href={mine.status === "playing" ? `#/game?table=${mine._id}` : `#/tables/${mine._id}`}>
+            {mine.status === "playing" ? "Back to the game" : "Back to the table"}
+          </a>
+          <button className="btn ghost" onClick={go} disabled={busy}>New table</button>
+        </div>
+      ) : (
+        <button className="btn" onClick={go} disabled={!signedIn || busy} title={signedIn ? undefined : "Sign in first"}>
+          {signedIn ? "Create a table" : "Sign in first"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function JoinTableBox({ signedIn }: { signedIn: boolean }) {
+  const [text, setText] = useState("");
+  const code = parseCode(text);
+  return (
+    <form
+      className="mode card"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (code) navigate(`/join/${code}`);
+      }}
+    >
+      <span className="tag">Multiplayer</span>
+      <h3>Join a table</h3>
+      <p>Paste the invite link (or code) the table's host sent you.</p>
+      <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Invite link or code" aria-label="Invite link or code" disabled={!signedIn} />
+      <button className="btn" disabled={!signedIn || !code} title={signedIn ? undefined : "Sign in first"}>
+        {signedIn ? "Join" : "Sign in first"}
+      </button>
+    </form>
   );
 }
 

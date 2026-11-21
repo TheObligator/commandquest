@@ -104,7 +104,7 @@ export function SeatBoard(props: {
 
   return (
     <section
-      className={`seat-board${props.active ? " active" : ""}${isMe ? " mine" : ""}${props.focused ? " focused" : ""}`}
+      className={`seat-board${props.active ? " active" : ""}${isMe ? " mine" : ""}${props.focused ? " focused" : ""}${p.lost ? " out" : ""}`}
       style={{ "--seat": p.color } as React.CSSProperties}
       aria-label={isMe ? "Your board" : `${p.name}'s board`}
       onDoubleClick={(e) => {
@@ -121,6 +121,9 @@ export function SeatBoard(props: {
           </button>
         ) : (
           <span className="sb-name" data-player-id={p.id}>{isMe ? `${p.name} (you)` : p.name}</span>
+        )}
+        {p.lost && (
+          <span className="sb-out" title="Out of the game: lost or conceded">Out</span>
         )}
         <span className="sb-life" title="Life">{p.life}</span>
         {p.poison > 0 && <span className="sb-poison" title="Poison counters">☠ {p.poison}</span>}

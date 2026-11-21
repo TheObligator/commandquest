@@ -1,6 +1,8 @@
-// A live game against Forge AI on the game server (#/game?deck=<id>). Before the game starts this
-// is the table's lobby, where you pick your deck (the choice is kept in the URL and remembered). The table is the same board
-// as the preview; the server sends this player's view and Forge's prompts (docs/game-protocol.md).
+// A live game on the game server. A quick game against Forge AI (#/game?deck=<id>): before the game
+// starts this is where you pick your deck (the choice is kept in the URL and remembered). A
+// multiplayer table's game (#/game?table=<id>, docs/tables.md): joins it with the deck picked at the
+// table. The table is the same board as the preview; the server sends this player's view and
+// Forge's prompts (docs/game-protocol.md).
 import { useConvexAuth, useQuery } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
@@ -13,6 +15,7 @@ import { LiveRail } from "../game/LiveRail";
 import { REWIND_LEVELS } from "../game/RewindPanel";
 import { LAYOUTS, LayoutPicker, TableBoard, useStored, useTableStops, type LayoutId, type MenuPart, type MenuTarget } from "../game/TableBoard";
 import { useHotkeys } from "../game/useHotkeys";
+import { useTablePresence } from "../game/useTablePresence";
 import { useLiveGame, type DeckPayload, type ManaOptions, type StandIn } from "../game/useLiveGame";
 import * as scry from "../scryfall";
 import { ManaDialog, type ManaDialogCard } from "../game/ManaDialog";
@@ -73,7 +76,13 @@ export function LiveGame() {
   const notReady = checks && decks ? decks.length - (ready?.length ?? 0) : 0;
   const [lastDeck, setLastDeck] = useStored<string>("cq.game.deck", "");
   const urlDeck = query.get("deck") ?? "";
-  const deckId = urlDeck || (ready?.some((d) => d._id === lastDeck) ? lastDeck : ready?.[0]?._id) || "";
+  // A table's game: the table and the deck you picked there.
+  const tableParam = query.get("table") ?? "";
+  const table = useQuery(api.tables.get, isAuthenticated && tableParam ? { id: tableParam } : "skip");
+  useTablePresence(table?._id);
+  const deckId = tableParam
+    ? (table?.me.deckId ?? "")
+    : urlDeck || (ready?.some((d) => d._id === lastDeck) ? lastDeck : ready?.[0]?._id) || "";
   const pickDeck = (id: string) => {
     setLastDeck(id);
     navigate(`/game?deck=${encodeURIComponent(id)}`, true);
@@ -114,9 +123,9 @@ export function LiveGame() {
     if (note && rewindNote) toast(note);
   }, [rewindNote]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const start = () => {
-    if (!deck) return;
-    const payload: DeckPayload = {
+  const deckPayload = (): DeckPayload | null => {
+    if (!deck) return null;
+    return {
       name: deck.name,
       cards: deck.cards.map((c) => {
         const missing = support?.notInForge(c.name);
@@ -125,8 +134,22 @@ export function LiveGame() {
       }),
       tokens: tokenArtMap(tokens),
     };
-    game.start(payload, me?.name ?? "You", opponents, freePlay, rewind);
   };
+  const start = () => {
+    const payload = deckPayload();
+    if (payload) game.start(payload, me?.name ?? "You", opponents, freePlay, rewind);
+  };
+
+  // A table's game: join it once the game server is ready and the table says it's on.
+  const joinedKey = useRef<string | null>(null);
+  const gameKey = table?.status === "playing" ? table.gameKey : null;
+  useEffect(() => {
+    if (!tableParam || !gameKey || game.status !== "ready" || joinedKey.current === gameKey) return;
+    const payload = deckPayload();
+    if (!payload) return;
+    joinedKey.current = gameKey;
+    game.joinTable(gameKey, payload);
+  }, [tableParam, gameKey, game.status, deck]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const playing = game.view && (game.status === "playing" || game.status === "reconnecting" || game.status === "moved" || game.status === "over");
 
@@ -159,8 +182,10 @@ export function LiveGame() {
         },
         { label: "Hotkeys and settings (new tab)", onSelect: () => window.open("#/settings", "_blank", "noopener") },
         {
-          label: game.status === "over" ? "Back to Play" : "Leave (the game is kept 5 minutes)",
-          onSelect: () => navigate("/play"),
+          label: tableParam
+            ? (game.status === "over" ? "Back to the table" : "Leave (the game is kept 5 minutes)")
+            : (game.status === "over" ? "Back to Play" : "Leave (the game is kept 5 minutes)"),
+          onSelect: () => navigate(tableParam ? `/tables/${tableParam}` : "/play"),
         },
         ...(game.status === "playing"
           ? [{ label: "Concede", danger: true, onSelect: () => confirm("Concede this game?") && game.concede() }]
@@ -173,7 +198,8 @@ export function LiveGame() {
     <div className="game">
       <div className="game-toolbar">
         <h1>
-          {deck?.name ?? "Game"} <span className="muted small">vs Forge AI</span>
+          {tableParam ? (table?.name ?? "Table") : (deck?.name ?? "Game")}{" "}
+          <span className="muted small">{tableParam ? (deck?.name ?? "") : "vs Forge AI"}</span>
         </h1>
         <span className="status" data-state={game.status === "offline" || game.status === "reconnecting" || game.status === "moved" ? "closed" : "open"}>
           {STATUS[game.status]}
@@ -207,14 +233,20 @@ export function LiveGame() {
           <strong>Game over.</strong>
           <span className="muted">{game.view?.outcome ?? gameOverText(game.view?.log ?? [], game.view?.players[0]?.name ?? "")}</span>
           <span className="sb-spacer" />
-          <button className="btn small" onClick={start} disabled={!deck}>Play again</button>
+          {tableParam ? (
+            <a className="btn small" href={`#/tables/${tableParam}`}>Back to the table</a>
+          ) : (
+            <button className="btn small" onClick={start} disabled={!deck}>Play again</button>
+          )}
           <a className="btn small ghost" href="#/replays" title="The replay is ready a few seconds after the game ends">Replays</a>
-          <a className="btn small ghost" href="#/play">Back</a>
+          {!tableParam && <a className="btn small ghost" href="#/play">Back</a>}
         </div>
       )}
 
       {playing ? (
         <LiveTable game={game} view={game.view!} layout={layout} gameMenu={gameMenu} />
+      ) : tableParam ? (
+        <TableJoin game={game} table={table} tableId={tableParam} hasDeck={!!deck} />
       ) : (
         <div className="card live-start">
           {decks === undefined || (decks.length > 0 && !ready) ? (
@@ -305,6 +337,39 @@ export function LiveGame() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** A table's game before it shows: joining it, waiting for the others, or why it isn't on. */
+function TableJoin({ game, table, tableId, hasDeck }: {
+  game: ReturnType<typeof useLiveGame>;
+  table: { name: string; status: string } | null | undefined;
+  tableId: string;
+  hasDeck: boolean;
+}) {
+  const back = <a className="btn" href={`#/tables/${tableId}`}>Back to the table</a>;
+  let body: React.ReactNode;
+  if (table === undefined) body = <p className="muted">Loading the table…</p>;
+  else if (table === null) body = <><p>You're not at this table any more.</p><p><a className="btn" href="#/play">Back to Play</a></p></>;
+  else if (game.tableGone) body = <><p>{game.tableGone}</p><p>{back}</p></>;
+  else if (table.status !== "playing") body = <><p>This table's game isn't on: it hasn't started, or it's over.</p><p>{back}</p></>;
+  else if (game.tableWaiting) {
+    const w = game.tableWaiting;
+    body = (
+      <>
+        <p>
+          Waiting for {w.waitingFor.join(", ") || "the others"} ({w.joined} of {w.total} here).
+        </p>
+        <p className="muted small">If they haven't joined within {w.seconds} seconds, the game starts without them.</p>
+      </>
+    );
+  } else if (!hasDeck) body = <><p className="muted">Loading your deck…</p></>;
+  else body = <p className="muted">{game.status === "offline" ? "Can't reach the game server. Retrying…" : "Joining the game…"}</p>;
+  return (
+    <div className="card live-start">
+      <h2>{table?.name ?? "Table"}</h2>
+      {body}
     </div>
   );
 }

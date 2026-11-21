@@ -170,6 +170,27 @@ label.inline select { width: auto; padding: 5px 8px; }
 .modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
 .mode { display: flex; flex-direction: column; gap: 4px; }
 .mode p { color: var(--muted); flex: 1; }
+.mode input { margin-bottom: 8px; }
+.mode-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Multiplayer table lobby (pages/TableLobby.tsx) */
+.table-lobby { max-width: 760px; margin: 0 auto; display: grid; gap: 16px; }
+.table-lobby .page-head { margin-bottom: 0; }
+.table-lobby h2 { margin: 0 0 10px; font-size: 1.05rem; }
+.lobby-playing { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-color: var(--accent); }
+.lobby-invite-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.lobby-invite-row input { flex: 1 1 240px; min-width: 0; font-family: ui-monospace, monospace; }
+.lobby-seats { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.lobby-seats li { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name ready" "deck actions"; gap: 2px 12px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius); }
+.lobby-seats li.me { border-color: var(--accent); }
+.lobby-seats li.empty-seat { border-style: dashed; }
+.lobby-seat-name { grid-area: name; font-weight: 600; overflow-wrap: anywhere; }
+.lobby-seat-deck { grid-area: deck; overflow-wrap: anywhere; }
+.lobby-ready { grid-area: ready; font-size: .8rem; color: var(--muted); text-align: right; }
+.lobby-ready.on { color: var(--ok); }
+.lobby-seat-actions { grid-area: actions; display: flex; gap: 4px; justify-content: flex-end; flex-wrap: wrap; }
+.lobby-me, .lobby-settings { display: grid; gap: 10px; }
+.lobby-go { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .tag { align-self: flex-start; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); border: 1px solid rgb(224 168 79 / 40%); border-radius: 99px; padding: 2px 8px; margin-bottom: 8px; }
 
 /* ---- Deck list ---- */

@@ -15,6 +15,8 @@ import { LiveGame } from "../pages/LiveGame";
 import { Replays } from "../pages/Replays";
 import { ReplayViewer } from "../pages/ReplayViewer";
 import { Table } from "../pages/Table";
+import { TableLobby } from "../pages/TableLobby";
+import { JoinTable } from "../pages/JoinTable";
 import { Loading } from "../components/Spinner";
 import { Layout } from "./Layout";
 import { match, navigate, useRoute } from "./router";
@@ -64,6 +66,8 @@ export function App() {
   else if (route.path === "/game") page = <RequireAuth><LiveGame /></RequireAuth>;
   else if (route.path === "/replays") page = <RequireAuth><Replays /></RequireAuth>;
   else if (route.path === "/replay") page = <RequireAuth><ReplayViewer /></RequireAuth>;
+  else if ((params = match("/tables/:id", route.path))) page = <RequireAuth><TableLobby key={params.id} id={params.id} /></RequireAuth>;
+  else if ((params = match("/join/:code", route.path))) page = <RequireAuth><JoinTable key={params.code} code={params.code} /></RequireAuth>;
   else if (route.path === "/decks") page = <RequireAuth><DeckList /></RequireAuth>;
   else if (route.path === "/decks/precons") page = <RequireAuth><Precons /></RequireAuth>;
   else if (route.path === "/decks/new") page = <RequireAuth><Editor key="new" /></RequireAuth>;

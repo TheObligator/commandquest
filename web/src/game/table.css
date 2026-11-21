@@ -43,6 +43,9 @@ body.in-game .game { height: calc(100dvh - 16px); }
 .sb-life { font-weight: 800; font-size: 1.2rem; font-variant-numeric: tabular-nums; }
 .sb-life::before { content: "♥ "; color: #e06b6b; font-size: .75em; }
 .sb-poison { font-size: .78rem; color: var(--ok); font-weight: 700; }
+/* A player out of the game (lost or conceded): Forge keeps them in the seating. */
+.sb-out { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--danger); border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; }
+.seat-board.out { opacity: .55; }
 .sb-pcounter { font-size: .74rem; font-weight: 700; color: var(--text); padding: 1px 6px; border-radius: 999px; background: rgb(255 255 255 / 8%); white-space: nowrap; }
 .sb-pcounter small { font-weight: 500; color: var(--muted); }
 .sb-cmd { font-size: .72rem; padding: 1px 7px; border-radius: 99px; font-weight: 700; color: var(--from); background: color-mix(in srgb, var(--from) 20%, transparent); border: 1px solid color-mix(in srgb, var(--from) 45%, transparent); }

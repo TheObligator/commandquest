@@ -174,6 +174,15 @@ export interface StandIn {
   faces?: Omit<StandIn, "layout" | "faces">[];
 }
 
+export interface TableWaiting {
+  joined: number;
+  total: number;
+  /** Names of the players who haven't come in yet. */
+  waitingFor: string[];
+  /** How long the game waits for them before starting without them. */
+  seconds: number;
+}
+
 export interface DeckPayload {
   name: string;
   /** `set` / `collectorNumber`: the printing you picked (Scryfall codes), so Forge uses it too. */
@@ -195,6 +204,10 @@ export function useLiveGame() {
   const [searchList, setSearchList] = useState<LibraryList | null>(null);
   const searchOwner = useRef<string | null>(null);
   const [notice, setNotice] = useState<{ message: string; n: number } | null>(null);
+  /** A table's game waiting for its players (docs/tables.md): who's still to come. */
+  const [tableWaiting, setTableWaiting] = useState<TableWaiting | null>(null);
+  /** The table's game this page asked to join isn't on (any more). */
+  const [tableGone, setTableGone] = useState<string | null>(null);
   const actionWaiters = useRef(new Map<number, ((a: CardActions) => void)[]>());
   const detailWaiters = useRef(new Map<number, ((d: CardDetails) => void)[]>());
   const manaWaiters = useRef<((o: ManaOptions) => void)[]>([]);
@@ -290,7 +303,16 @@ export function useLiveGame() {
             parked = true;
             lost(s);
             break;
+          case "tableWaiting":
+            setTableWaiting({ joined: m.joined, total: m.total, waitingFor: m.waitingFor ?? [], seconds: m.seconds ?? 60 });
+            break;
+          case "tableGone":
+            setTableGone(m.message ?? "This table's game isn't on any more.");
+            setTableWaiting(null);
+            if (statusRef.current === "starting") setStatus("ready");
+            break;
           case "state":
+            setTableWaiting(null);
             setView(m.view as GameView);
             setStatus(m.view.gameOver ? "over" : "playing");
             if (m.view.gameOver) {
@@ -343,6 +365,7 @@ export function useLiveGame() {
           }
           case "error":
             setError(m.message);
+            setTableWaiting(null);
             if (statusRef.current === "starting") setStatus("ready");
             break;
         }
@@ -398,6 +421,8 @@ export function useLiveGame() {
     libraryList,
     searchList,
     signedIn: !!token,
+    tableWaiting,
+    tableGone,
     clearError: () => setError(null),
     /** Brings the game back to this tab after it was opened in another one. */
     takeBack: () => reconnect.current(),
@@ -410,6 +435,17 @@ export function useLiveGame() {
       setAutoPassState(null);
       setStatus("starting");
       send({ t: "start", deck, name, opponents, freePlay, rewind });
+    },
+    /** Join a table's game with your deck (`key`: the table's game key, from tables.get). */
+    joinTable(key: string, deck: DeckPayload) {
+      setError(null);
+      setTableGone(null);
+      setView(null);
+      setPrompt(null);
+      setAsk(null);
+      setAutoPassState(null);
+      setStatus("starting");
+      send({ t: "table", key, deck });
     },
     ok: () => send({ t: "ok" }),
     cancel: () => send({ t: "cancel" }),
