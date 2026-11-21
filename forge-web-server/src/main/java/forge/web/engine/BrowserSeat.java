@@ -284,6 +284,7 @@ public final class BrowserSeat implements IRemote {
                 manual.keepLocked(live);
             }
             ObjectNode view = views.game(gv, me);
+            reportBlankCards(view, live);
             view.set("playable", playable());
             view.put("freePlay", freePlay);
             Rewind rw = rewind.get();
@@ -551,6 +552,62 @@ public final class BrowserSeat implements IRemote {
      * Everything a freshly connected browser needs to carry on (after a reload or reconnect): the
      * view, the prompt on screen, and every question still waiting for an answer.
      */
+    /** Cards already reported by {@link #reportBlankCards}, so each is logged once. */
+    private final Set<Integer> blankReported = ConcurrentHashMap.newKeySet();
+
+    /**
+     * Logs a card this player may see that has no name or no owner. The browser shows it as a
+     * blank card. This shouldn't happen; the log line says what Forge had for it, to find out why.
+     */
+    private void reportBlankCards(ObjectNode view, Game live) {
+        for (JsonNode p : view.path("players")) {
+            for (String zone : new String[] {"hand", "battlefield", "graveyard", "exile", "command"}) {
+                for (JsonNode c : p.path(zone)) {
+                    boolean blank = c.path("name").asText("").isEmpty() || c.path("owner").isNull();
+                    if (!blank || c.path("hidden").asBoolean() || !blankReported.add(c.path("id").asInt())) {
+                        continue;
+                    }
+                    Card card = live == null ? null : live.findById(c.path("id").asInt());
+                    String forge = card == null ? "no such card in the game"
+                            : "'" + card.getName() + "' in " + card.getZone() + ", owner " + card.getOwner()
+                            + ", state " + card.getCurrentStateName() + ", same view " + (card.getView() == findView(p, zone, c))
+                            + ", view state '" + card.getView().getCurrentState().getName() + "'";
+                    Logger.warn("Blank card sent to {}: {} (turn {}). Forge has: {}", me == null ? "?" : me.getName(), c,
+                            live == null ? "?" : live.getPhaseHandler().getTurn(), forge);
+                }
+            }
+        }
+    }
+
+    /** The CardView behind a card in the JSON view, found again in the game view (null if gone). */
+    private CardView findView(JsonNode player, String zone, JsonNode card) {
+        IGuiGame g = gui;
+        GameView gv = g == null ? null : g.getGameView();
+        if (gv == null) {
+            return null;
+        }
+        for (PlayerView pv : gv.getPlayers()) {
+            if (!String.valueOf(pv.getId()).equals(player.path("id").asText())) {
+                continue;
+            }
+            Iterable<CardView> cards = switch (zone) {
+                case "hand" -> pv.getHand();
+                case "battlefield" -> pv.getBattlefield();
+                case "graveyard" -> pv.getGraveyard();
+                case "exile" -> pv.getExile();
+                default -> pv.getCommand();
+            };
+            if (cards != null) {
+                for (CardView cv : cards) {
+                    if (cv.getId() == card.path("id").asInt()) {
+                        return cv;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
     public void replay() {
         refresh();
         ObjectNode prompt = lastPrompt;
