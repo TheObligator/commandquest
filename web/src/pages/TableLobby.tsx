@@ -70,7 +70,11 @@ function Lobby({ table }: { table: TableView }) {
   const problems = myCheck?.problems ?? [];
   const needsFreePlay = myCheck?.needsFreePlay ?? [];
   const deckBlocked = problems.length > 0 || (needsFreePlay.length > 0 && !table.freePlay);
-  const playable = useMemo(() => decks?.filter((d) => !checks?.get(d._id)?.problems.length), [decks, checks]);
+  // Decks that can't start a game aren't offered (the Decks page marks them and says why). Your
+  // current deck stays in the list if it stopped being playable, so you can see what's picked.
+  const playable = useMemo(() => (checks ? decks?.filter((d) => !checks.get(d._id)?.problems.length) : undefined), [decks, checks]);
+  const unplayable = decks && playable ? decks.length - playable.length : 0;
+  const [showLink, setShowLink] = useState(false);
   const playing = table.status === "playing";
   const editable = table.isHost && !playing;
 
@@ -134,9 +138,16 @@ function Lobby({ table }: { table: TableView }) {
       {table.isHost && table.code && (
         <section className="card lobby-invite">
           <h2>Invite players</h2>
-          <p className="muted small">Anyone with this link can sit down while there's a free seat. Make a new link to retire this one.</p>
+          <p className="muted small">Anyone with this link can sit down while there's a free seat, so it's hidden in case your screen is shared. Copy works while it's hidden. Make a new link to retire this one.</p>
           <div className="lobby-invite-row">
-            <input readOnly value={inviteLink(table.code)} onFocus={(e) => e.currentTarget.select()} aria-label="Invite link" />
+            {showLink ? (
+              <input readOnly value={inviteLink(table.code)} onFocus={(e) => e.currentTarget.select()} aria-label="Invite link" />
+            ) : (
+              <input readOnly value="••••••••••••••••" className="lobby-invite-hidden" aria-label="Invite link (hidden)" />
+            )}
+            <button className="btn ghost" onClick={() => setShowLink(!showLink)} aria-pressed={showLink} title={showLink ? "Hide the link" : "Show the link"}>
+              {showLink ? "Hide" : "Show"}
+            </button>
             <button className="btn" onClick={copy}>Copy</button>
             <button className="btn ghost" onClick={() => call(newInvite({ id }))}>New link</button>
           </div>
@@ -179,8 +190,8 @@ function Lobby({ table }: { table: TableView }) {
       {!playing && (
         <section className="card lobby-me">
           <h2>Your deck</h2>
-          {decks === undefined ? (
-            <p className="muted">Loading your decks…</p>
+          {decks === undefined || (decks.length > 0 && !playable) ? (
+            <p className="muted">Checking your decks…</p>
           ) : !decks.length ? (
             <p>You have no decks yet. <a className="link" href="#/decks">Build or import one</a>, then come back.</p>
           ) : (
@@ -189,17 +200,24 @@ function Lobby({ table }: { table: TableView }) {
                 value={table.me.deckId ?? ""}
                 onChange={(e) => call(setDeck({ id, deckId: (e.target.value || null) as Id<"decks"> | null }))}
               >
-                <option value="">Pick a deck…</option>
-                {decks.map((d) => {
-                  const c = checks?.get(d._id);
-                  const bad = !!c?.problems.length;
-                  return (
-                    <option key={d._id} value={d._id} disabled={bad && d._id !== table.me.deckId}>
-                      {`${d.name}${d.commanders.length ? ` (${d.commanders.join(" & ")})` : ""}${bad ? " · can't be played yet" : c?.needsFreePlay.length ? " · needs free play" : ""}`}
-                    </option>
-                  );
-                })}
+                <option value="">{playable?.length ? "Pick a deck…" : "None of your decks can be played yet"}</option>
+                {decks
+                  .filter((d) => d._id === table.me.deckId || playable?.includes(d))
+                  .map((d) => {
+                    const c = checks?.get(d._id);
+                    const bad = !!c?.problems.length;
+                    return (
+                      <option key={d._id} value={d._id}>
+                        {`${d.name}${d.commanders.length ? ` (${d.commanders.join(" & ")})` : ""}${bad ? " · can't be played yet" : c?.needsFreePlay.length ? " · needs free play" : ""}`}
+                      </option>
+                    );
+                  })}
               </select>
+              {unplayable > 0 && (
+                <span className="muted small">
+                  {unplayable} {unplayable === 1 ? "deck can't" : "decks can't"} be played yet: they're marked on <a className="link" href="#/decks">your Decks page</a>.
+                </span>
+              )}
             </label>
           )}
           {myDeck && problems.length > 0 && (
