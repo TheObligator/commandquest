@@ -9,16 +9,19 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as crons from "../crons.js";
 import type * as decks from "../decks.js";
 import type * as http from "../http.js";
 import type * as importDeck from "../importDeck.js";
 import type * as model_deckRules from "../model/deckRules.js";
 import type * as model_importers from "../model/importers.js";
 import type * as model_replays from "../model/replays.js";
+import type * as model_tables from "../model/tables.js";
 import type * as replays from "../replays.js";
 import type * as settings from "../settings.js";
 import type * as signinHandoff from "../signinHandoff.js";
 import type * as stops from "../stops.js";
+import type * as tables from "../tables.js";
 import type * as users from "../users.js";
 
 import type {
@@ -29,16 +32,19 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  crons: typeof crons;
   decks: typeof decks;
   http: typeof http;
   importDeck: typeof importDeck;
   "model/deckRules": typeof model_deckRules;
   "model/importers": typeof model_importers;
   "model/replays": typeof model_replays;
+  "model/tables": typeof model_tables;
   replays: typeof replays;
   settings: typeof settings;
   signinHandoff: typeof signinHandoff;
   stops: typeof stops;
+  tables: typeof tables;
   users: typeof users;
 }>;
 

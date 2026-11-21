@@ -91,6 +91,49 @@ export default defineSchema({
     .index("by_user_replay", ["userId", "replayId"])
     .index("by_replay", ["replayId"]),
 
+  /**
+   * A multiplayer table (convex/tables.ts, docs/tables.md): people gather here, pick decks and
+   * start a game together. The host is whoever created it, or whoever took over when they left.
+   * Deleted once the last player leaves.
+   */
+  tables: defineTable({
+    name: v.string(),
+    hostId: v.id("users"),
+    /** The invite code (`#/join/<code>`); the host can replace it, which retires the old link. */
+    code: v.string(),
+    status: v.union(v.literal("open"), v.literal("playing")),
+    seats: v.number(),
+    fillWithAI: v.boolean(),
+    freePlay: v.boolean(),
+    rewind: v.number(),
+    /** While playing: the secret the game server fetches the roster with (http.ts). */
+    gameKey: v.optional(v.string()),
+    /** Players the host removed: the invite link doesn't let them back in. */
+    kicked: v.array(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_code", ["code"])
+    .index("by_game_key", ["gameKey"])
+    .index("by_updated", ["updatedAt"]),
+
+  /** A player at a table. A player sits at one table at a time. */
+  tableSeats: defineTable({
+    tableId: v.id("tables"),
+    userId: v.id("users"),
+    /** Their display name when they sat down (users.me's `name`). */
+    name: v.string(),
+    deckId: v.optional(v.id("decks")),
+    deckName: v.optional(v.string()),
+    commanders: v.optional(v.array(v.string())),
+    ready: v.boolean(),
+    joinedAt: v.number(),
+    /** Last check-in from their table or game page (tables.heartbeat). */
+    lastSeen: v.number(),
+  })
+    .index("by_table", ["tableId", "joinedAt"])
+    .index("by_user", ["userId"]),
+
   /** Per-user settings (convex/settings.ts). One row per user; absent = the defaults. */
   settings: defineTable({
     userId: v.id("users"),

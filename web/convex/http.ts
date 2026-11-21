@@ -35,4 +35,30 @@ http.route({
   }),
 });
 
+/**
+ * The game server reads who's playing a table's game (docs/tables.md). The game key is the secret:
+ * only the table's players get it, from tables.get, and they hand it to the game server.
+ */
+http.route({
+  path: "/tables/roster",
+  method: "GET",
+  handler: httpAction(async (ctx, req) => {
+    const key = new URL(req.url).searchParams.get("key") ?? "";
+    const roster = await ctx.runQuery(internal.tables.roster, { key });
+    if (!roster) return new Response("No such game", { status: 404 });
+    return Response.json(roster);
+  }),
+});
+
+/** The game server says a table's game is over: the table goes back to its lobby. */
+http.route({
+  path: "/tables/ended",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    const key = new URL(req.url).searchParams.get("key") ?? "";
+    const ok = await ctx.runMutation(internal.tables.ended, { key });
+    return new Response(ok ? "ok" : "No such game", { status: ok ? 200 : 404 });
+  }),
+});
+
 export default http;
