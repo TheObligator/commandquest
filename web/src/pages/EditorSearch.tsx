@@ -12,7 +12,7 @@ import { bestExtraColor, identityQuery, mentionsIdentity, offIdentity } from "..
 import { commanderCards } from "../edhrec";
 import { compileQuery } from "../game/scryquery";
 import * as scry from "../scryfall";
-import { displayTerms, forEdhrecCards, hasOrder, joinQuery, locallyReadable, restrictToNames, stripDisplay } from "../searchquery";
+import { displayTerms, forEdhrecCards, hasOrder, joinQuery, locallyReadable, nameTerms, restrictToNames, stripDisplay } from "../searchquery";
 import { BOARDS, boardLabel } from "./boards";
 
 /** The ⓘ button, drawn in CSS (the Unicode glyph renders badly in many fonts). */
@@ -28,13 +28,32 @@ export function InfoButton({ label, onClick, className = "" }: { label: string; 
 export const canCommand = (c: scry.ScryCard, format: string) =>
   format === "conquest" ? isCommanderEligible(c) : /Legendary.*Creature|can be your commander/i.test(`${c.type_line} ${c.oracle_text ?? ""}`);
 
+/**
+ * What a Commander or Conquest deck's commanders let it play: a Scryfall clause to add to searches
+ * (Rulebreakers included), and a local check for what Scryfall can't express (Conquest's hybrid
+ * rule). Null when there's nothing to limit (another format, or no commander yet).
+ */
+export function identityFilter(format: string, deck: DeckCard[], commanders: scry.ScryCard[], extraColorPick?: string) {
+  const conquest = format === "conquest";
+  if (!((format === "commander" || conquest) && commanders.length)) return null;
+  const fits = conquest ? fitsIdentity : (card: { color_identity: string[] }, id: Set<string>) => card.color_identity.every((x) => id.has(x));
+  const extraColor =
+    extraColorPick ??
+    bestExtraColor(deck.flatMap((d) => { const card = d.board === "main" ? scry.cached(d) : undefined; return card ? [{ card, quantity: d.quantity }] : []; }), commanders, fits);
+  /** The ids of `cards` the deck can't play after all (only Conquest's hybrid cards get this far). */
+  const offIds = (cards: scry.ScryCard[]) =>
+    conquest ? new Set(offIdentity(cards.map((c) => ({ name: c.id, card: c })), commanders, fitsIdentity, extraColor).map((e) => e.name)) : new Set<string>();
+  return { clause: identityQuery(commanders, extraColor, conquest), fits, extraColor, offIds };
+}
+
 // ---- Name box with suggestions -----------------------------------------------------------
 
 /**
  * Typing shows up to 8 matching card names. Clicking one (or ↓/↑ then Enter) adds that card.
- * Enter on the typed text opens the full results page.
+ * Enter on the typed text opens the full results page. With `identity` (a commander deck), only
+ * names of cards the commanders allow are suggested.
  */
-export function SearchBox(props: { onPick: (name: string) => void; onSubmit: (query: string) => void; autoFocus?: boolean; initial?: string }) {
+export function SearchBox(props: { onPick: (name: string) => void; onSubmit: (query: string) => void; autoFocus?: boolean; initial?: string; identity?: IdentityFilter | null }) {
   const [q, setQ] = useState(props.initial ?? "");
   const [names, setNames] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
@@ -61,8 +80,9 @@ export function SearchBox(props: { onPick: (name: string) => void; onSubmit: (qu
       setNames([]);
       return;
     }
+    const identity = props.identity;
     timer.current = window.setTimeout(async () => {
-      const found = await scry.autocomplete(value).catch(() => []);
+      const found = identity ? await suggestWithin(value, identity).catch(() => []) : await scry.autocomplete(value).catch(() => []);
       if (mine === seq.current) {
         setNames(found.slice(0, 8));
         setOpen(true);
@@ -144,6 +164,23 @@ export function SearchBox(props: { onPick: (name: string) => void; onSubmit: (qu
   );
 }
 
+type IdentityFilter = NonNullable<ReturnType<typeof identityFilter>>;
+
+/**
+ * Names matching the typed text among cards the deck's commanders allow. Scryfall's autocomplete
+ * can't be filtered, so this is a name search with the identity clause; names starting with the
+ * typed text come first, then the rest in Scryfall's (EDHREC popularity) order.
+ */
+async function suggestWithin(text: string, identity: IdentityFilter): Promise<string[]> {
+  const terms = nameTerms(text);
+  if (!terms) return [];
+  const { cards } = await scry.search(`${terms} ${identity.clause} -is:token`);
+  const off = identity.offIds(cards);
+  const typed = text.trim().toLowerCase();
+  const names = [...new Set(cards.filter((c) => !off.has(c.id)).map((c) => c.name))];
+  return [...names.filter((n) => n.toLowerCase().startsWith(typed)), ...names.filter((n) => !n.toLowerCase().startsWith(typed))];
+}
+
 // ---- Full results page -----------------------------------------------------------------
 
 const normName = (n: string) => n.split(" // ")[0].replace(/[‘’]/g, "'").toLowerCase();
@@ -189,14 +226,12 @@ export function SearchResults(props: {
   // In a Commander or Conquest deck, only cards the commanders allow, Rulebreakers included,
   // unless the query already filters by color identity or the player asks for every color.
   const conquest = props.format === "conquest";
-  const commanderDeck = (props.format === "commander" || conquest) && props.commanders.length > 0;
-  const canFilter = commanderDeck && !mentionsIdentity(props.query);
+  const identity = identityFilter(props.format, props.deck, props.commanders, props.extraColor);
+  const canFilter = !!identity && !mentionsIdentity(props.query);
   const filtered = canFilter && !allColors;
-  const fits = conquest ? fitsIdentity : (card: { color_identity: string[] }, id: Set<string>) => card.color_identity.every((x) => id.has(x));
-  const extraColor =
-    props.extraColor ??
-    bestExtraColor(props.deck.flatMap((d) => { const card = d.board === "main" ? scry.cached(d) : undefined; return card ? [{ card, quantity: d.quantity }] : []; }), props.commanders, fits);
-  const idClause = filtered ? identityQuery(props.commanders, extraColor, conquest) : "";
+  const fits = identity?.fits ?? ((card: { color_identity: string[] }, id: Set<string>) => card.color_identity.every((x) => id.has(x)));
+  const extraColor = identity?.extraColor;
+  const idClause = filtered ? identity.clause : "";
   const additionsOn = !!additions.trim() && !skipAdditions;
   const added = additionsOn ? additions : "";
   // Display keywords (order:, unique:) go last and outside the parentheses.
@@ -206,8 +241,7 @@ export function SearchResults(props: {
   const exact = PRINTING_QUERY.test(fullQuery);
   const additionsFilter = additionsOn && !!stripDisplay(additions).trim();
   // Conquest's hybrid rule has no Scryfall syntax: hybrid cards come back and are checked here.
-  const offIds = (cs: scry.ScryCard[]) => new Set(offIdentity(cs.map((c) => ({ name: c.id, card: c })), props.commanders, fitsIdentity, extraColor).map((e) => e.name));
-  const off = filtered && conquest ? offIds(cards) : null;
+  const off = filtered && conquest ? identity.offIds(cards) : null;
 
   // Most played with the commander first (EDHREC). By default only for searches we can check
   // against that list locally (and without their own order:); the button ranks any search, asking
@@ -215,6 +249,7 @@ export function SearchResults(props: {
   const commanderNames = props.commanders.map((c) => scry.deckName(c)).join(" and ");
   const localQuery = joinQuery(forEdhrecCards(props.query), forEdhrecCards(added));
   const readable = locallyReadable(localQuery);
+  const commanderDeck = !!identity;
   const rankOn = commanderDeck && (rankChoice ?? (readable && !hasOrder(fullQuery)));
   const filterQuery = joinQuery(props.query, idClause, stripDisplay(added));
   const commanderKey = props.commanders.map((c) => c.name).join("|");
@@ -255,7 +290,7 @@ export function SearchResults(props: {
           const card = matched.get(normName(e.name));
           return card ? [{ card, inclusion: e.inclusion }] : [];
         });
-        if (filtered && conquest) found = found.filter((f) => !offIds([f.card]).has(f.card.id));
+        if (filtered && conquest && identity) found = found.filter((f) => !identity.offIds([f.card]).has(f.card.id));
       }
       if (live) (setRanked(found), setRankStatus(found.length ? "" : `None of the cards EDHREC lists for ${commanderNames} match this search.`));
     })();

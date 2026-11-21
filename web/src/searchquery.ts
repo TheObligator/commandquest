@@ -84,3 +84,13 @@ export function restrictToNames(filter: string, names: string[], maxLength = MAX
   if (batch.length) out.push(query(batch));
   return out;
 }
+
+/** Typed text as Scryfall name terms: each word quoted, so `-`, `:` or `(` in a name aren't syntax. */
+export function nameTerms(text: string): string {
+  return text
+    .replace(/"/g, "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => `"${w}"`)
+    .join(" ");
+}

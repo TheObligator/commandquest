@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { commanderSlug, parsePage } from "../src/edhrec.ts";
-import { displayTerms, forEdhrecCards, hasOrder, joinQuery, locallyReadable, restrictToNames, stripDisplay } from "../src/searchquery.ts";
+import { displayTerms, forEdhrecCards, hasOrder, joinQuery, locallyReadable, nameTerms, restrictToNames, stripDisplay } from "../src/searchquery.ts";
 
 test("display keywords split from the filters", () => {
   assert.equal(stripDisplay("game:paper order:cmc dir:desc"), "game:paper");
@@ -66,4 +66,11 @@ test("restrictToNames packs names into queries Scryfall reads whole", () => {
   assert.ok(qs.every((q) => q.length <= 300 && q.startsWith("(t:creature game:paper) (")));
   assert.equal(qs.join(" ").match(/!"/g)!.length, 100);
   assert.deepEqual(restrictToNames("", ['Say "Hi"']), ['(!"Say Hi")']);
+});
+
+test("nameTerms quotes each typed word so names aren't read as search syntax", () => {
+  assert.equal(nameTerms("  talisman "), '"talisman"');
+  assert.equal(nameTerms("urza's  saga"), `"urza's" "saga"`);
+  assert.equal(nameTerms('-x "y" (z)'), '"-x" "y" "(z)"');
+  assert.equal(nameTerms("   "), "");
 });

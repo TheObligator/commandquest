@@ -31,7 +31,7 @@ import { tokenPicks } from "../tokens";
 import { useCardPreview } from "../useCardPreview";
 import { printingPref, usePrintingPref } from "../usePrintingPref";
 import { BOARDS, TYPE_ORDER } from "./boards";
-import { canCommand, SearchBox, SearchResults } from "./EditorSearch";
+import { canCommand, identityFilter, SearchBox, SearchResults } from "./EditorSearch";
 import { capitalize } from "./DeckList";
 
 /** Up to this many main-deck planeswalkers are shown beside the commander(s). */
@@ -538,7 +538,7 @@ function DeckEditor({ initial }: { initial: Draft }) {
               <button className={`tab${tab === "search" ? " active" : ""}`} onClick={() => setTab("search")}>Search</button>
               <button className={`tab${tab === "import" ? " active" : ""}`} onClick={() => setTab("import")}>Import</button>
             </div>
-            <SearchPane hidden={tab !== "search"} addTo={addTo} onAddTo={setAddTo} onPick={(n) => void addByName(n)} onSubmit={setSearchQuery} autoFocus={!deck.cards.length && tab === "search"} />
+            <SearchPane hidden={tab !== "search"} addTo={addTo} onAddTo={setAddTo} onPick={(n) => void addByName(n)} onSubmit={setSearchQuery} autoFocus={!deck.cards.length && tab === "search"} identity={identityFilter(deck.format, deck.cards, commanders, deck.extraColor)} />
             <ImportPane hidden={tab !== "import"} startReplacing={deck.cards.length === 0} onImport={applyImport} importFromUrl={(url) => importFromUrl({ url })} autoFocus={tab === "import"} />
           </aside>
           <DeckView
@@ -562,10 +562,10 @@ function DeckEditor({ initial }: { initial: Draft }) {
 
 // ---- Search ---------------------------------------------------------------------------
 
-function SearchPane(props: { hidden: boolean; addTo: Board; onAddTo: (b: Board) => void; onPick: (name: string) => void; onSubmit: (q: string) => void; autoFocus: boolean }) {
+function SearchPane(props: { hidden: boolean; addTo: Board; onAddTo: (b: Board) => void; onPick: (name: string) => void; onSubmit: (q: string) => void; autoFocus: boolean; identity: ReturnType<typeof identityFilter> }) {
   return (
     <div className="pane" hidden={props.hidden}>
-      <SearchBox onPick={props.onPick} onSubmit={props.onSubmit} autoFocus={props.autoFocus} />
+      <SearchBox onPick={props.onPick} onSubmit={props.onSubmit} autoFocus={props.autoFocus} identity={props.identity} />
       <div className="search-help">
         <label className="inline small muted">
           Picked names go to{" "}
