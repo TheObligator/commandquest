@@ -373,10 +373,16 @@ export function useLiveGame() {
       s.onclose = () => lost(s);
     };
     // A connection can die without closing (sleep, Wi-Fi drop): ping, and give up on silence.
+    // Browsers run a background tab's timers only about once a minute, so a late tick means we
+    // weren't pinging, not that the server went quiet: just ping, and judge on a later tick.
+    let lastTick = Date.now();
     const heartbeat = window.setInterval(() => {
+      const now = Date.now();
+      const late = now - lastTick > PING_MS * 2;
+      lastTick = now;
       const s = ws.current;
       if (!s || s.readyState !== WebSocket.OPEN) return;
-      if (Date.now() - heard > SILENT_MS) lost(s);
+      if (!late && now - heard > SILENT_MS) lost(s);
       else s.send(JSON.stringify({ t: "ping" }));
     }, PING_MS);
     // Back online, or back to the tab: retry now rather than after the backoff.

@@ -29,7 +29,9 @@ Signing in from a second tab takes the game over the same way; the first tab get
 and stays out of it until the player brings it back (the client signs in again).
 
 The browser pings every 10 seconds and treats 25 seconds of silence as a dropped connection, since
-a sleeping laptop or a dead Wi-Fi link can leave a socket that never reports closing. Restarting
+a sleeping laptop or a dead Wi-Fi link can leave a socket that never reports closing. Browsers run
+a background tab's timers only about once a minute, so a late heartbeat just pings and the silence
+check waits for an on-time one: a tab in the background doesn't keep reconnecting. Restarting
 the game server still ends every game: they're only in its memory.
 
 ## Starting a game
