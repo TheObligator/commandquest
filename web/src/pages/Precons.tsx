@@ -14,7 +14,7 @@ import { cardCount, cardImage, cardKey, deckCards, loadPreconCards, loadPrecons,
 import * as scry from "../scryfall";
 import { useCardPreview } from "../useCardPreview";
 import { FlipButton, useFlips } from "../components/FlipButton";
-import { TYPE_ORDER } from "./boards";
+import { TYPE_ORDER } from "../deckGroups";
 
 type Kind = Precon["kind"];
 

@@ -683,7 +683,7 @@ button.text-link:hover { text-decoration: underline; }
 .search-card { position: relative; display: grid; gap: 6px; align-content: start; }
 .search-card.in-deck .tile-img img { outline: 2px solid var(--ok); outline-offset: 1px; }
 .search-card.not-legal .tile-img img { outline: 2px solid var(--danger); outline-offset: 1px; }
-.in-deck-badge { position: absolute; top: 7px; right: 7px; padding: 2px 8px; border-radius: 99px; font-size: .75rem; font-weight: 700; background: rgb(14 16 22 / 85%); color: var(--ok); border: 1px solid rgb(111 207 151 / 55%); pointer-events: none; }
+.in-deck-badge { position: absolute; top: 7px; right: 7px; max-width: calc(100% - 14px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 8px; border-radius: 99px; font-size: .75rem; font-weight: 700; background: rgb(14 16 22 / 85%); color: var(--ok); border: 1px solid rgb(111 207 151 / 55%); pointer-events: none; }
 .search-card .legal-badge { top: 7px; left: 7px; }
 .search-card-bar { display: flex; align-items: center; gap: 6px; }
 .search-card-bar .add-btn { flex: 1; border-radius: 8px 0 0 8px; }

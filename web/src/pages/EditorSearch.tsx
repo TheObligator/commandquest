@@ -14,7 +14,7 @@ import { commanderCards } from "../edhrec";
 import { compileQuery } from "../game/scryquery";
 import * as scry from "../scryfall";
 import { displayTerms, forEdhrecCards, hasOrder, joinQuery, locallyReadable, nameTerms, restrictToNames, stripDisplay } from "../searchquery";
-import { BOARDS, boardLabel } from "./boards";
+import { BOARDS, boardLabel, inDeckText } from "./boards";
 
 /** The ⓘ button, drawn in CSS (the Unicode glyph renders badly in many fonts). */
 export function InfoButton({ label, onClick, className = "" }: { label: string; onClick: () => void; className?: string }) {
@@ -430,7 +430,7 @@ export function SearchResults(props: {
         )}
         {count > 0 && (
           <span className="in-deck-badge" title={inDeck.map((e) => `${e.quantity} in ${boardLabel(e.board).toLowerCase()}`).join(", ")}>
-            {count} in deck
+            {inDeckText(inDeck)}
           </span>
         )}
         {inclusion !== undefined && (

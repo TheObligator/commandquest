@@ -1,6 +1,6 @@
 import { useState } from "react";
 import * as scry from "../scryfall";
-import { TYPE_ORDER } from "../pages/boards";
+import { TYPE_ORDER } from "../deckGroups";
 
 type Entry = { name: string; quantity: number; card: scry.ScryCard };
 
