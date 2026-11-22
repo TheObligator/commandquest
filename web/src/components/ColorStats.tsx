@@ -12,8 +12,9 @@ const costOf = (s: scry.ScryCard) => s.mana_cost || s.card_faces?.map((f) => f.m
 
 /** `extra`: more of the same color drawn lighter after `n` (what fetch lands add). */
 function Bar({ label, n, extra = 0, total, color, tip }: { label: string; n: number; extra?: number; total: number; color: Color; tip: string }) {
-  const share = (x: number) => (total ? (x / total) * 100 : 0);
-  const pct = Math.round(share(n + extra));
+  const share = (x: number) => (total ? Math.min(100, (x / total) * 100) : 0);
+  // Not capped: with fetch lands a color can reach past 100% of the plain mana count.
+  const pct = total ? Math.round(((n + extra) / total) * 100) : 0;
   return (
     <div className="color-bar" title={tip} role="meter" aria-label={`${label}: ${pct}%`} aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
       {extra > 0 && <div className={`color-fill fill-${color} fetched`} style={{ width: `${share(n + extra)}%` }} />}
@@ -49,7 +50,6 @@ export function ColorStats({ cards, identity }: { cards: DeckCard[]; /** The com
     identity?.length ? identity : undefined,
   );
   const fetchTotal = shown.reduce((n, c) => n + fetched[c], 0);
-  const reachTotal = madeTotal + fetchTotal;
   const used = (c: Color) => pips[c] > 0 || !!identity?.includes(c);
 
   return (
@@ -66,9 +66,9 @@ export function ColorStats({ cards, identity }: { cards: DeckCard[]; /** The com
                 label="+ Fetch"
                 n={made[c]}
                 extra={fetched[c]}
-                total={reachTotal}
+                total={madeTotal}
                 color={c}
-                tip={`With fetch lands: ${made[c]} source${made[c] === 1 ? "" : "s"} make ${NAMES[c].toLowerCase()}${fetched[c] ? ` and ${fetched[c]} land${fetched[c] === 1 ? "" : "s"} can fetch it (the lighter part)` : ""}, of ${reachTotal} in all`}
+                tip={`The Mana bar (${made[c]} of ${madeTotal}, every mana source)${fetched[c] ? ` plus ${fetched[c]} fetch land${fetched[c] === 1 ? "" : "s"} that can find ${NAMES[c].toLowerCase()} (the lighter part)` : `; no fetch land finds ${NAMES[c].toLowerCase()}`}`}
               />
             )}
           </div>
@@ -77,7 +77,7 @@ export function ColorStats({ cards, identity }: { cards: DeckCard[]; /** The com
       <p className="muted small color-note">
         Costs: each color's share of the mana symbols on the cards (commander included; hybrid counts for each color{shown.includes("C") ? "; {C} counts as colorless" : ""}). Mana: its share of what the deck's
         mana sources can make: lands, rocks, dorks, rituals and Treasure makers.
-        {fetchTotal > 0 && " + Fetch: the same, counting each color your fetch lands (and lands like Evolving Wilds) can find; the lighter part is what fetching adds."}
+        {fetchTotal > 0 && " + Fetch: the Mana bar with your fetch lands (and lands like Evolving Wilds) added for each color they can find, the lighter part; on the same scale, so it can pass 100%."}
       </p>
     </section>
   );
