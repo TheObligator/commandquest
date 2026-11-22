@@ -638,6 +638,7 @@ option { background: var(--bg-2); color: var(--text); }
 .suggest-list li.active, .suggest-list li:hover { background: var(--line); }
 .suggest-hint { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; opacity: 0; }
 .suggest-list li.active .suggest-hint, .suggest-list li:hover .suggest-hint { opacity: 1; }
+.suggest-list li.suggest-note { cursor: default; padding: 6px 10px 4px; font-size: .8rem; color: var(--muted); background: none; }
 .suggest-all { border-top: 1px solid var(--line); margin-top: 4px; color: var(--accent-2); font-size: .88rem; }
 kbd { font-family: var(--font-mono, ui-monospace, monospace); font-size: .72rem; padding: 1px 5px; border: 1px solid var(--line); border-radius: 4px; color: var(--muted); }
 .search-help { display: grid; gap: 4px; }

@@ -10,6 +10,7 @@
 //  - Card data is cached in localStorage for 7 days (Scryfall asks for at least 24h).
 
 import type { DeckCard } from "../convex/model/deckRules";
+import { probes, rank } from "./didyoumean";
 import { choosePrinting, type Print, type PrintingPref } from "./printings";
 import { restrictToNames } from "./searchquery";
 
@@ -327,6 +328,20 @@ export async function autocomplete(q: string): Promise<string[]> {
   if (q.trim().length < 2) return [];
   const data = await getJson<{ data: string[] }>(`${API}/cards/autocomplete?${new URLSearchParams({ q })}`);
   return data.data;
+}
+
+/**
+ * Card names close to text that autocomplete found nothing for, closest first: Scryfall's fuzzy
+ * name match first, then autocomplete on shortened forms of the text, ranked by spelling distance.
+ */
+export async function didYouMean(q: string): Promise<string[]> {
+  const fuzzy = getJson<ScryCard>(`${API}/cards/named?${new URLSearchParams({ fuzzy: q })}`)
+    .then((c) => [remember(c).name])
+    .catch(() => [] as string[]);
+  const loose = probes(q).map((p) => autocomplete(p).catch(() => [] as string[]));
+  const [best, ...rest] = await Promise.all([fuzzy, ...loose]);
+  // Scryfall's own best guess leads even when it's spelled further off than our threshold allows.
+  return [...new Set([...best, ...rank(q, rest.flat())])].slice(0, 5);
 }
 
 /** One card by its exact name (front-face names work too); cached. */

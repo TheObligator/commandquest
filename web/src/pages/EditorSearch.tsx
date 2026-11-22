@@ -57,6 +57,8 @@ export function identityFilter(format: string, deck: DeckCard[], commanders: scr
 export function SearchBox(props: { onPick: (name: string) => void; onSubmit: (query: string) => void; autoFocus?: boolean; initial?: string; identity?: IdentityFilter | null }) {
   const [q, setQ] = useState(props.initial ?? "");
   const [names, setNames] = useState<string[]>([]);
+  /** Whether `names` are spelling guesses because nothing matched the text as typed. */
+  const [guessed, setGuessed] = useState(false);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const seq = useRef(0);
@@ -83,9 +85,17 @@ export function SearchBox(props: { onPick: (name: string) => void; onSubmit: (qu
     }
     const identity = props.identity;
     timer.current = window.setTimeout(async () => {
-      const found = identity ? await suggestWithin(value, identity).catch(() => []) : await scry.autocomplete(value).catch(() => []);
+      let found = identity ? await suggestWithin(value, identity).catch(() => []) : await scry.autocomplete(value).catch(() => []);
+      let guess = false;
+      if (!found.length && mine === seq.current) {
+        // Nothing by that spelling: offer the closest names instead ("did you mean").
+        found = await scry.didYouMean(value).catch(() => []);
+        if (identity && found.length) found = await keepWithin(found, identity).catch(() => []);
+        guess = true;
+      }
       if (mine === seq.current) {
         setNames(found.slice(0, 8));
+        setGuessed(guess);
         setOpen(true);
       }
     }, 200);
@@ -97,6 +107,7 @@ export function SearchBox(props: { onPick: (name: string) => void; onSubmit: (qu
     setActive(-1);
     setQ("");
     setNames([]);
+    setGuessed(false);
   }
 
   function onKey(e: React.KeyboardEvent) {
@@ -141,6 +152,11 @@ export function SearchBox(props: { onPick: (name: string) => void; onSubmit: (qu
       />
       {open && names.length > 0 && (
         <ul className="suggest-list" id="suggest-list" role="listbox">
+          {guessed && (
+            <li className="suggest-note" role="presentation">
+              No card names match “{q.trim()}”. Did you mean:
+            </li>
+          )}
           {names.map((n, i) => (
             <li
               key={n}
@@ -180,6 +196,15 @@ async function suggestWithin(text: string, identity: IdentityFilter): Promise<st
   const typed = text.trim().toLowerCase();
   const names = [...new Set(cards.filter((c) => !off.has(c.id)).map((c) => c.name))];
   return [...names.filter((n) => n.toLowerCase().startsWith(typed)), ...names.filter((n) => !n.toLowerCase().startsWith(typed))];
+}
+
+/** Those of `names` (exact card names) the deck's commanders allow, in the same order. */
+async function keepWithin(names: string[], identity: IdentityFilter): Promise<string[]> {
+  const exact = names.map((n) => `!"${n.replace(/"/g, "")}"`).join(" or ");
+  const { cards } = await scry.search(`(${exact}) ${identity.clause} -is:token`);
+  const off = identity.offIds(cards);
+  const ok = new Set(cards.filter((c) => !off.has(c.id)).map((c) => c.name));
+  return names.filter((n) => ok.has(n));
 }
 
 // ---- Full results page -----------------------------------------------------------------
