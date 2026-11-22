@@ -969,14 +969,17 @@ function DeckView(props: {
         const walkers = groupBy === "type" ? main.filter((c) => scry.primaryType(scry.cached(c)) === "Planeswalker") : [];
         const besideCommander = commanders.length > 0 && walkers.length > 0 && walkers.length <= MAX_WALKERS_BESIDE_COMMANDER;
 
-        type Group = CardGroup & { whole?: boolean; extra?: React.ReactNode };
+        type Group = CardGroup & { whole?: boolean; extra?: React.ReactNode; landBacks?: DeckCard[] };
         const head = (g: Group) => (
           <h4>
             {g.label}
             <span className="muted"> {sum(g.cards)}</span>
+            {g.landBacks && <LandBacks cards={g.landBacks} />}
           </h4>
         );
-        const groupsOf = (cards: DeckCard[]): Group[] => groupCards(cards, groupBy, scry.cached);
+        /** The board's groups; a lands group also counts the board's spells with a land on the back ("+ 2"). */
+        const groupsOf = (cards: DeckCard[]): Group[] =>
+          groupCards(cards, groupBy, scry.cached).map((g) => (g.key === "type:Land" || g.key === "lands" ? { ...g, landBacks: cards } : g));
         const commanderGroup: Group = { key: "commander", label: commanders.length > 1 ? "Commanders" : "Commander", cards: commanders, whole: true, extra: partnerSlot };
         /** The walkers group moved up next to the commander. */
         const walkersFirst = (groups: Group[]) => {
@@ -1166,8 +1169,6 @@ function Stats({ deck, count, onExtraColor }: { deck: Draft; count: (b?: Board) 
     return card ? [{ name: c.name, quantity: c.quantity, card }] : [];
   });
   const lands = main.filter((e) => scry.primaryType(e.card) === "Land").reduce((n, e) => n + e.quantity, 0);
-  const landBacks = main.filter((e) => playableLandBack(e.card));
-  const landBackCount = landBacks.reduce((n, e) => n + e.quantity, 0);
   const mainCount = main.reduce((n, e) => n + e.quantity, 0);
   const avg = deckAverages(main.map((e) => ({ quantity: e.quantity, cmc: e.card.cmc ?? 0, land: scry.primaryType(e.card) === "Land" })));
   const fmt = (n: number | undefined) => (n === undefined ? "—" : n.toFixed(2));
@@ -1209,22 +1210,7 @@ function Stats({ deck, count, onExtraColor }: { deck: Draft; count: (b?: Board) 
           <p>
             <span className="muted">Lands </span>
             {lands}
-            {landBackCount > 0 && (
-              <span className="land-backs" tabIndex={0} aria-label={`plus ${landBackCount} modal double-faced ${landBackCount === 1 ? "card" : "cards"} that can be played as a land`}>
-                + {landBackCount}
-                <span className="curve-tip land-backs-tip" role="tooltip">
-                  <strong>Can be played as a land</strong>
-                  <ul>
-                    {landBacks.map((e) => (
-                      <li key={e.name}>
-                        {e.quantity > 1 && <span className="muted">{e.quantity} × </span>}
-                        {e.name}
-                      </li>
-                    ))}
-                  </ul>
-                </span>
-              </span>
-            )}
+            <LandBacks cards={deck.cards.filter((c) => c.board === "main")} />
           </p>
           <p title="Average mana value of the main deck, counting lands as 0">
             <span className="muted">Average mana value </span>
@@ -1469,5 +1455,51 @@ function TagEditor({ card, suggestions, onChange, onClose }: { card: DeckCard; s
         </div>
       </form>
     </dialog>
+  );
+}
+
+/**
+ * "+ 2" after a land count: the modal double-faced cards among `cards` that can be played as a
+ * land from their back. Hovering (or focusing) it lists them. The list is placed on screen with
+ * fixed coordinates, so a group heading that clips its overflow doesn't cut it off.
+ */
+function LandBacks({ cards }: { cards: DeckCard[] }) {
+  const [at, setAt] = useState<{ x: number; y: number; below: boolean } | null>(null);
+  const backs = cards.flatMap((c) => {
+    const s = scry.cached(c);
+    return s && playableLandBack(s) ? [c] : [];
+  });
+  const n = backs.reduce((t, c) => t + c.quantity, 0);
+  if (!n) return null;
+  const show = (e: React.SyntheticEvent<HTMLElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const width = 300;
+    setAt({ x: Math.max(8, Math.min(r.left, innerWidth - width - 8)), y: r.top > 220 ? innerHeight - r.top + 8 : r.bottom + 8, below: r.top <= 220 });
+  };
+  return (
+    <span
+      className="land-backs"
+      tabIndex={0}
+      aria-label={`plus ${n} modal double-faced ${n === 1 ? "card" : "cards"} that can be played as a land`}
+      onMouseEnter={show}
+      onFocus={show}
+      onMouseLeave={() => setAt(null)}
+      onBlur={() => setAt(null)}
+    >
+      {" "}+ {n}
+      {at && (
+        <span className="curve-tip land-backs-tip" role="tooltip" style={at.below ? { left: at.x, top: at.y, bottom: "auto" } : { left: at.x, bottom: at.y, top: "auto" }}>
+          <strong>Can be played as a land</strong>
+          <ul>
+            {[...backs].sort((a, z) => a.name.localeCompare(z.name)).map((c) => (
+              <li key={`${c.board}|${c.name}`}>
+                {c.quantity > 1 && <span className="muted">{c.quantity} × </span>}
+                {c.name}
+              </li>
+            ))}
+          </ul>
+        </span>
+      )}
+    </span>
   );
 }
