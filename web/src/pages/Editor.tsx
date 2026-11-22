@@ -869,18 +869,18 @@ function DeckView(props: {
   /**
    * A card image. In the grid nothing ever covers the bottom of the card, where the artist and
    * copyright line is (Scryfall's image rules); in the overlapping views only the top of each card
-   * shows (the last one shows whole) and hovering previews the whole card. The options button
+   * shows (the last one shows whole). Hovering any card previews it whole. The options button
    * appears over the top-right corner on hover, the quantity over the top when there's more than one.
    */
-  const tile = (c: DeckCard, i: number) => tileOf(c, i, stacked);
-  /** `overlapped`: only the card's top shows, so hovering previews the whole card. */
-  const tileOf = (c: DeckCard, i: number, overlapped: boolean) => {
+  const tile = (c: DeckCard, i: number) => tileOf(c, i);
+  /** Hovering any card previews it whole, covered or not. */
+  const tileOf = (c: DeckCard, i: number) => {
     const s = scry.cached(c);
     const face = flips.face(s);
     const img = s && scry.imageUrl(s, "normal", face);
     return (
-      <div key={key(c, i)} className={`card-tile${s ? "" : " unresolved"}${brokenClass(c, s)}`} {...(overlapped ? preview.handlers(s, face) : {})} onContextMenu={onContextMenu(c)}>
-        <button className="tile-img" title={overlapped ? undefined : s ? `${c.name}: card details` : c.name} aria-label={`${c.quantity} × ${c.name}: card details`} disabled={!s} onClick={() => s && openDetails(c, s)}>
+      <div key={key(c, i)} className={`card-tile${s ? "" : " unresolved"}${brokenClass(c, s)}`} {...preview.handlers(s, face)} onContextMenu={onContextMenu(c)}>
+        <button className="tile-img" title={s ? undefined : c.name} aria-label={`${c.quantity} × ${c.name}: card details`} disabled={!s} onClick={() => s && openDetails(c, s)}>
           {img ? <img src={img} alt={c.name} loading="lazy" /> : <span className="noimg">{c.name}{missing.includes(c.name) ? " (not found)" : ""}</span>}
         </button>
         {/* The name as invisible text over the printed one, so the browser's find (Ctrl+F) finds and highlights cards. */}
@@ -910,7 +910,7 @@ function DeckView(props: {
   /** `tiled`: never overlap, even in Stacked and Spread (the commanders, so both show whole). */
   const plain = (cards: DeckCard[], extra?: React.ReactNode, tiled = false) => {
     if (view === "list") return <ul className="flat">{cards.map(row)}{extra && <li>{extra}</li>}</ul>;
-    if (view === "grid" || tiled) return <div className="card-tiles">{cards.map((c, i) => tileOf(c, i, false))}{extra}</div>;
+    if (view === "grid" || tiled) return <div className="card-tiles">{cards.map((c, i) => tileOf(c, i))}{extra}</div>;
     const cols: DeckCard[][] = [];
     for (let i = 0; i < cards.length; i += 10) cols.push(cards.slice(i, i + 10));
     return (
@@ -1000,7 +1000,7 @@ function DeckView(props: {
                       <div key={g.key} className="stack-group">
                         {head(g)}
                         {g.whole ? (
-                          <div className="card-tiles whole-col">{g.cards.map((c, j) => tileOf(c, j, false))}{g.extra}</div>
+                          <div className="card-tiles whole-col">{g.cards.map((c, j) => tileOf(c, j))}{g.extra}</div>
                         ) : (
                           stackBody(g.cards, slot.span)
                         )}
@@ -1029,7 +1029,7 @@ function DeckView(props: {
                   <div className={`stack-rows${g.whole ? " whole" : ""}`} style={{ gridTemplateColumns: `repeat(${across}, 150px)` }}>
                     {g.cards.map((c, i) => (
                       <div key={key(c, i)} className={i >= lastRow ? "row-cell last-row" : "row-cell"}>
-                        {tileOf(c, i, !g.whole && i < lastRow)}
+                        {tileOf(c, i)}
                       </div>
                     ))}
                     {g.extra && <div className="row-cell last-row">{g.extra}</div>}
