@@ -32,6 +32,16 @@ test("a type far taller than the rest goes to three columns, but never more", ()
   assert.deepEqual(columnSpans([30, 18, 5], 5), [2, 2, 1]);
 });
 
+test("types about as tall as each other split together when one split alone wouldn't shorten the row", () => {
+  // Instants 40 and Lands 20 in six columns: Instants to two (20) ties Lands, so both split: 14 and 10.
+  assert.deepEqual(columnSpans([40, 20], 6), [3, 2]);
+  // Two equal types both split.
+  assert.deepEqual(columnSpans([24, 24], 6), [2, 2]);
+  assert.deepEqual(columnSpans([20, 20, 3], 6), [2, 2, 1]);
+  // But only with room for both: one spare column can't shorten the row, so nothing splits.
+  assert.deepEqual(columnSpans([24, 24], 3), [1, 1]);
+});
+
 test("columnsOf splits a group into columns, the first ones taking any extra cards", () => {
   assert.deepEqual(columnsOf([1, 2, 3, 4, 5], 2), [[1, 2, 3], [4, 5]]);
   assert.deepEqual(columnsOf([1, 2, 3, 4, 5, 6, 7], 3), [[1, 2, 3], [4, 5, 6], [7]]);
