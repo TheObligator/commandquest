@@ -442,6 +442,8 @@ dialog.new-deck h3 { margin: 0; padding-right: 36px; }
 
 .preview { position: fixed; left: 0; top: 0; z-index: 50; pointer-events: none; width: 250px; }
 .preview img { width: 250px; aspect-ratio: 488 / 680; border-radius: 12px; box-shadow: var(--shadow); display: block; }
+/* A double-faced card: both faces side by side (the gap matches PREVIEW_GAP in useCardPreview). */
+.preview.two-faces { display: flex; gap: 8px; width: auto; }
 
 dialog.printings { width: min(1100px, calc(100vw - 32px)); max-height: 88vh; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow); overflow: hidden; position: fixed; }
 dialog.printings .dialog-head { padding-right: 44px; min-height: 30px; }
