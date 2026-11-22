@@ -656,8 +656,10 @@ kbd { font-family: var(--font-mono, ui-monospace, monospace); font-size: .72rem;
 .deck-drawer { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: flex; flex-direction: column; background: var(--panel); border-top: 1px solid var(--line); box-shadow: 0 -10px 30px rgb(0 0 0 / 45%); height: 52px; transition: height .2s ease; }
 .deck-drawer.open { height: min(62vh, calc(100vh - 80px)); }
 /* The deck's name, count and Show/Hide sit together in the middle of the bar. */
-.deck-drawer-bar { flex: 0 0 52px; position: relative; display: flex; justify-content: center; align-items: center; gap: 14px; padding: 0 16px; border: 0; background: var(--panel-2); color: var(--text); cursor: pointer; text-align: left; font: inherit; }
+.deck-drawer.dragging { transition: none; user-select: none; }
+.deck-drawer-bar { flex: 0 0 52px; position: relative; touch-action: none; display: flex; justify-content: center; align-items: center; gap: 14px; padding: 0 16px; border: 0; background: var(--panel-2); color: var(--text); cursor: pointer; text-align: left; font: inherit; }
 .deck-drawer-bar:hover { background: var(--line); }
+.deck-drawer-bar, .deck-drawer.dragging * { cursor: ns-resize; }
 .deck-drawer-grip { position: absolute; top: 5px; left: 50%; width: 40px; height: 4px; margin-left: -20px; border-radius: 2px; background: var(--muted); opacity: .6; }
 .deck-drawer-title { min-width: 0; display: flex; align-items: center; gap: 10px; }
 .deck-drawer-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

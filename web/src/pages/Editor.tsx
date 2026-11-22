@@ -1314,7 +1314,35 @@ function FolderSelect({ deckId }: { deckId?: Id<"decks"> }) {
  * slides the deck up over part of the screen, the same deck view as the editor (change counts,
  * move or remove cards, ...); clicking its top bar again (or Escape) lowers it.
  */
+const DRAWER_BAR = 52;
+const DRAWER_KEY = "cq.deckDrawerHeight";
+/** Dragged lower than this above the bar, the drawer closes. */
+const DRAWER_MIN_OPEN = 140;
+const drawerMax = () => window.innerHeight - 80;
+
+function savedDrawerHeight(): number | null {
+  try {
+    const n = Number(localStorage.getItem(DRAWER_KEY));
+    return n >= DRAWER_MIN_OPEN ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The deck in a drawer along the bottom of the search page. Click the bar to open or close it, or
+ * drag the bar to make it as tall or short as you like (dragging nearly all the way down closes
+ * it). The height you leave it at is remembered in this browser.
+ */
 function DeckDrawer({ open, onToggle, name, badge, badgeOk, children }: { open: boolean; onToggle: () => void; name: string; badge: string; badgeOk: boolean; children: React.ReactNode }) {
+  const [height, setHeight] = useState<number | null>(savedDrawerHeight);
+  /** While dragging: the live height. */
+  const [dragHeight, setDragHeight] = useState<number | null>(null);
+  const drag = useRef<{ y: number; from: number; moved: boolean } | null>(null);
+  /** A drag ends with a click on the bar; that click mustn't toggle the drawer. */
+  const swallowClick = useRef(false);
+  const ref = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -1323,9 +1351,63 @@ function DeckDrawer({ open, onToggle, name, badge, badgeOk, children }: { open: 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onToggle]);
+
+  const keep = (h: number) => {
+    setHeight(h);
+    try {
+      localStorage.setItem(DRAWER_KEY, String(Math.round(h)));
+    } catch {
+      // Storage blocked: lasts until the page reloads.
+    }
+  };
+
+  const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0) return;
+    drag.current = { y: e.clientY, from: open ? (ref.current?.getBoundingClientRect().height ?? DRAWER_BAR) : DRAWER_BAR, moved: false };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d) return;
+    if (!d.moved && Math.abs(e.clientY - d.y) < 5) return;
+    d.moved = true;
+    setDragHeight(Math.min(drawerMax(), Math.max(DRAWER_BAR, d.from + d.y - e.clientY)));
+  };
+  const onPointerUp = () => {
+    const d = drag.current;
+    drag.current = null;
+    if (!d?.moved || dragHeight === null) return;
+    swallowClick.current = true;
+    setDragHeight(null);
+    if (dragHeight < DRAWER_MIN_OPEN) {
+      if (open) onToggle();
+    } else {
+      keep(dragHeight);
+      if (!open) onToggle();
+    }
+  };
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (!open || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+    e.preventDefault();
+    const now = ref.current?.getBoundingClientRect().height ?? DRAWER_MIN_OPEN;
+    keep(Math.min(drawerMax(), Math.max(DRAWER_MIN_OPEN, now + (e.key === "ArrowUp" ? 60 : -60))));
+  };
+
+  const shown = dragHeight ?? (open ? height : null);
+  const style = shown !== null ? { height: `min(${shown}px, calc(100vh - 80px))` } : undefined;
   return (
-    <div className={`deck-drawer${open ? " open" : ""}`} role="region" aria-label="Your deck">
-      <button className="deck-drawer-bar" aria-expanded={open} onClick={onToggle} title={open ? "Lower the deck" : "Show your deck"}>
+    <div ref={ref} className={`deck-drawer${open ? " open" : ""}${dragHeight !== null ? " dragging" : ""}`} style={style} role="region" aria-label="Your deck">
+      <button
+        className="deck-drawer-bar"
+        aria-expanded={open}
+        onClick={() => (swallowClick.current ? (swallowClick.current = false) : onToggle())}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={() => ((drag.current = null), setDragHeight(null))}
+        onKeyDown={onKeyDown}
+        title={open ? "Click to lower the deck, or drag to resize (arrow keys too)" : "Click to show your deck, or drag it up"}
+      >
         <span className="deck-drawer-grip" aria-hidden="true" />
         <span className="deck-drawer-title">
           <strong>{name}</strong>
@@ -1333,7 +1415,7 @@ function DeckDrawer({ open, onToggle, name, badge, badgeOk, children }: { open: 
         </span>
         <span className="deck-drawer-toggle">{open ? "Hide deck ▾" : "Show deck ▴"}</span>
       </button>
-      {open && <div className="deck-drawer-body">{children}</div>}
+      {(open || (dragHeight ?? 0) > DRAWER_BAR) && <div className="deck-drawer-body">{children}</div>}
     </div>
   );
 }
