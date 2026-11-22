@@ -274,6 +274,8 @@ function DeckEditor({ initial }: { initial: Draft }) {
     toast(`Couldn't find ${d.name ?? d.fuzzy ?? "that card"} on Scryfall`, "error");
   }
 
+  const dropTo = useCardDrops((d, b) => void addDropped(d, b));
+
   // Entries are found by board and name, not by object: every change copies the cards, so an entry
   // from an earlier render (two quick clicks) would otherwise not be found.
   const entryIndex = (cards: DeckCard[], target: DeckCard) => cards.findIndex((c) => c.board === target.board && c.name === target.name);
@@ -565,7 +567,7 @@ function DeckEditor({ initial }: { initial: Draft }) {
       onMakeCommander={makeCommander}
       onPrinting={setPrinting}
       onAddCommander={(c) => void addCard(c, "commander")}
-      onDropCard={(d, b) => void addDropped(d, b)}
+      dropTo={dropTo}
       onExtraColor={(c) => change((d) => ({ ...d, extraColor: c }))}
       onBracket={(b) => change((d) => ({ ...d, bracket: b }))}
       onBracketTags={(t) => change((d) => ({ ...d, bracketTags: t.length ? t : undefined }))}
@@ -736,6 +738,75 @@ function ImportPane(props: {
   );
 }
 
+// ---- Cards dragged in -------------------------------------------------------------------
+
+/** A drag that started on this page (a card's image, a link): not a card coming in. */
+let dragFromPage = false;
+window.addEventListener("dragstart", () => (dragFromPage = true), true);
+window.addEventListener("dragend", () => (dragFromPage = false), true);
+// dragend never comes when the dragged element went away mid-drag; the pointer moving again
+// (it doesn't during a drag) means the drag is over.
+window.addEventListener("pointermove", () => (dragFromPage = false), true);
+
+/** Text boxes keep their usual drop (the text goes in). */
+const isTextBox = (t: EventTarget | null) => t instanceof HTMLElement && (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t.isContentEditable);
+
+/**
+ * Where a drop at `target` (height `y`) goes: the sideboard or Considering when on them, Considering
+ * when below the main deck, otherwise (anywhere else on the page too) the main deck.
+ */
+function dropBoardAt(target: EventTarget | null, y: number): Board {
+  const el = target instanceof Element ? target : null;
+  const b = el?.closest<HTMLElement>("[data-board]")?.dataset.board;
+  if (b === "side" || b === "maybe") return b;
+  if (b) return "main";
+  const main = el?.closest(".deck-view")?.querySelector('[data-board="main"], [data-board="deck"]');
+  return main && y > main.getBoundingClientRect().bottom ? "maybe" : "main";
+}
+
+/**
+ * Cards dragged onto the editor from another site (EDHREC, Scryfall) or the search results. The
+ * whole page takes the drop, so the browser never opens the dragged link instead. Returns the
+ * board the card would land on while one is dragged over, else null.
+ */
+function useCardDrops(onDrop: (d: DroppedCard, board: Board) => void): Board | null {
+  const [dropTo, setDropTo] = useState<Board | null>(null);
+  const onDropRef = useRef(onDrop);
+  onDropRef.current = onDrop;
+  useEffect(() => {
+    const incoming = (e: DragEvent) => !dragFromPage && !!e.dataTransfer && looksLikeCard(e.dataTransfer.types) && !isTextBox(e.target);
+    const over = (e: DragEvent) => {
+      if (!incoming(e)) return setDropTo(null);
+      e.preventDefault();
+      e.dataTransfer!.dropEffect = "copy";
+      setDropTo(dropBoardAt(e.target, e.clientY));
+    };
+    // Leaving the window: relatedTarget is null.
+    const leave = (e: DragEvent) => void (e.relatedTarget === null && setDropTo(null));
+    const drop = (e: DragEvent) => {
+      setDropTo(null);
+      if (!incoming(e)) return;
+      e.preventDefault();
+      const dt = e.dataTransfer!;
+      const d = readDrop({ html: dt.getData("text/html"), uris: dt.getData("text/uri-list"), text: dt.getData("text/plain") }, (h) => new DOMParser().parseFromString(h, "text/html"));
+      if (d) onDropRef.current(d, dropBoardAt(e.target, e.clientY));
+      else toast("That doesn't look like a card", "error");
+    };
+    // Safari wants dragenter turned down too before it allows the drop.
+    window.addEventListener("dragenter", over);
+    window.addEventListener("dragover", over);
+    window.addEventListener("dragleave", leave);
+    window.addEventListener("drop", drop);
+    return () => {
+      window.removeEventListener("dragenter", over);
+      window.removeEventListener("dragover", over);
+      window.removeEventListener("dragleave", leave);
+      window.removeEventListener("drop", drop);
+    };
+  }, []);
+  return dropTo;
+}
+
 // ---- The deck -------------------------------------------------------------------------
 
 function DeckView(props: {
@@ -748,7 +819,8 @@ function DeckView(props: {
   onMakeCommander: (c: DeckCard, partner: boolean) => void;
   onPrinting: (c: DeckCard, p: scry.ScryCard) => void;
   onAddCommander: (c: scry.ScryCard) => void;
-  onDropCard: (d: DroppedCard, board: Board) => void;
+  /** Where a card being dragged in would go (useCardDrops); null when nothing is. */
+  dropTo: Board | null;
   onExtraColor: (color: string | undefined) => void;
   onBracket: (b: number | undefined) => void;
   onBracketTags: (tags: string[]) => void;
@@ -776,46 +848,7 @@ function DeckView(props: {
   const [measure, stackCols] = useStackColumns();
   const support = useCardSupport();
 
-  // ---- Cards dragged in (from EDHREC, Scryfall, the search results) ----
-  // They go to the main deck, or to Considering when dropped below the main deck (or to the
-  // sideboard when dropped on it).
-  /** Where the card being dragged over the deck would go; null when nothing is. */
-  const [dropTo, setDropTo] = useState<Board | null>(null);
-  /** A drag that started on this deck's own cards isn't a new card. */
-  const dragFromHere = useRef(false);
-  const viewRef = useRef<HTMLElement>(null);
-  const dropBoardAt = (target: EventTarget | null, y: number): Board => {
-    const b = (target instanceof Element ? target.closest<HTMLElement>("[data-board]") : null)?.dataset.board;
-    if (b === "side" || b === "maybe") return b;
-    if (b) return "main";
-    const main = viewRef.current?.querySelector('[data-board="main"], [data-board="deck"]');
-    return main && y > main.getBoundingClientRect().bottom ? "maybe" : "main";
-  };
-  const dragIn = (e: React.DragEvent) => !dragFromHere.current && looksLikeCard(e.dataTransfer.types);
-  const dropHandlers = {
-    onDragStart: () => void (dragFromHere.current = true),
-    onDragEnd: () => void (dragFromHere.current = false),
-    onDragOver: (e: React.DragEvent) => {
-      if (!dragIn(e)) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "copy";
-      const b = dropBoardAt(e.target, e.clientY);
-      if (b !== dropTo) setDropTo(b);
-    },
-    onDragLeave: (e: React.DragEvent) => {
-      if (!(e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget))) setDropTo(null);
-    },
-    onDrop: (e: React.DragEvent) => {
-      if (!dragIn(e)) return;
-      e.preventDefault();
-      setDropTo(null);
-      const board = dropBoardAt(e.target, e.clientY);
-      const dt = e.dataTransfer;
-      const d = readDrop({ html: dt.getData("text/html"), uris: dt.getData("text/uri-list"), text: dt.getData("text/plain") }, (h) => new DOMParser().parseFromString(h, "text/html"));
-      if (d) props.onDropCard(d, board);
-      else toast("That doesn't look like a card", "error");
-    },
-  };
+  const { dropTo } = props;
 
   const warnings = useMemo(() => deckWarnings(deck, missing, support), [deck, missing, support]);
   /** The tile's outline class for a card that won't work: red when it's missing, amber for a known issue. */
@@ -832,7 +865,7 @@ function DeckView(props: {
 
   if (!deck.cards.length) {
     return (
-      <section ref={viewRef} className={`panel deck-view${dropTo ? " dropping" : ""}`} {...dropHandlers}>
+      <section className={`panel deck-view${dropTo ? " dropping" : ""}`}>
         <div className="empty">
           <h3>This deck is empty</h3>
           <p>Search for cards on the left, switch to Import to bring in a list, or drag cards in from EDHREC.</p>
@@ -1016,7 +1049,7 @@ function DeckView(props: {
   ) : undefined;
 
   return (
-    <section ref={viewRef} className={`panel deck-view${dropTo ? " dropping" : ""}`} {...dropHandlers}>
+    <section className={`panel deck-view${dropTo ? " dropping" : ""}`}>
       {warnings.length > 0 && <ul className="warnings">{warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
       {deck.format === "conquest" && (
         <p className="format-note muted small">
