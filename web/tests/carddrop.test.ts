@@ -43,8 +43,9 @@ test("plain text is a card name; other links and junk are nothing", () => {
   assert.equal(readDrop({ uris: "javascript:alert(1)" }), null);
 });
 
-test("only text drags count, not files", () => {
+test("links and text count, files alone don't", () => {
   assert.equal(looksLikeCard(["text/uri-list", "text/html"]), true);
+  // Chromium dragging an image inside a link (an EDHREC card).
+  assert.equal(looksLikeCard(["text/uri-list", "text/html", "Files", "text/plain"]), true);
   assert.equal(looksLikeCard(["Files"]), false);
-  assert.equal(looksLikeCard(["Files", "text/plain"]), false);
 });

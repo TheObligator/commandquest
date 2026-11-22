@@ -14,9 +14,13 @@ export interface DroppedCard {
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
-/** The drag carries something we might read a card from (not files). */
+/**
+ * The drag carries something we might read a card from: a link, markup or text. Chromium adds the
+ * image itself as a file when an image (an EDHREC card) is dragged, so files alongside are fine;
+ * only files alone (from the desktop) aren't a card.
+ */
 export function looksLikeCard(types: readonly string[]): boolean {
-  return !types.includes("Files") && types.some((t) => t === "text/uri-list" || t === "text/html" || t === "text/plain");
+  return types.some((t) => t === "text/uri-list" || t === "text/html" || t === "text/plain");
 }
 
 /** Reads one URL: a card image named by its Scryfall id, an EDHREC card page, a Scryfall card page. */
