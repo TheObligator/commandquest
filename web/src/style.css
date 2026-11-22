@@ -649,13 +649,13 @@ kbd { font-family: var(--font-mono, ui-monospace, monospace); font-size: .72rem;
 .search-page { margin-bottom: 64px; }
 .deck-drawer { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: flex; flex-direction: column; background: var(--panel); border-top: 1px solid var(--line); box-shadow: 0 -10px 30px rgb(0 0 0 / 45%); height: 52px; transition: height .2s ease; }
 .deck-drawer.open { height: min(62vh, calc(100vh - 80px)); }
-/* Three columns, so the deck's name and count sit in the middle of the bar whatever the toggle's width. */
-.deck-drawer-bar { flex: 0 0 52px; position: relative; display: grid; grid-template-columns: 1fr minmax(0, auto) 1fr; align-items: center; gap: 12px; padding: 0 16px; border: 0; background: var(--panel-2); color: var(--text); cursor: pointer; text-align: left; font: inherit; }
+/* The deck's name, count and Show/Hide sit together in the middle of the bar. */
+.deck-drawer-bar { flex: 0 0 52px; position: relative; display: flex; justify-content: center; align-items: center; gap: 14px; padding: 0 16px; border: 0; background: var(--panel-2); color: var(--text); cursor: pointer; text-align: left; font: inherit; }
 .deck-drawer-bar:hover { background: var(--line); }
 .deck-drawer-grip { position: absolute; top: 5px; left: 50%; width: 40px; height: 4px; margin-left: -20px; border-radius: 2px; background: var(--muted); opacity: .6; }
-.deck-drawer-title { grid-column: 2; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.deck-drawer-title { min-width: 0; display: flex; align-items: center; gap: 10px; }
 .deck-drawer-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.deck-drawer-toggle { grid-column: 3; justify-self: end; white-space: nowrap; color: var(--muted); font-size: .9rem; }
+.deck-drawer-toggle { flex: none; white-space: nowrap; color: var(--muted); font-size: .9rem; }
 .deck-drawer-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px 16px 20px; }
 .deck-drawer-body .deck-view { border: 0; padding: 0; min-height: 0; background: none; }
 .search-page > p { margin: 0; }
