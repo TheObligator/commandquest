@@ -13,6 +13,7 @@ import { toast } from "../dom";
 import { CardMenu, type MenuItem, type MenuSection } from "../components/CardMenu";
 import { ContextMenu, type ContextMenuState } from "../components/ContextMenu";
 import { ColorStats } from "../components/ColorStats";
+import { DeckBar } from "../components/DeckBar";
 import { DeckBracket } from "../components/DeckBracket";
 import { deckAverages, playableLandBack } from "../deckstats";
 import { FORMATS } from "../deckFormats";
@@ -635,6 +636,9 @@ function DeckEditor({ initial }: { initial: Draft }) {
           </aside>
           {deckView}
         </div>
+      )}
+      {searchQuery === null && deck.cards.length > 0 && (
+        <DeckBar cards={deck.cards} count={badge} countOk={badgeOk} bracket={deck.bracket} commander={deck.format === "commander"} />
       )}
       {searchQuery !== null && (
         <DeckDrawer open={deckOpen} onToggle={() => setDeckOpen((o) => !o)} name={deck.name} badge={badge} badgeOk={badgeOk}>

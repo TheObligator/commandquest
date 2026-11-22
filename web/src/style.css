@@ -903,3 +903,20 @@ dialog.new-deck.tag-editor { width: min(460px, calc(100vw - 32px)); }
 .type-icon.t-sorcery { color: var(--type-sorcery); }
 .type-icon.t-artifact { color: var(--type-artifact); }
 .type-icon.t-enchantment { color: var(--type-enchantment); }
+
+/* The bar along the bottom of the deck editor: count, bracket, cards of each type. */
+.deck-bar { position: sticky; bottom: 0; z-index: 35; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; margin-top: 16px; padding: 8px 16px; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius) var(--radius) 0 0; box-shadow: 0 -8px 24px rgb(0 0 0 / 35%); font-size: .9rem; }
+.deck-bar-count { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--danger); }
+.deck-bar-count[data-ok="true"] { color: var(--ok); }
+.deck-bar-types { display: flex; flex-wrap: wrap; gap: 4px 16px; list-style: none; margin: 0 0 0 auto; padding: 0; }
+.deck-bar-types > li { position: relative; display: flex; align-items: center; gap: 5px; padding: 2px 4px; border-radius: 6px; cursor: default; font-variant-numeric: tabular-nums; }
+.deck-bar-types > li.none { opacity: .4; }
+.deck-bar-types > li:not(.none):hover, .deck-bar-types > li:focus-visible { background: var(--panel); outline: none; }
+.deck-bar-tip { display: none; position: absolute; bottom: calc(100% + 8px); right: 0; z-index: 40; width: max-content; min-width: 160px; max-width: 260px; max-height: 50vh; overflow: auto; padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+.deck-bar-types > li:hover .deck-bar-tip, .deck-bar-types > li:focus-visible .deck-bar-tip { display: block; }
+.deck-bar-tip ul { list-style: none; margin: 6px 0 0; padding: 0; }
+.deck-bar-tip li { display: flex; justify-content: space-between; gap: 16px; padding: 1px 0; }
+.deck-bar-tip p { margin: 4px 0 0; }
+@media (max-width: 600px) {
+  .deck-bar-types { margin-left: 0; }
+}
