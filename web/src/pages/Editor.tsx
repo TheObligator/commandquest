@@ -775,11 +775,36 @@ function DeckView(props: {
     );
   }
 
+  /**
+   * Where a card can go from its board: the other boards, and in Commander-style decks "Make
+   * commander" (and "Add as second commander" next to a partner) for a card that can lead the deck,
+   * which then replaces a plain move to Commander.
+   */
+  const destinations = (c: DeckCard, s: scry.ScryCard | undefined) => {
+    const cmdrs = deck.cards.filter((x) => x.board === "commander");
+    const cmdrCards = cmdrs.map((x) => scry.cached(x));
+    const commanderFormat = deck.format === "commander" || deck.format === "conquest";
+    const eligible = commanderFormat && c.board !== "commander" && !!s && canCommand(s, deck.format);
+    const asPartner = eligible && cmdrs.length === 1 && !!cmdrCards[0] && canPair(cmdrCards[0], s!);
+    const commander: { label: string; run: () => void }[] = !eligible
+      ? []
+      : [
+          ...(asPartner ? [{ label: "★ Add as second commander", run: () => props.onMakeCommander(c, true) }] : []),
+          { label: cmdrs.length ? (cmdrs.length > 1 ? "★ Make commander (replaces both)" : `★ Make commander (replaces ${cmdrs[0].name})`) : "★ Make commander", run: () => props.onMakeCommander(c, false) },
+        ];
+    const moves = BOARDS.filter((b) => b.id !== c.board && !(b.id === "commander" && eligible)).map((b) => ({ board: b, run: () => props.onMove(c, b.id) }));
+    return { commander, moves };
+  };
+
   const openDetails = (c: DeckCard, s: scry.ScryCard) => {
     preview.hide();
+    const { commander, moves } = destinations(c, s);
     showCardDetails(s, [
+      ...moves.map((m) => ({ label: m.board.id === "commander" ? "Move to commander" : `Move to ${m.board.label.toLowerCase()}`, run: m.run })),
+      ...commander,
       { label: "Choose printing…", run: () => setPrintingsFor(c) },
-      { label: "Remove from deck", run: () => props.onQty(c, 0) },
+      { label: "Add tags…", run: () => setTagging({ board: c.board, name: c.name }) },
+      { label: c.quantity > 1 ? `Remove all ${c.quantity}` : "Remove from deck", run: () => props.onQty(c, 0), danger: true },
     ]);
   };
 
@@ -797,17 +822,8 @@ function DeckView(props: {
    */
   const menuSections = (c: DeckCard, s: scry.ScryCard | undefined): MenuSection[] => {
     const boardLabel = BOARDS.find((b) => b.id === c.board)!.label;
-    const cmdrs = deck.cards.filter((x) => x.board === "commander");
-    const cmdrCards = cmdrs.map((x) => scry.cached(x));
-    const commanderFormat = deck.format === "commander" || deck.format === "conquest";
-    const eligible = commanderFormat && c.board !== "commander" && !!s && canCommand(s, deck.format);
-    const asPartner = eligible && cmdrs.length === 1 && !!cmdrCards[0] && canPair(cmdrCards[0], s!);
-    const commanderItems: MenuItem[] = !eligible
-      ? []
-      : [
-          ...(asPartner ? [{ label: "★ Add as second commander", onSelect: () => props.onMakeCommander(c, true) }] : []),
-          { label: cmdrs.length ? (cmdrs.length > 1 ? "★ Make commander (replaces both)" : `★ Make commander (replaces ${cmdrs[0].name})`) : "★ Make commander", onSelect: () => props.onMakeCommander(c, false) },
-        ];
+    const { commander, moves } = destinations(c, s);
+    const commanderItems: MenuItem[] = commander.map((x) => ({ label: x.label, onSelect: x.run }));
     const sections: MenuSection[] = [
       {
         title: `${c.quantity} × ${c.name} · ${boardLabel}`,
@@ -828,7 +844,7 @@ function DeckView(props: {
       { items: commanderItems },
       {
         title: "Move to",
-        items: BOARDS.filter((b) => b.id !== c.board && !(b.id === "commander" && eligible)).map((b) => ({ label: b.label, onSelect: () => props.onMove(c, b.id) })),
+        items: moves.map((m) => ({ label: m.board.label, onSelect: m.run })),
       },
       { items: [{ label: c.quantity > 1 ? `Remove all ${c.quantity}` : "Remove from deck", danger: true, onSelect: () => props.onQty(c, 0) }] },
     ];

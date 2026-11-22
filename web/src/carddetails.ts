@@ -14,6 +14,8 @@ const LEGALITY_LABEL: Record<string, string> = { legal: "Legal", not_legal: "Not
 export interface CardDetailAction {
   label: string;
   run: () => void;
+  /** Shown in red (removing the card). */
+  danger?: boolean;
 }
 
 export function showCardDetails(card: ScryCard, actions: CardDetailAction[] = []) {
@@ -57,7 +59,7 @@ export function showCardDetails(card: ScryCard, actions: CardDetailAction[] = []
         ),
         rulingsSection(card),
         h("div", { class: "detail-actions" },
-          ...actions.map((a) => h("button", { class: "btn small", onclick: () => { a.run(); dialog.close(); } }, a.label)),
+          ...actions.map((a) => h("button", { class: a.danger ? "btn small ghost danger" : "btn small", onclick: () => { a.run(); dialog.close(); } }, a.label)),
           h("a", { class: "btn ghost small", href: card.scryfall_uri, target: "_blank", rel: "noopener" }, "View on Scryfall ↗"),
         ),
       ),
