@@ -30,3 +30,14 @@ export function deckAverages(entries: StatEntry[]): {
     landsPerHand: cards ? (Math.min(OPENING_HAND, cards) * lands) / cards : undefined,
   };
 }
+
+/**
+ * True for a modal double-faced card whose front isn't a land but whose back is, like Emeria's
+ * Call // Emeria, Shattered Skyclave: it can be played as a land. Transforming cards don't count,
+ * since their land side can't be played from hand.
+ */
+export function playableLandBack(c: { layout?: string; type_line?: string; card_faces?: { type_line?: string }[] }): boolean {
+  if (c.layout !== "modal_dfc" || !c.card_faces || c.card_faces.length < 2) return false;
+  const isLand = (t?: string) => /\bLand\b/.test((t ?? "").split("—")[0]);
+  return !isLand(c.card_faces[0].type_line) && c.card_faces.slice(1).some((f) => isLand(f.type_line));
+}

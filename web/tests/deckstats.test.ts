@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { deckAverages } from "../src/deckstats.ts";
+import { deckAverages, playableLandBack } from "../src/deckstats.ts";
 
 test("deckAverages: mana value with and without lands, and lands per opening hand", () => {
   const a = deckAverages([
@@ -19,4 +19,15 @@ test("deckAverages handles empty and all-land decks", () => {
   const lands = deckAverages([{ quantity: 4, cmc: 0, land: true }]);
   assert.equal(lands.withoutLands, undefined);
   assert.equal(lands.landsPerHand, 4, "a deck under 7 cards draws all of it");
+});
+
+test("playableLandBack counts modal double-faced spells with a land back, not transforming cards", () => {
+  const mdfc = (front: string, back: string, layout = "modal_dfc") => ({ layout, card_faces: [{ type_line: front }, { type_line: back }] });
+  assert.equal(playableLandBack(mdfc("Sorcery", "Land")), true, "Emeria's Call");
+  assert.equal(playableLandBack(mdfc("Legendary Creature — God", "Legendary Land")), true, "Valki-style god with a land back");
+  assert.equal(playableLandBack(mdfc("Land", "Land")), false, "pathways are already lands");
+  assert.equal(playableLandBack(mdfc("Legendary Creature — Vampire", "Legendary Land", "transform")), false, "transforms into a land");
+  assert.equal(playableLandBack(mdfc("Instant", "Creature — Elf")), false);
+  assert.equal(playableLandBack({ layout: "normal", type_line: "Land" }), false);
+  assert.equal(playableLandBack(mdfc("Creature — Island Elemental", "Sorcery")), false, "subtypes don't count");
 });

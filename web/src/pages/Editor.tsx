@@ -13,7 +13,7 @@ import { CardMenu, type MenuItem, type MenuSection } from "../components/CardMen
 import { ContextMenu, type ContextMenuState } from "../components/ContextMenu";
 import { ColorStats } from "../components/ColorStats";
 import { DeckBracket } from "../components/DeckBracket";
-import { deckAverages } from "../deckstats";
+import { deckAverages, playableLandBack } from "../deckstats";
 import { FORMATS } from "../deckFormats";
 import { DeckTokens } from "../components/DeckTokens";
 import { FlipButton, useFlips } from "../components/FlipButton";
@@ -1059,6 +1059,8 @@ function Stats({ deck, count, onExtraColor }: { deck: Draft; count: (b?: Board) 
     return card ? [{ name: c.name, quantity: c.quantity, card }] : [];
   });
   const lands = main.filter((e) => scry.primaryType(e.card) === "Land").reduce((n, e) => n + e.quantity, 0);
+  const landBacks = main.filter((e) => playableLandBack(e.card));
+  const landBackCount = landBacks.reduce((n, e) => n + e.quantity, 0);
   const mainCount = main.reduce((n, e) => n + e.quantity, 0);
   const avg = deckAverages(main.map((e) => ({ quantity: e.quantity, cmc: e.card.cmc ?? 0, land: scry.primaryType(e.card) === "Land" })));
   const fmt = (n: number | undefined) => (n === undefined ? "—" : n.toFixed(2));
@@ -1097,7 +1099,26 @@ function Stats({ deck, count, onExtraColor }: { deck: Draft; count: (b?: Board) 
               </label>
             </p>
           )}
-          <p><span className="muted">Lands </span>{lands}</p>
+          <p>
+            <span className="muted">Lands </span>
+            {lands}
+            {landBackCount > 0 && (
+              <span className="land-backs" tabIndex={0} aria-label={`plus ${landBackCount} modal double-faced ${landBackCount === 1 ? "card" : "cards"} that can be played as a land`}>
+                + {landBackCount}
+                <span className="curve-tip land-backs-tip" role="tooltip">
+                  <strong>Can be played as a land</strong>
+                  <ul>
+                    {landBacks.map((e) => (
+                      <li key={e.name}>
+                        {e.quantity > 1 && <span className="muted">{e.quantity} × </span>}
+                        {e.name}
+                      </li>
+                    ))}
+                  </ul>
+                </span>
+              </span>
+            )}
+          </p>
           <p title="Average mana value of the main deck, counting lands as 0">
             <span className="muted">Average mana value </span>
             {fmt(avg.withLands)}
