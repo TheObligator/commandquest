@@ -218,7 +218,7 @@ label.inline select { width: auto; padding: 5px 8px; }
 /* Clear of the "Not playable" mark, which sits along the bottom left. */
 .card-tile:has(.tile-nw) .flip-btn, .search-card:has(.tile-nw) .flip-btn { top: calc(127cqw - 1.6em - max(30px, 16cqw) - 6px); }
 /* Overlapping stacks: each card's button stays under the next card, like the rest of the card. */
-.stack .flip-btn { z-index: auto; }
+:is(.stack, .stack-rows) .flip-btn { z-index: auto; }
 
 /* ---- Deck folders ---- */
 .folder-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
@@ -419,8 +419,8 @@ dialog.new-deck h3 { margin: 0; padding-right: 36px; }
 .gc-badge.tile-gc { position: absolute; top: 7px; right: 7px; z-index: 1; background: rgb(14 16 22 / 88%); }
 .card-tile:hover .tile-gc, .card-tile:has(.tile-menu.open) .tile-gc { opacity: 0; pointer-events: none; }
 .search-card:has(.in-deck-badge) .tile-gc { top: 34px; }
-.stack .tile-gc { top: 3.5cqw; right: 4cqw; font-size: max(.58rem, 5.5cqw); padding: 0 4px; line-height: 1.6; }
-.stack .card-tile:has(.tile-qty) .tile-gc { right: calc(4cqw + 3.4em); }
+:is(.stack, .stack-rows) .tile-gc { top: 3.5cqw; right: 4cqw; font-size: max(.58rem, 5.5cqw); padding: 0 4px; line-height: 1.6; }
+:is(.stack, .stack-rows) .card-tile:has(.tile-qty) .tile-gc { right: calc(4cqw + 3.4em); }
 .qty { display: inline-flex; align-items: center; gap: 2px; font-variant-numeric: tabular-nums; min-width: 58px; }
 .qty > span { min-width: 1.6em; text-align: center; }
 .qty-input { width: 2.4em; padding: 1px 2px; text-align: center; font: inherit; font-variant-numeric: tabular-nums; color: inherit; background: none; border: 1px solid transparent; border-radius: 4px; }
@@ -573,15 +573,15 @@ dialog.card-detail.two-faces { width: min(1180px, calc(100vw - 32px)); }
 /* The editor's cards in the overlapping views: only each card's top strip shows, so the quantity
    and "not playable" mark sit on its right (like the precon stacks) and give way to the options
    button on hover. A hovered card is outlined, not lifted. */
-.stack .card-tile .tile-img img { box-shadow: 0 -2px 6px rgb(0 0 0 / 35%); transition: none; }
-.stack .card-tile .tile-img:hover:not(:disabled) img { transform: none; box-shadow: 0 -2px 6px rgb(0 0 0 / 35%); outline: 2px solid var(--accent-2); outline-offset: -1px; }
-.stack .card-tile .noimg { display: flex; align-items: flex-start; width: 100%; aspect-ratio: 488 / 680; padding: 6% 7%; border: 1px solid var(--line); border-radius: 4.75% / 3.5%; background: var(--panel-2); font-size: .8rem; text-align: left; }
-.stack .tile-qty { top: 3.5cqw; left: auto; right: 4cqw; padding: 0 6px; font-size: max(.7rem, 7cqw); line-height: 1.5; }
+:is(.stack, .stack-rows) .card-tile .tile-img img { box-shadow: 0 -2px 6px rgb(0 0 0 / 35%); transition: none; }
+:is(.stack, .stack-rows) .card-tile .tile-img:hover:not(:disabled) img { transform: none; box-shadow: 0 -2px 6px rgb(0 0 0 / 35%); outline: 2px solid var(--accent-2); outline-offset: -1px; }
+:is(.stack, .stack-rows) .card-tile .noimg { display: flex; align-items: flex-start; width: 100%; aspect-ratio: 488 / 680; padding: 6% 7%; border: 1px solid var(--line); border-radius: 4.75% / 3.5%; background: var(--panel-2); font-size: .8rem; text-align: left; }
+:is(.stack, .stack-rows) .tile-qty { top: 3.5cqw; left: auto; right: 4cqw; padding: 0 6px; font-size: max(.7rem, 7cqw); line-height: 1.5; }
 /* The "not playable" mark stays at the card's foot, under the next card: only the outline shows on a covered card. */
-.stack .tile-nw { z-index: auto; font-size: max(.6rem, 6cqw); padding: 0 5px; line-height: 1.6; }
-.stack .card-tile.not-playable .tile-img img, .stack .card-tile.known-issue .tile-img img { outline-offset: -2px; }
-.stack .tile-menu { top: 3cqw; right: 3cqw; }
-.stack .card-tile:hover .tile-qty, .stack .card-tile:has(.tile-menu.open) .tile-qty { opacity: 0; pointer-events: none; }
+:is(.stack, .stack-rows) .tile-nw { z-index: auto; font-size: max(.6rem, 6cqw); padding: 0 5px; line-height: 1.6; }
+:is(.stack, .stack-rows) .card-tile.not-playable .tile-img img, :is(.stack, .stack-rows) .card-tile.known-issue .tile-img img { outline-offset: -2px; }
+:is(.stack, .stack-rows) .tile-menu { top: 3cqw; right: 3cqw; }
+:is(.stack, .stack-rows) .card-tile:hover .tile-qty, :is(.stack, .stack-rows) .card-tile:has(.tile-menu.open) .tile-qty { opacity: 0; pointer-events: none; }
 
 /* Card options: "⋯" button + dark popup menu (replaces the native <select>) */
 .menu-btn { width: 28px; height: 24px; padding: 0; border-radius: 6px; border: 1px solid transparent; background: none; color: var(--muted); cursor: pointer; font-size: 1.1rem; line-height: 1; opacity: 0; transition: opacity .1s; }
@@ -781,6 +781,8 @@ table.hotkeys { width: 100%; border-collapse: collapse; }
 .glance-list { margin-top: 10px; padding: 10px 14px; border-radius: 8px; background: var(--bg-2); border: 1px solid var(--line); }
 .glance-list p { margin: 0 0 6px; }
 .glance-list ul { columns: 220px; column-gap: 24px; margin: 0; padding-left: 18px; font-size: .9rem; }
+.glance-list li { width: fit-content; cursor: default; }
+.glance-list li:hover { color: var(--accent-2); }
 .glance-source { margin: 8px 0 0; }
 .glance-panel { margin-bottom: 8px; }
 
@@ -816,3 +818,33 @@ table.hotkeys { width: 100%; border-collapse: collapse; }
 .partner-slot.tile .partner-plus { font-size: 2.4rem; line-height: 1; }
 .partner-slot.row { width: 100%; justify-content: flex-start; padding: 4px 10px; border-radius: 6px; font-size: .92rem; }
 .partner-picker .partner-more { grid-column: 1 / -1; }
+
+/* Deck editor: view and grouping controls over the cards. */
+.deck-controls { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px 16px; margin-top: 12px; }
+.deck-controls .view-toggle { float: none; margin: 0; }
+.group-by { display: flex; align-items: center; gap: 8px; font-size: .9rem; }
+.group-by select { padding: 5px 8px; }
+
+/* Stacked: small groups share a column under the one before (src/stackLayout.ts packStacks). */
+.stack-slot { display: flex; flex-direction: column; gap: 14px; }
+.stack-group h4 { font-size: .85rem; text-transform: uppercase; letter-spacing: .06em; color: var(--accent-2); margin: 6px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-tiles.whole-col { grid-template-columns: 1fr; gap: 10px; }
+
+/* Spread: each group's cards across the page; every row covers all but the name and art of the
+   row above (55% of a card shows), the last row shows whole. Small groups sit side by side. */
+.row-groups { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px 28px; }
+.row-group { max-width: 100%; min-width: 0; }
+.row-group h4 { font-size: .85rem; text-transform: uppercase; letter-spacing: .06em; color: var(--accent-2); margin: 6px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stack-rows { display: grid; column-gap: 14px; }
+.row-cell { min-width: 0; margin-bottom: -84.3%; } /* % of the column's width */
+.row-cell.last-row { margin-bottom: 0; }
+
+/* A card's own tags in the List view. */
+.row-tags { font-size: .72rem; color: var(--accent-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
+
+/* Tag editor dialog */
+dialog.new-deck.tag-editor { width: min(460px, calc(100vw - 32px)); }
+.tag-editor .reason-tag { font-size: .85rem; padding: 4px 11px; }
+.tag-editor-sub { margin: 0 0 6px; }
+.tag-editor-add { display: flex; gap: 8px; }
+.tag-editor-add input { flex: 1; min-width: 0; }

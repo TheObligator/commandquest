@@ -138,8 +138,12 @@ export function mergeDuplicates<T extends ParsedCard>(cards: T[]): T[] {
   for (const c of cards) {
     const key = `${c.board}|${c.name.toLowerCase()}|${c.set ?? ""}|${c.collectorNumber ?? ""}`;
     const prev = seen.get(key);
-    if (prev) prev.quantity += c.quantity;
-    else {
+    if (prev) {
+      prev.quantity += c.quantity;
+      // Tags from both entries (moving a tagged card onto an untagged copy keeps its tags).
+      const tags = [...((prev as { tags?: string[] }).tags ?? []), ...((c as { tags?: string[] }).tags ?? [])];
+      if (tags.length) (prev as { tags?: string[] }).tags = [...new Map(tags.map((t) => [t.toLowerCase(), t])).values()];
+    } else {
       const copy = { ...c };
       seen.set(key, copy);
       out.push(copy);

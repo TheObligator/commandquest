@@ -11,6 +11,8 @@ export interface DeckCard {
   scryfallId?: string;
   set?: string;
   collectorNumber?: string;
+  /** The player's own categories for this card ("Ramp", "Win condition", …), for grouping the deck. */
+  tags?: string[];
 }
 
 export interface DeckInput {
@@ -33,6 +35,8 @@ export const MAX_DECK_SIZE = 1000;
 export const MAX_DECKS_PER_USER = 500;
 export const MAX_BRACKET_TAGS = 20;
 export const MAX_BRACKET_TAG_LENGTH = 40;
+export const MAX_CARD_TAGS = 10;
+export const MAX_CARD_TAG_LENGTH = 30;
 
 const FORMAT = /^[a-z0-9_-]{1,32}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -85,6 +89,9 @@ export function validateDeck(input: DeckInput): Required<Pick<DeckInput, "name" 
       if (set) out.set = set;
       const cn = clip(c.collectorNumber, 16);
       if (cn) out.collectorNumber = cn;
+      if ((c.tags?.length ?? 0) > MAX_CARD_TAGS * 2) throw new DeckError(`A card can have at most ${MAX_CARD_TAGS} tags.`);
+      const tags = cleanCardTags(c.tags ?? []);
+      if (tags.length) out.tags = tags;
       return out;
     }),
   };
@@ -99,15 +106,24 @@ export interface DeckSummary {
 /** What the deck list shows: main deck + commander count, commander names, cover art id. */
 /** The player's bracket tags tidied: trimmed, no blanks or repeats (ignoring case), capped in length and number. */
 export function cleanBracketTags(tags: string[]): string[] {
+  return cleanTags(tags, MAX_BRACKET_TAG_LENGTH, MAX_BRACKET_TAGS);
+}
+
+/** A card's tags tidied: trimmed, no blanks or repeats (ignoring case), capped in length and number. */
+export function cleanCardTags(tags: string[]): string[] {
+  return cleanTags(tags, MAX_CARD_TAG_LENGTH, MAX_CARD_TAGS);
+}
+
+function cleanTags(tags: string[], maxLength: number, maxCount: number): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const t of tags) {
-    const tag = String(t).trim().replace(/\s+/g, " ").slice(0, MAX_BRACKET_TAG_LENGTH);
+    const tag = String(t).trim().replace(/\s+/g, " ").slice(0, maxLength).trim();
     if (!tag || seen.has(tag.toLowerCase())) continue;
     seen.add(tag.toLowerCase());
     out.push(tag);
   }
-  return out.slice(0, MAX_BRACKET_TAGS);
+  return out.slice(0, maxCount);
 }
 
 export function summarize(cards: DeckCard[]): DeckSummary {

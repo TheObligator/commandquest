@@ -11,6 +11,7 @@ export const deckCard = v.object({
   scryfallId: v.optional(v.string()),
   set: v.optional(v.string()),
   collectorNumber: v.optional(v.string()),
+  tags: v.optional(v.array(v.string())),
 });
 
 export default defineSchema({

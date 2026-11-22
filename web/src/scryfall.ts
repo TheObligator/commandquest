@@ -514,14 +514,7 @@ export function artistOf(c: ScryCard): string | undefined {
 }
 
 /** Which group a card goes in when the deck view is grouped by type. */
-export function primaryType(c: ScryCard | undefined): string {
-  if (!c) return "Other";
-  const front = (c.card_faces?.[0]?.type_line ?? c.type_line ?? "").split("—")[0];
-  for (const t of ["Creature", "Planeswalker", "Battle", "Land", "Instant", "Sorcery", "Artifact", "Enchantment"]) {
-    if (front.includes(t)) return t;
-  }
-  return "Other";
-}
+export { primaryType } from "./deckGroups";
 
 // ---- Token art -----------------------------------------------------------------------------------
 // Tokens are their own printings on Scryfall (set "t" + the set code, e.g. "tm19"). The game server

@@ -45,3 +45,17 @@ test("columnsOf splits a group into columns, the first ones taking any extra car
   assert.deepEqual(columnsOf([1, 2, 3, 4, 5, 6, 7], 3), [[1, 2, 3], [4, 5, 6], [7]]);
   assert.deepEqual(columnsOf([1, 2, 3], 1), [[1, 2, 3]]);
 });
+
+test("packStacks: small groups share a column when they fit under the tallest group", async () => {
+  const { packStacks } = await import("../src/stackLayout.ts");
+  // Commander, 1 planeswalker, 35 creatures, 5 sorceries, 6 instants (Stacked: 15% of a covered card shows).
+  const groups = [{ size: 1, whole: true }, { size: 1 }, { size: 35 }, { size: 5 }, { size: 6 }];
+  const shape = (cols: number) => packStacks(groups, cols, 0.15).map((s) => `${s.groups.join("+")}${s.span > 1 ? `×${s.span}` : ""}`);
+  // Four columns: the creatures stay one tall column, so everything small stacks beside them.
+  assert.deepEqual(shape(4), ["0+1", "2", "3+4"]);
+  // Six: the creatures split in two for a shorter row; the planeswalker still fits under the commander.
+  assert.deepEqual(shape(6), ["0+1", "2×2", "3", "4"]);
+  // No room: still one column per tall group, nothing lost.
+  const tight = packStacks([{ size: 20 }, { size: 20 }, { size: 2 }], 1, 0.15);
+  assert.deepEqual(tight.flatMap((s) => s.groups).sort(), [0, 1, 2]);
+});

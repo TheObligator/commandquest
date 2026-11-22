@@ -9,6 +9,7 @@ import { knownTags, lookUpTags, pendingQueries } from "../cardtags";
 import { errorMessage } from "../app/errors";
 import { CardMenu } from "./CardMenu";
 import * as scry from "../scryfall";
+import { useCardPreview } from "../useCardPreview";
 
 export function DeckBracket(props: {
   cards: DeckCard[];
@@ -71,6 +72,12 @@ export function DeckBracket(props: {
   const groups = useMemo(() => glance(played, tagged), [played, tagged]);
   const count = (id: string) => total(groups.get(id));
   const [open, setOpen] = useState<string | null>(null);
+  const preview = useCardPreview();
+  /** The deck's own entry for a name, so the preview shows the printing in the deck. */
+  const cardFor = (name: string) => {
+    const c = props.cards.find((x) => x.name === name && (x.board === "main" || x.board === "commander"));
+    return c && scry.cached(c);
+  };
   const openCat = GLANCE.find((c) => c.id === open);
 
   const floor = bracketFloor({ gameChangers: count("gameChanger"), massLandDenial: count("massLandDenial"), extraTurns: count("extraTurn") });
@@ -143,7 +150,7 @@ export function DeckBracket(props: {
           {groups.get(openCat.id)?.length ? (
             <ul>
               {[...groups.get(openCat.id)!].sort((a, z) => a.name.localeCompare(z.name)).map((c) => (
-                <li key={c.name}>{c.quantity > 1 ? `${c.quantity} × ` : ""}{c.name}</li>
+                <li key={c.name} {...preview.handlers(cardFor(c.name))}>{c.quantity > 1 ? `${c.quantity} × ` : ""}{c.name}</li>
               ))}
             </ul>
           ) : (
@@ -151,6 +158,7 @@ export function DeckBracket(props: {
           )}
         </div>
       )}
+      {preview.element}
       <p className="muted small glance-source">
         Game Changers from Scryfall; other counts from <a href="https://tagger.scryfall.com/" target="_blank" rel="noopener">Scryfall Tagger</a>, where players tag cards, so they can miss a card or two.
       </p>

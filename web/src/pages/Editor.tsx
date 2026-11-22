@@ -2,7 +2,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-import { MAX_QUANTITY, type Board, type DeckCard } from "../../convex/model/deckRules";
+import { MAX_CARD_TAG_LENGTH, MAX_CARD_TAGS, MAX_QUANTITY, cleanCardTags, type Board, type DeckCard } from "../../convex/model/deckRules";
 import { errorMessage } from "../app/errors";
 import { navigate, replaceQuietly, useLeaveGuard, useRoute } from "../app/router";
 import { closeOnBackdrop, showCardDetails } from "../carddetails";
@@ -19,7 +19,8 @@ import { DeckTokens } from "../components/DeckTokens";
 import { FlipButton, useFlips } from "../components/FlipButton";
 import { CardViewToggle, useCardView, useStackColumns } from "../cardView";
 import { ManaCurve } from "../components/ManaCurve";
-import { columnSpans, columnsOf, stackColClass } from "../stackLayout";
+import { columnsOf, packStacks, stackColClass } from "../stackLayout";
+import { GROUPINGS, deckTags, groupCards, saveGroupBy, savedGroupBy, type CardGroup, type GroupBy } from "../deckGroups";
 import { ManaCost } from "../components/ManaCost";
 import { Loading } from "../components/Spinner";
 import { CONQUEST } from "../formats/conquest";
@@ -31,7 +32,7 @@ import * as scry from "../scryfall";
 import { tokenPicks } from "../tokens";
 import { useCardPreview } from "../useCardPreview";
 import { printingPref, usePrintingPref } from "../usePrintingPref";
-import { BOARDS, TYPE_ORDER } from "./boards";
+import { BOARDS } from "./boards";
 import { canCommand, identityFilter, SearchBox, SearchResults } from "./EditorSearch";
 import { capitalize } from "./DeckList";
 
@@ -275,6 +276,17 @@ function DeckEditor({ initial }: { initial: Draft }) {
       return d;
     });
     toast(`Removed ${target.name}${target.board === "main" ? "" : " from " + BOARDS.find((b) => b.id === target.board)!.label.toLowerCase()}`);
+  }
+
+  function setTags(target: DeckCard, tags: string[]) {
+    change((d) => {
+      const i = entryIndex(d.cards, target);
+      if (i < 0) return d;
+      const clean = cleanCardTags(tags);
+      if (clean.length) d.cards[i].tags = clean;
+      else delete d.cards[i].tags;
+      return d;
+    });
   }
 
   function moveCard(target: DeckCard, board: Board) {
@@ -527,6 +539,7 @@ function DeckEditor({ initial }: { initial: Draft }) {
       count={count}
       onQty={setQty}
       onMove={moveCard}
+      onTags={setTags}
       onMakeCommander={makeCommander}
       onPrinting={setPrinting}
       onAddCommander={(c) => void addCard(c, "commander")}
@@ -708,6 +721,7 @@ function DeckView(props: {
   count: (b?: Board) => number;
   onQty: (c: DeckCard, q: number) => void;
   onMove: (c: DeckCard, b: Board) => void;
+  onTags: (c: DeckCard, tags: string[]) => void;
   onMakeCommander: (c: DeckCard, partner: boolean) => void;
   onPrinting: (c: DeckCard, p: scry.ScryCard) => void;
   onAddCommander: (c: scry.ScryCard) => void;
@@ -728,6 +742,13 @@ function DeckView(props: {
   const closeMenu = useCallback(() => setMenu(null), []);
   const [view, setView] = useCardView();
   const stacked = view === "stacked" || view === "spread";
+  const [groupBy, setGroupByState] = useState<GroupBy>(savedGroupBy);
+  const setGroupBy = (by: GroupBy) => {
+    setGroupByState(by);
+    saveGroupBy(by);
+  };
+  /** The card whose tags are being edited (by board and name, so it survives edits). */
+  const [tagging, setTagging] = useState<{ board: Board; name: string } | null>(null);
   const [measure, stackCols] = useStackColumns();
   const support = useCardSupport();
   const warnings = useMemo(() => deckWarnings(deck, missing, support), [deck, missing, support]);
@@ -801,6 +822,7 @@ function DeckView(props: {
         items: [
           { label: "Card details", disabled: !s, onSelect: () => s && openDetails(c, s) },
           { label: "Choose printing…", onSelect: () => setPrintingsFor(c) },
+          { label: c.tags?.length ? `Tags: ${c.tags.join(", ")}` : "Add tags…", onSelect: () => setTagging({ board: c.board, name: c.name }) },
         ],
       },
       { items: commanderItems },
@@ -837,6 +859,7 @@ function DeckView(props: {
         {s ? <button className="cname" title="Card details" onClick={() => openDetails(c, s)}>{c.name}</button> : <span className="cname">{c.name}</span>}
         {notWorking(c, s, "nw-badge")}
         {gameChanger(s, "gc-badge")}
+        {c.tags?.length ? <span className="row-tags" title={`Tags: ${c.tags.join(", ")}`}>{c.tags.join(" · ")}</span> : null}
         {s ? <ManaCost cost={s.mana_cost ?? s.card_faces?.map((f) => f.mana_cost).filter(Boolean).join(" // ")} /> : <span className="muted small">{missing.includes(c.name) ? "not found" : ""}</span>}
         {cardMenu(c, s)}
       </li>
@@ -871,13 +894,16 @@ function DeckView(props: {
     );
   };
 
-  /** A column of overlapping cards (Stacked, Spread), or two or three side by side for a big type. */
+  /** Overlapping cards in a column (Stacked, Spread), or two or three side by side for a big group. */
+  const stackBody = (cards: DeckCard[], span = 1) => (
+    <div className="stack-pair">
+      {columnsOf(cards, span).map((g, i) => <div key={i} className={`stack ${view}`}>{g.map(tile)}</div>)}
+    </div>
+  );
   const stack = (cards: DeckCard[], k: string, head?: React.ReactNode, span = 1) => (
     <div key={k} className={stackColClass(span)}>
       {head}
-      <div className="stack-pair">
-        {columnsOf(cards, span).map((g, i) => <div key={i} className={`stack ${view}`}>{g.map(tile)}</div>)}
-      </div>
+      {stackBody(cards, span)}
     </div>
   );
   /** Cards that aren't split by type (commander, considering): rows, a grid, or columns of up to 10. */
@@ -926,75 +952,152 @@ function DeckView(props: {
         onBracket={props.onBracket}
         onTags={props.onBracketTags}
       />
-      <CardViewToggle view={view} onChange={setView} />
+      <div className="deck-controls">
+        <CardViewToggle view={view} onChange={setView} />
+        <label className="group-by">
+          <span className="muted">Group by</span>
+          <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as GroupBy)}>
+            {GROUPINGS.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
+          </select>
+        </label>
+      </div>
       {(() => {
-        // A few main-deck planeswalkers sit beside the commander(s) instead of further down.
-        const commanders = deck.cards.filter((c) => c.board === "commander");
-        const walkers = deck.cards.filter((c) => c.board === "main" && scry.primaryType(scry.cached(c)) === "Planeswalker");
+        const sum = (g: DeckCard[]) => g.reduce((n, c) => n + c.quantity, 0);
+        const commanders = [...deck.cards.filter((c) => c.board === "commander")].sort((a, z) => a.name.localeCompare(z.name));
+        const main = deck.cards.filter((c) => c.board === "main");
+        // Grouped by type, a few main-deck planeswalkers sit beside the commander(s) instead of further down.
+        const walkers = groupBy === "type" ? main.filter((c) => scry.primaryType(scry.cached(c)) === "Planeswalker") : [];
         const besideCommander = commanders.length > 0 && walkers.length > 0 && walkers.length <= MAX_WALKERS_BESIDE_COMMANDER;
 
-        const sortByCmc = (g: DeckCard[]) => g.sort((a, z) => (scry.cached(a)?.cmc ?? 0) - (scry.cached(z)?.cmc ?? 0) || a.name.localeCompare(z.name));
-        const sum = (g: DeckCard[]) => g.reduce((n, c) => n + c.quantity, 0);
+        type Group = CardGroup & { whole?: boolean; extra?: React.ReactNode };
+        const head = (g: Group) => (
+          <h4>
+            {g.label}
+            <span className="muted"> {sum(g.cards)}</span>
+          </h4>
+        );
+        const groupsOf = (cards: DeckCard[]): Group[] => groupCards(cards, groupBy, scry.cached);
+        const commanderGroup: Group = { key: "commander", label: commanders.length > 1 ? "Commanders" : "Commander", cards: commanders, whole: true, extra: partnerSlot };
+        /** The walkers group moved up next to the commander. */
+        const walkersFirst = (groups: Group[]) => {
+          const i = groups.findIndex((g) => g.key === "type:Planeswalker");
+          return besideCommander && i > 0 ? [groups[i], ...groups.slice(0, i), ...groups.slice(i + 1)] : groups;
+        };
 
-        const board = (b: (typeof BOARDS)[number]) => {
-          const cards = deck.cards.filter((c) => c.board === b.id);
-          if (!cards.length) return null;
-          let body: React.ReactNode;
-          if (b.id === "main" || b.id === "side") {
-            const groups = new Map<string, DeckCard[]>();
-            for (const c of cards) {
-              const t = scry.primaryType(scry.cached(c));
-              if (b.id === "main" && t === "Planeswalker" && besideCommander) continue;
-              groups.set(t, [...(groups.get(t) ?? []), c]);
-            }
-            const types = TYPE_ORDER.filter((t) => groups.has(t)).map((t) => {
-              const g = sortByCmc(groups.get(t)!);
-              const head = (
-                <h4>
-                  {t === "Other" && !g.some((c) => scry.cached(c)) ? "Loading…" : t}
-                  <span className="muted"> {sum(g)}</span>
-                </h4>
-              );
-              return { t, g, head };
-            });
-            body = stacked ? (
-              (() => {
-                const spans = columnSpans(types.map(({ g }) => g.length), stackCols);
-                return <div className="stack-groups" ref={measure}>{types.map(({ t, g, head }, i) => stack(g, t, head, spans[i]))}</div>;
-              })()
-            ) : (
-              <div className={view === "grid" ? "image-groups" : "type-groups"}>
-                {types.map(({ t, g, head }) => (
-                  <div key={t} className="type-group">
-                    {head}
-                    {view === "grid" ? <div className="card-tiles">{g.map(tile)}</div> : <ul>{g.map(row)}</ul>}
-                  </div>
-                ))}
-              </div>
-            );
-          } else {
-            body = plain([...cards].sort((a, z) => a.name.localeCompare(z.name)), b.id === "commander" ? partnerSlot : undefined, b.id === "commander");
-          }
+        /** Stacked: columns of overlapping cards; small groups share a column when they fit. */
+        const packed = (groups: Group[]) => {
+          const slots = packStacks(groups.map((g) => ({ size: g.cards.length + (g.extra ? 1 : 0), whole: g.whole })), stackCols, 0.15);
           return (
-            <section key={b.id} className="board">
-              <h2>{b.label}<span className="muted"> {sum(cards)}</span></h2>
-              {body}
-            </section>
+            <div className="stack-groups" ref={measure}>
+              {slots.map((slot) => (
+                <div key={groups[slot.groups[0]].key} className={`${stackColClass(slot.span)} stack-slot`}>
+                  {slot.groups.map((i) => {
+                    const g = groups[i];
+                    return (
+                      <div key={g.key} className="stack-group">
+                        {head(g)}
+                        {g.whole ? (
+                          <div className="card-tiles whole-col">{g.cards.map((c, j) => tileOf(c, j, false))}{g.extra}</div>
+                        ) : (
+                          stackBody(g.cards, slot.span)
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
           );
         };
 
-        return BOARDS.map((b) => {
-          if (b.id !== "commander" || !besideCommander) return board(b);
+        /**
+         * Spread: each group's cards across the page in rows, every row covering all but the name
+         * and art of the one above (the last row shows whole). Small groups sit side by side.
+         */
+        const rows = (groups: Group[]) => (
+          <div className="row-groups" ref={measure}>
+            {groups.map((g) => {
+              const n = g.cards.length + (g.extra ? 1 : 0);
+              const across = Math.max(1, Math.min(n, stackCols || 6));
+              const lastRow = n - (n % across || across);
+              return (
+                <div key={g.key} className="row-group" style={{ width: across * 150 + (across - 1) * 14 }}>
+                  {head(g)}
+                  <div className={`stack-rows${g.whole ? " whole" : ""}`} style={{ gridTemplateColumns: `repeat(${across}, 150px)` }}>
+                    {g.cards.map((c, i) => (
+                      <div key={key(c, i)} className={i >= lastRow ? "row-cell last-row" : "row-cell"}>
+                        {tileOf(c, i, !g.whole && i < lastRow)}
+                      </div>
+                    ))}
+                    {g.extra && <div className="row-cell last-row">{g.extra}</div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+
+        /** Grid and List: whole cards or names, each group under its heading. */
+        const flat = (groups: Group[]) => (
+          <div className={view === "grid" ? "image-groups" : "type-groups"}>
+            {groups.map((g) => (
+              <div key={g.key} className="type-group">
+                {head(g)}
+                {view === "grid" ? <div className="card-tiles">{g.cards.map(tile)}</div> : <ul>{g.cards.map(row)}</ul>}
+              </div>
+            ))}
+          </div>
+        );
+
+        const laid = (groups: Group[]) => (view === "stacked" ? packed(groups) : view === "spread" ? rows(groups) : flat(groups));
+        const section = (k: string, title: string, cards: DeckCard[], body: React.ReactNode) => (
+          <section key={k} className="board">
+            <h2>{title}<span className="muted"> {sum(cards)}</span></h2>
+            {body}
+          </section>
+        );
+        const other = (b: Board) => {
+          const cards = deck.cards.filter((c) => c.board === b);
+          if (!cards.length) return null;
+          const label = BOARDS.find((x) => x.id === b)!.label;
+          // Considering is a short list: no groups.
+          return section(b, label, cards, b === "maybe" ? plain([...cards].sort((a, z) => a.name.localeCompare(z.name))) : laid(groupsOf(cards)));
+        };
+
+        // Stacked and Spread: the commander is the first group of the deck, beside the others.
+        if (stacked) {
+          const groups = walkersFirst(groupsOf(main));
           return (
-            <div key="top" className="top-row">
-              {board(b)}
-              <section className="board walkers">
-                <h2>Planeswalkers<span className="muted"> {sum(walkers)} · main deck</span></h2>
-                {plain(sortByCmc(walkers))}
-              </section>
-            </div>
+            <>
+              {(commanders.length > 0 || main.length > 0) &&
+                section("deck", commanders.length ? "Deck" : "Main deck", [...commanders, ...main], laid(commanders.length || partnerSlot ? [commanderGroup, ...groups] : groups))}
+              {other("side")}
+              {other("maybe")}
+            </>
           );
-        });
+        }
+
+        // Grid and List: the commander(s) on top, with a few planeswalkers beside them.
+        const mainGroups = groupsOf(besideCommander ? main.filter((c) => !walkers.includes(c)) : main);
+        const commanderBoard = commanders.length ? section("commander", "Commander", commanders, plain(commanders, partnerSlot, true)) : null;
+        return (
+          <>
+            {besideCommander ? (
+              <div className="top-row">
+                {commanderBoard}
+                <section className="board walkers">
+                  <h2>Planeswalkers<span className="muted"> {sum(walkers)} · main deck</span></h2>
+                  {plain(walkers.sort((a, z) => (scry.cached(a)?.cmc ?? 0) - (scry.cached(z)?.cmc ?? 0) || a.name.localeCompare(z.name)))}
+                </section>
+              </div>
+            ) : (
+              commanderBoard
+            )}
+            {main.length > 0 && section("main", "Main deck", main, laid(mainGroups))}
+            {other("side")}
+            {other("maybe")}
+          </>
+        );
       })()}
       <Stats deck={deck} count={count} onExtraColor={props.onExtraColor} />
       <ColorStats
@@ -1004,6 +1107,10 @@ function DeckView(props: {
       <DeckTokens deckId={deck.id} cards={deck.cards} />
       {preview.element}
       {contextMenu && <ContextMenu menu={contextMenu} onClose={closeMenu} />}
+      {tagging && (() => {
+        const c = deck.cards.find((x) => x.board === tagging.board && x.name === tagging.name);
+        return c ? <TagEditor card={c} suggestions={deckTags(deck.cards)} onChange={(t) => props.onTags(c, t)} onClose={() => setTagging(null)} /> : null;
+      })()}
       {printingsFor && <Printings card={printingsFor} onPick={(p) => props.onPrinting(printingsFor, p)} onClose={() => setPrintingsFor(null)} />}
       {pickingPartner && leadCard && slotLabel && (
         <PartnerPicker commander={leadCard} label={slotLabel} onPick={props.onAddCommander} onClose={() => setPickingPartner(false)} />
@@ -1299,6 +1406,68 @@ function PartnerPicker({ commander, label, onPick, onClose }: { commander: scry.
           )}
         </div>
       )}
+    </dialog>
+  );
+}
+
+/** A card's tags: chips to remove, the deck's other tags to add with a click, or a new one typed in. */
+function TagEditor({ card, suggestions, onChange, onClose }: { card: DeckCard; suggestions: string[]; onChange: (tags: string[]) => void; onClose: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const [draft, setDraft] = useState("");
+  useEffect(() => ref.current?.showModal(), []);
+  const tags = card.tags ?? [];
+  const has = (t: string) => tags.some((x) => x.toLowerCase() === t.toLowerCase());
+  const full = tags.length >= MAX_CARD_TAGS;
+  const others = suggestions.filter((t) => !has(t));
+  function add(e: React.FormEvent) {
+    e.preventDefault();
+    const t = draft.trim().replace(/\s+/g, " ");
+    if (t && !has(t) && !full) onChange([...tags, t]);
+    setDraft("");
+  }
+  return (
+    <dialog ref={ref} className="new-deck tag-editor" onClose={onClose} onClick={(e) => closeOnBackdrop(e.nativeEvent, ref.current)}>
+      <button className="dialog-close" aria-label="Close" onClick={() => ref.current?.close()}>×</button>
+      <form onSubmit={add}>
+        <h3>Tags for {card.name}</h3>
+        <p className="muted small">Group the deck by your tags with Group by → Tag, or Type &amp; tag. A card can have several.</p>
+        <div className="reason-tags">
+          {tags.length ? (
+            tags.map((t) => (
+              <button type="button" key={t} className="reason-tag on" title="Remove this tag" onClick={() => onChange(tags.filter((x) => x !== t))}>
+                {t} <span aria-hidden="true">×</span>
+              </button>
+            ))
+          ) : (
+            <span className="muted small">No tags yet.</span>
+          )}
+        </div>
+        {others.length > 0 && (
+          <div>
+            <p className="muted small tag-editor-sub">Used in this deck</p>
+            <div className="reason-tags">
+              {others.map((t) => (
+                <button type="button" key={t} className="reason-tag" disabled={full} onClick={() => onChange([...tags, t])}>+ {t}</button>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="tag-editor-add">
+          <input
+            autoFocus
+            value={draft}
+            maxLength={MAX_CARD_TAG_LENGTH}
+            disabled={full}
+            placeholder={full ? `At most ${MAX_CARD_TAGS} tags` : "New tag, e.g. Ramp, Win condition"}
+            aria-label="New tag"
+            onChange={(e) => setDraft(e.target.value)}
+          />
+          <button className="btn" disabled={!draft.trim() || full}>Add</button>
+        </div>
+        <div className="actions new-deck-actions">
+          <button type="button" className="btn ghost" onClick={() => ref.current?.close()}>Done</button>
+        </div>
+      </form>
     </dialog>
   );
 }
