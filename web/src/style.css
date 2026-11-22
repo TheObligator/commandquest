@@ -786,7 +786,8 @@ table.hotkeys { width: 100%; border-collapse: collapse; }
 .glance-panel { margin-bottom: 8px; }
 
 /* Colors under the stats (src/components/ColorStats.tsx) */
-.color-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; max-width: 760px; }
+.color-grid { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 10px; max-width: 760px; }
+.color-grid:has(> :nth-child(6)) { max-width: 912px; }
 .color-col { display: grid; justify-items: center; gap: 7px; padding: 14px 10px 12px; border-radius: 10px; background: var(--bg-2); border: 1px solid var(--line); text-align: center; }
 .color-sym { width: 52px; height: 52px; border-radius: 50%; box-shadow: 0 2px 8px rgb(0 0 0 / 40%); margin-bottom: 2px; }
 /* A bar filled to the color's share, with "Costs 38%" written over it. */
@@ -797,6 +798,7 @@ table.hotkeys { width: 100%; border-collapse: collapse; }
 .fill-B { background: #7d6f86; }
 .fill-R { background: #d4553a; }
 .fill-G { background: #3d9a5c; }
+.fill-C { background: #a8a29a; }
 .color-bar-text { position: relative; display: flex; justify-content: space-between; align-items: center; height: 100%; padding: 0 7px; font-size: .74rem; color: #fff; text-shadow: 0 1px 2px rgb(0 0 0 / 85%); }
 .color-bar-text strong { font-variant-numeric: tabular-nums; }
 .color-col.unused { opacity: .35; }
