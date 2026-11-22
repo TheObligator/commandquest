@@ -681,9 +681,20 @@ button.text-link { background: none; border: 0; padding: 0; color: var(--accent-
 button.text-link:hover { text-decoration: underline; }
 .edh-share { justify-self: center; }
 .search-card { position: relative; display: grid; gap: 6px; align-content: start; }
-.search-card.in-deck .tile-img img { outline: 2px solid var(--ok); outline-offset: 1px; }
+/* Each board its own color: the commander gold, main deck green, sideboard silver, considering blue.
+   The card's outline takes the first board it's on, in that order. */
+.search-card.in-deck { --in-board: var(--ok); }
+.search-card.in-commander { --in-board: var(--accent); }
+.search-card.in-side { --in-board: var(--type-artifact); }
+.search-card.in-maybe { --in-board: var(--type-instant); }
+.search-card.in-deck .tile-img img { outline: 2px solid var(--in-board); outline-offset: 1px; }
+.in-deck-badge .board-commander { color: var(--accent); }
+.in-deck-badge .board-main { color: var(--ok); }
+.in-deck-badge .board-side { color: var(--type-artifact); }
+.in-deck-badge .board-maybe { color: var(--type-instant); }
+.in-deck-badge .sep { color: var(--muted); }
 .search-card.not-legal .tile-img img { outline: 2px solid var(--danger); outline-offset: 1px; }
-.in-deck-badge { position: absolute; top: 7px; right: 7px; max-width: calc(100% - 14px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 8px; border-radius: 99px; font-size: .75rem; font-weight: 700; background: rgb(14 16 22 / 85%); color: var(--ok); border: 1px solid rgb(111 207 151 / 55%); pointer-events: none; }
+.in-deck-badge { position: absolute; top: 7px; right: 7px; max-width: calc(100% - 14px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 8px; border-radius: 99px; font-size: .75rem; font-weight: 700; background: rgb(14 16 22 / 85%); color: var(--in-board); border: 1px solid color-mix(in srgb, var(--in-board) 55%, transparent); pointer-events: none; }
 .search-card .legal-badge { top: 7px; left: 7px; }
 .search-card-bar { display: flex; align-items: center; gap: 6px; }
 .search-card-bar .add-btn { flex: 1; border-radius: 8px 0 0 8px; }

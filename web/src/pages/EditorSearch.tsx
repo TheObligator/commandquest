@@ -14,7 +14,7 @@ import { commanderCards } from "../edhrec";
 import { compileQuery } from "../game/scryquery";
 import * as scry from "../scryfall";
 import { displayTerms, forEdhrecCards, hasOrder, joinQuery, locallyReadable, nameTerms, restrictToNames, stripDisplay } from "../searchquery";
-import { BOARDS, boardLabel, inDeckText } from "./boards";
+import { BOARDS, boardLabel, inDeckParts } from "./boards";
 
 /** The ⓘ button, drawn in CSS (the Unicode glyph renders badly in many fonts). */
 export function InfoButton({ label, onClick, className = "" }: { label: string; onClick: () => void; className?: string }) {
@@ -416,7 +416,7 @@ export function SearchResults(props: {
         ...(commander ? [{ label: "★ Set as commander", run: () => props.onAdd(c, "commander", exact) }] : []),
       ]);
     return (
-      <div key={c.id} className={`search-card${count ? " in-deck" : ""}${verdict.ok ? "" : " not-legal"}${playable && !playable.works ? (playable.missing ? " not-playable" : " known-issue") : ""}`}>
+      <div key={c.id} className={`search-card${count ? ` in-deck in-${inDeckParts(inDeck)[0].board}` : ""}${verdict.ok ? "" : " not-legal"}${playable && !playable.works ? (playable.missing ? " not-playable" : " known-issue") : ""}`}>
         <button className="tile-img" title={`${c.name}: card details`} onClick={details}>
           {img ? <img src={img} alt={c.name} loading="lazy" /> : <span className="noimg">{c.name}</span>}
         </button>
@@ -430,7 +430,9 @@ export function SearchResults(props: {
         )}
         {count > 0 && (
           <span className="in-deck-badge" title={inDeck.map((e) => `${e.quantity} in ${boardLabel(e.board).toLowerCase()}`).join(", ")}>
-            {inDeckText(inDeck)}
+            {inDeckParts(inDeck).map((p, i) => (
+              <span key={p.board} className={`board-${p.board}`}>{i > 0 && <span className="sep"> · </span>}{p.text}</span>
+            ))}
           </span>
         )}
         {inclusion !== undefined && (
