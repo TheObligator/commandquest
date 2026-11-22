@@ -6,7 +6,7 @@ import { MAX_CARD_TAG_LENGTH, MAX_CARD_TAGS, MAX_QUANTITY, cleanCardTags, type B
 import { errorMessage } from "../app/errors";
 import { navigate, replaceQuietly, useLeaveGuard, useRoute } from "../app/router";
 import { closeOnBackdrop, showCardDetails } from "../carddetails";
-import { looksLikeCard, readDrop, type DroppedCard } from "../carddrop";
+import { CARD_TYPE, cardDragData, looksLikeCard, readDrop, type DroppedCard } from "../carddrop";
 import { useCardSupport, type CardSupport } from "../cardsupport";
 import { mergeDuplicates, parseDecklist, writeDecklist, type ParsedToken } from "../decklist";
 import { toast } from "../dom";
@@ -267,7 +267,8 @@ function DeckEditor({ initial }: { initial: Draft }) {
       } catch {
         continue;
       }
-      await addCard(c, board);
+      // From another deck: the same printing and number of copies.
+      await addCard(c, board, d.exact && c.id === d.id, d.quantity ?? 1);
       setCardData((n) => n + 1);
       return;
     }
@@ -788,7 +789,7 @@ function useCardDrops(onDrop: (d: DroppedCard, board: Board) => void): Board | n
       if (!incoming(e)) return;
       e.preventDefault();
       const dt = e.dataTransfer!;
-      const d = readDrop({ html: dt.getData("text/html"), uris: dt.getData("text/uri-list"), text: dt.getData("text/plain") }, (h) => new DOMParser().parseFromString(h, "text/html"));
+      const d = readDrop({ card: dt.getData(CARD_TYPE), html: dt.getData("text/html"), uris: dt.getData("text/uri-list"), text: dt.getData("text/plain") }, (h) => new DOMParser().parseFromString(h, "text/html"));
       if (d) onDropRef.current(d, dropBoardAt(e.target, e.clientY));
       else toast("That doesn't look like a card", "error");
     };
@@ -963,13 +964,24 @@ function DeckView(props: {
   };
 
   const key = (c: DeckCard, i: number) => `${c.board}|${c.name}|${c.scryfallId ?? i}`;
+  /** Drag a card to another deck (open in another tab) to copy it there, same printing and copies. */
+  const dragOut = (c: DeckCard) => ({
+    draggable: true,
+    onDragStart: (e: React.DragEvent) => {
+      // Dragging in the quantity box selects its text instead.
+      if (e.target instanceof HTMLInputElement) return e.preventDefault();
+      e.dataTransfer.setData(CARD_TYPE, cardDragData(c));
+      e.dataTransfer.setData("text/plain", c.name);
+      e.dataTransfer.effectAllowed = "copy";
+    },
+  });
   const menuCard = menu && deck.cards.find((c, i) => key(c, i) === menu.key);
   const contextMenu: ContextMenuState | null = menuCard ? { x: menu.x, y: menu.y, sections: menuSections(menuCard, scry.cached(menuCard)) } : null;
 
   const row = (c: DeckCard, i: number) => {
     const s = scry.cached(c);
     return (
-      <li key={key(c, i)} className={s ? "card-row" : "card-row unresolved"} {...preview.handlers(s)} onContextMenu={onContextMenu(c)}>
+      <li key={key(c, i)} className={s ? "card-row" : "card-row unresolved"} {...preview.handlers(s)} onContextMenu={onContextMenu(c)} {...dragOut(c)}>
         {qty(c)}
         {s ? <button className="cname" title="Card details" onClick={() => openDetails(c, s)}>{c.name}</button> : <span className="cname">{c.name}</span>}
         {notWorking(c, s, "nw-badge")}
@@ -994,9 +1006,9 @@ function DeckView(props: {
     const face = flips.face(s);
     const img = s && scry.imageUrl(s, "normal", face);
     return (
-      <div key={key(c, i)} className={`card-tile${s ? "" : " unresolved"}${brokenClass(c, s)}`} {...preview.handlers(s, face)} onContextMenu={onContextMenu(c)}>
+      <div key={key(c, i)} className={`card-tile${s ? "" : " unresolved"}${brokenClass(c, s)}`} {...preview.handlers(s, face)} onContextMenu={onContextMenu(c)} {...dragOut(c)}>
         <button className="tile-img" title={s ? undefined : c.name} aria-label={`${c.quantity} × ${c.name}: card details`} disabled={!s} onClick={() => s && openDetails(c, s)}>
-          {img ? <img src={img} alt={c.name} loading="lazy" /> : <span className="noimg">{c.name}{missing.includes(c.name) ? " (not found)" : ""}</span>}
+          {img ? <img src={img} alt={c.name} loading="lazy" draggable={false} /> : <span className="noimg">{c.name}{missing.includes(c.name) ? " (not found)" : ""}</span>}
         </button>
         {/* The name as invisible text over the printed one, so the browser's find (Ctrl+F) finds and highlights cards. */}
         {img && <span className="tile-name" aria-hidden="true">{c.name}</span>}

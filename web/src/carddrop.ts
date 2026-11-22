@@ -10,6 +10,35 @@ export interface DroppedCard {
   name?: string;
   /** A name taken from a URL slug ("sol-ring"): needs Scryfall's fuzzy match. */
   fuzzy?: string;
+  /** From another CommandQuest deck: keep its printing and number of copies. */
+  exact?: boolean;
+  quantity?: number;
+}
+
+/** The drag type a CommandQuest deck card carries (readable by the editor in another tab). */
+export const CARD_TYPE = "application/x-commandquest-card";
+
+/** What a deck card puts in its drag, as `CARD_TYPE` data. */
+export function cardDragData(c: { name: string; quantity: number; scryfallId?: string; set?: string; collectorNumber?: string }): string {
+  return JSON.stringify({ name: c.name, quantity: c.quantity, id: c.scryfallId, set: c.set, collectorNumber: c.collectorNumber });
+}
+
+/** A card dragged from a CommandQuest deck, or null when the data isn't one. */
+function fromDeckCard(json: string): DroppedCard | null {
+  let v: unknown;
+  try {
+    v = JSON.parse(json);
+  } catch {
+    return null;
+  }
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const str = (x: unknown) => (typeof x === "string" && x ? x : undefined);
+  const name = str(o.name);
+  if (!name) return null;
+  const id = str(o.id);
+  const q = typeof o.quantity === "number" && Number.isInteger(o.quantity) && o.quantity > 0 ? o.quantity : 1;
+  return { name, id: id && UUID.test(id) ? id.toLowerCase() : undefined, set: str(o.set), collectorNumber: str(o.collectorNumber), exact: true, quantity: q };
 }
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
@@ -20,7 +49,7 @@ const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
  * only files alone (from the desktop) aren't a card.
  */
 export function looksLikeCard(types: readonly string[]): boolean {
-  return types.some((t) => t === "text/uri-list" || t === "text/html" || t === "text/plain");
+  return types.some((t) => t === CARD_TYPE || t === "text/uri-list" || t === "text/html" || t === "text/plain");
 }
 
 /** Reads one URL: a card image named by its Scryfall id, an EDHREC card page, a Scryfall card page. */
@@ -56,18 +85,20 @@ function plainName(s: string | null | undefined): string | undefined {
 }
 
 /**
- * The card a drop describes, from its `text/html`, `text/uri-list` and `text/plain` data; null
+ * The card a drop describes, from a CommandQuest deck card's `CARD_TYPE` data or its `text/html`, `text/uri-list` and `text/plain` data; null
  * when none of them looks like a card. `parseHtml` turns markup into a document (DOMParser in the
  * browser), so this stays testable without one.
  */
 export function readDrop(
-  data: { html?: string; uris?: string; text?: string },
+  data: { card?: string; html?: string; uris?: string; text?: string },
   parseHtml?: (html: string) => Document,
 ): DroppedCard | null {
+  const deckCard = data.card ? fromDeckCard(data.card) : null;
+  if (deckCard) return Object.fromEntries(Object.entries(deckCard).filter(([, x]) => x !== undefined)) as DroppedCard;
   const found: DroppedCard = {};
   const take = (c: DroppedCard | null) => {
     if (!c) return;
-    for (const k of Object.keys(c) as (keyof DroppedCard)[]) found[k] ??= c[k];
+    for (const [k, v] of Object.entries(c)) (found as Record<string, unknown>)[k] ??= v;
   };
 
   if (data.html && parseHtml) {

@@ -1,7 +1,7 @@
 // Cards dragged in from EDHREC and Scryfall (src/carddrop.ts).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { looksLikeCard, readDrop } from "../src/carddrop.ts";
+import { CARD_TYPE, cardDragData, looksLikeCard, readDrop } from "../src/carddrop.ts";
 
 /** Just enough of a parsed document for readDrop: img and a elements with attributes and text. */
 function fakeDoc(html: string): Document {
@@ -41,6 +41,15 @@ test("plain text is a card name; other links and junk are nothing", () => {
   assert.equal(readDrop({ uris: "https://example.com/page" }), null);
   assert.equal(readDrop({ text: "" }), null);
   assert.equal(readDrop({ uris: "javascript:alert(1)" }), null);
+});
+
+test("a card dragged from another CommandQuest deck keeps its printing and copies", () => {
+  const card = cardDragData({ name: "Plains", quantity: 12, scryfallId: ID, set: "cmr", collectorNumber: "500" });
+  assert.deepEqual(readDrop({ card, text: "Plains" }), { name: "Plains", id: ID, set: "cmr", collectorNumber: "500", exact: true, quantity: 12 });
+  assert.deepEqual(readDrop({ card: cardDragData({ name: "Sol Ring", quantity: 1 }) }), { name: "Sol Ring", exact: true, quantity: 1 });
+  // Not deck-card data: read the rest of the drop as usual.
+  assert.deepEqual(readDrop({ card: "{oops", text: "Sol Ring" }), { name: "Sol Ring" });
+  assert.equal(looksLikeCard([CARD_TYPE]), true);
 });
 
 test("links and text count, files alone don't", () => {
