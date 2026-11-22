@@ -94,6 +94,8 @@ function DeckEditor({ initial }: { initial: Draft }) {
   // The open search is in the URL (#/decks/<id>?q=…), so a reload or a shared link reopens it.
   const [searchQuery, setSearchQuery] = useState<string | null>(() => query.get("q") || null);
   const searchRef = useRef(searchQuery);
+  /** The deck drawer at the bottom of the search results: open or just its bar. */
+  const [deckOpen, setDeckOpen] = useState(false);
   searchRef.current = searchQuery;
   const [addTo, setAddTo] = useState<Board>("main");
   const pref = usePrintingPref();
@@ -501,6 +503,22 @@ function DeckEditor({ initial }: { initial: Draft }) {
     );
   }
 
+  const deckView = (
+    <DeckView
+      deck={deck}
+      missing={missing}
+      count={count}
+      onQty={setQty}
+      onMove={moveCard}
+      onMakeCommander={makeCommander}
+      onPrinting={setPrinting}
+      onAddCommander={(c) => void addCard(c, "commander")}
+      onExtraColor={(c) => change((d) => ({ ...d, extraColor: c }))}
+      onBracket={(b) => change((d) => ({ ...d, bracket: b }))}
+      onBracketTags={(t) => change((d) => ({ ...d, bracketTags: t.length ? t : undefined }))}
+    />
+  );
+
   return (
     <div className="editor">
       <div className="editor-head">
@@ -557,20 +575,13 @@ function DeckEditor({ initial }: { initial: Draft }) {
             <SearchPane hidden={tab !== "search"} addTo={addTo} onAddTo={setAddTo} onPick={(n) => void addByName(n)} onSubmit={setSearchQuery} autoFocus={!deck.cards.length && tab === "search"} identity={identityFilter(deck.format, deck.cards, commanders, deck.extraColor)} />
             <ImportPane hidden={tab !== "import"} startReplacing={deck.cards.length === 0} onImport={applyImport} importFromUrl={(url) => importFromUrl({ url })} autoFocus={tab === "import"} />
           </aside>
-          <DeckView
-            deck={deck}
-            missing={missing}
-            count={count}
-            onQty={setQty}
-            onMove={moveCard}
-            onMakeCommander={makeCommander}
-            onPrinting={setPrinting}
-            onAddCommander={(c) => void addCard(c, "commander")}
-            onExtraColor={(c) => change((d) => ({ ...d, extraColor: c }))}
-            onBracket={(b) => change((d) => ({ ...d, bracket: b }))}
-            onBracketTags={(t) => change((d) => ({ ...d, bracketTags: t.length ? t : undefined }))}
-          />
+          {deckView}
         </div>
+      )}
+      {searchQuery !== null && (
+        <DeckDrawer open={deckOpen} onToggle={() => setDeckOpen((o) => !o)} name={deck.name} badge={badge} badgeOk={badgeOk}>
+          {deckView}
+        </DeckDrawer>
       )}
     </div>
   );
@@ -1146,6 +1157,35 @@ function FolderSelect({ deckId }: { deckId?: Id<"decks"> }) {
       <option value="">No folder</option>
       {folders.map((f) => <option key={f._id} value={f._id}>📁 {f.name}</option>)}
     </select>
+  );
+}
+
+/**
+ * The deck, while browsing search results: a bar along the bottom of the window. Clicking the bar
+ * slides the deck up over part of the screen, the same deck view as the editor (change counts,
+ * move or remove cards, ...); clicking its top bar again (or Escape) lowers it.
+ */
+function DeckDrawer({ open, onToggle, name, badge, badgeOk, children }: { open: boolean; onToggle: () => void; name: string; badge: string; badgeOk: boolean; children: React.ReactNode }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !document.querySelector("dialog[open], .card-menu")) onToggle();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onToggle]);
+  return (
+    <div className={`deck-drawer${open ? " open" : ""}`} role="region" aria-label="Your deck">
+      <button className="deck-drawer-bar" aria-expanded={open} onClick={onToggle} title={open ? "Lower the deck" : "Show your deck"}>
+        <span className="deck-drawer-grip" aria-hidden="true" />
+        <span className="deck-drawer-title">
+          <strong>{name}</strong>
+          <span className="count-badge" data-ok={String(badgeOk)}>{badge}</span>
+        </span>
+        <span className="deck-drawer-toggle">{open ? "Hide deck ▾" : "Show deck ▴"}</span>
+      </button>
+      {open && <div className="deck-drawer-body">{children}</div>}
+    </div>
   );
 }
 

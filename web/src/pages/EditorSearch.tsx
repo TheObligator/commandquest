@@ -340,7 +340,7 @@ export function SearchResults(props: {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !document.querySelector("dialog[open], .card-menu")) props.onClose();
+      if (e.key === "Escape" && !document.querySelector("dialog[open], .card-menu, .deck-drawer.open")) props.onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
