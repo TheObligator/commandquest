@@ -390,6 +390,9 @@ dialog.new-deck h3 { margin: 0; padding-right: 36px; }
 
 .board { margin-top: 18px; }
 .board h2 { font-size: 1.1rem; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+/* A card dragged in from EDHREC or Scryfall: the board it would land on is outlined. */
+.board.drop-target { outline: 2px dashed var(--accent); outline-offset: 6px; border-radius: 6px; }
+.drop-hint { padding: 18px 0; text-align: center; }
 .type-groups { columns: 280px; column-gap: 24px; }
 /* List: the types flow down one column and on into the next, and a long type (37 lands) carries
    on in the next column too, so the columns come out even instead of one long one. */

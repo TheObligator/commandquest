@@ -6,6 +6,7 @@ import { MAX_CARD_TAG_LENGTH, MAX_CARD_TAGS, MAX_QUANTITY, cleanCardTags, type B
 import { errorMessage } from "../app/errors";
 import { navigate, replaceQuietly, useLeaveGuard, useRoute } from "../app/router";
 import { closeOnBackdrop, showCardDetails } from "../carddetails";
+import { looksLikeCard, readDrop, type DroppedCard } from "../carddrop";
 import { useCardSupport, type CardSupport } from "../cardsupport";
 import { mergeDuplicates, parseDecklist, writeDecklist, type ParsedToken } from "../decklist";
 import { toast } from "../dom";
@@ -250,6 +251,27 @@ function DeckEditor({ initial }: { initial: Draft }) {
     } catch (e) {
       toast(`Couldn't find ${name}: ${errorMessage(e)}`, "error");
     }
+  }
+
+  /** A card dragged in from EDHREC, Scryfall or the search results, dropped on `board`. */
+  async function addDropped(d: DroppedCard, board: Board) {
+    const tries: (() => Promise<scry.ScryCard>)[] = [];
+    if (d.id) tries.push(() => scry.byScryfallId(d.id!));
+    if (d.set && d.collectorNumber) tries.push(() => scry.printing(d.set!, d.collectorNumber!));
+    if (d.name) tries.push(() => scry.named(d.name!), () => scry.fuzzyNamed(d.name!));
+    if (d.fuzzy) tries.push(() => scry.fuzzyNamed(d.fuzzy!));
+    for (const t of tries) {
+      let c: scry.ScryCard;
+      try {
+        c = await t();
+      } catch {
+        continue;
+      }
+      await addCard(c, board);
+      setCardData((n) => n + 1);
+      return;
+    }
+    toast(`Couldn't find ${d.name ?? d.fuzzy ?? "that card"} on Scryfall`, "error");
   }
 
   // Entries are found by board and name, not by object: every change copies the cards, so an entry
@@ -543,6 +565,7 @@ function DeckEditor({ initial }: { initial: Draft }) {
       onMakeCommander={makeCommander}
       onPrinting={setPrinting}
       onAddCommander={(c) => void addCard(c, "commander")}
+      onDropCard={(d, b) => void addDropped(d, b)}
       onExtraColor={(c) => change((d) => ({ ...d, extraColor: c }))}
       onBracket={(b) => change((d) => ({ ...d, bracket: b }))}
       onBracketTags={(t) => change((d) => ({ ...d, bracketTags: t.length ? t : undefined }))}
@@ -725,6 +748,7 @@ function DeckView(props: {
   onMakeCommander: (c: DeckCard, partner: boolean) => void;
   onPrinting: (c: DeckCard, p: scry.ScryCard) => void;
   onAddCommander: (c: scry.ScryCard) => void;
+  onDropCard: (d: DroppedCard, board: Board) => void;
   onExtraColor: (color: string | undefined) => void;
   onBracket: (b: number | undefined) => void;
   onBracketTags: (tags: string[]) => void;
@@ -751,6 +775,48 @@ function DeckView(props: {
   const [tagging, setTagging] = useState<{ board: Board; name: string } | null>(null);
   const [measure, stackCols] = useStackColumns();
   const support = useCardSupport();
+
+  // ---- Cards dragged in (from EDHREC, Scryfall, the search results) ----
+  // They go to the main deck, or to Considering when dropped below the main deck (or to the
+  // sideboard when dropped on it).
+  /** Where the card being dragged over the deck would go; null when nothing is. */
+  const [dropTo, setDropTo] = useState<Board | null>(null);
+  /** A drag that started on this deck's own cards isn't a new card. */
+  const dragFromHere = useRef(false);
+  const viewRef = useRef<HTMLElement>(null);
+  const dropBoardAt = (target: EventTarget | null, y: number): Board => {
+    const b = (target instanceof Element ? target.closest<HTMLElement>("[data-board]") : null)?.dataset.board;
+    if (b === "side" || b === "maybe") return b;
+    if (b) return "main";
+    const main = viewRef.current?.querySelector('[data-board="main"], [data-board="deck"]');
+    return main && y > main.getBoundingClientRect().bottom ? "maybe" : "main";
+  };
+  const dragIn = (e: React.DragEvent) => !dragFromHere.current && looksLikeCard(e.dataTransfer.types);
+  const dropHandlers = {
+    onDragStart: () => void (dragFromHere.current = true),
+    onDragEnd: () => void (dragFromHere.current = false),
+    onDragOver: (e: React.DragEvent) => {
+      if (!dragIn(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+      const b = dropBoardAt(e.target, e.clientY);
+      if (b !== dropTo) setDropTo(b);
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      if (!(e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget))) setDropTo(null);
+    },
+    onDrop: (e: React.DragEvent) => {
+      if (!dragIn(e)) return;
+      e.preventDefault();
+      setDropTo(null);
+      const board = dropBoardAt(e.target, e.clientY);
+      const dt = e.dataTransfer;
+      const d = readDrop({ html: dt.getData("text/html"), uris: dt.getData("text/uri-list"), text: dt.getData("text/plain") }, (h) => new DOMParser().parseFromString(h, "text/html"));
+      if (d) props.onDropCard(d, board);
+      else toast("That doesn't look like a card", "error");
+    },
+  };
+
   const warnings = useMemo(() => deckWarnings(deck, missing, support), [deck, missing, support]);
   /** The tile's outline class for a card that won't work: red when it's missing, amber for a known issue. */
   const brokenClass = (c: DeckCard, s: scry.ScryCard | undefined) => {
@@ -766,10 +832,10 @@ function DeckView(props: {
 
   if (!deck.cards.length) {
     return (
-      <section className="panel deck-view">
+      <section ref={viewRef} className={`panel deck-view${dropTo ? " dropping" : ""}`} {...dropHandlers}>
         <div className="empty">
           <h3>This deck is empty</h3>
-          <p>Search for cards on the left, or switch to Import to bring in a list.</p>
+          <p>Search for cards on the left, switch to Import to bring in a list, or drag cards in from EDHREC.</p>
         </div>
       </section>
     );
@@ -922,7 +988,7 @@ function DeckView(props: {
       {stackBody(cards, span)}
     </div>
   );
-  /** Cards that aren't split by type (commander, considering): rows, a grid, or columns of up to 10. */
+  /** Cards that aren't split by type (the commanders, planeswalkers beside them): rows, a grid, or columns of up to 10. */
   /** `tiled`: never overlap, even in Stacked and Spread (the commanders, so both show whole). */
   const plain = (cards: DeckCard[], extra?: React.ReactNode, tiled = false) => {
     if (view === "list") return <ul className="flat">{cards.map(row)}{extra && <li>{extra}</li>}</ul>;
@@ -950,7 +1016,7 @@ function DeckView(props: {
   ) : undefined;
 
   return (
-    <section className="panel deck-view">
+    <section ref={viewRef} className={`panel deck-view${dropTo ? " dropping" : ""}`} {...dropHandlers}>
       {warnings.length > 0 && <ul className="warnings">{warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
       {deck.format === "conquest" && (
         <p className="format-note muted small">
@@ -1069,18 +1135,21 @@ function DeckView(props: {
         );
 
         const laid = (groups: Group[]) => (view === "stacked" ? packed(groups) : view === "spread" ? rows(groups) : flat(groups));
+        const isDropTarget = (k: string) => (k === "deck" || k === "main" ? dropTo === "main" : dropTo === k);
         const section = (k: string, title: string, cards: DeckCard[], body: React.ReactNode) => (
-          <section key={k} className="board">
+          <section key={k} className={`board${isDropTarget(k) ? " drop-target" : ""}`} data-board={k}>
             <h2>{title}<span className="muted"> {sum(cards)}</span></h2>
             {body}
           </section>
         );
         const other = (b: Board) => {
           const cards = deck.cards.filter((c) => c.board === b);
-          if (!cards.length) return null;
           const label = BOARDS.find((x) => x.id === b)!.label;
-          // Considering is a short list: no groups.
-          return section(b, label, cards, b === "maybe" ? plain([...cards].sort((a, z) => a.name.localeCompare(z.name))) : laid(groupsOf(cards)));
+          if (!cards.length) {
+            // While a card is dragged over the deck, an empty Considering shows where to drop it.
+            return b === "maybe" && dropTo ? section(b, label, cards, <p className="drop-hint muted">Drop here to add to {label.toLowerCase()}</p>) : null;
+          }
+          return section(b, label, cards, laid(groupsOf(cards)));
         };
 
         // Stacked and Spread: the commander is the first group of the deck, beside the others.

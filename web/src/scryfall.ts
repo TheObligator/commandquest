@@ -336,6 +336,27 @@ export async function named(name: string): Promise<ScryCard> {
   return remember(await getJson<ScryCard>(`${API}/cards/named?${new URLSearchParams({ exact: name })}`));
 }
 
+/** One card by a loose name ("sol ring", "atraxa praetors voice"): Scryfall's best match; cached. */
+export async function fuzzyNamed(name: string): Promise<ScryCard> {
+  const hit = byName.get(name.toLowerCase());
+  if (hit) return hit;
+  return remember(await getJson<ScryCard>(`${API}/cards/named?${new URLSearchParams({ fuzzy: name })}`));
+}
+
+/** One printing by set code and collector number; cached. */
+export async function printing(set: string, collectorNumber: string): Promise<ScryCard> {
+  const hit = cachedPrinting(set, collectorNumber);
+  if (hit) return hit;
+  return remember(await getJson<ScryCard>(`${API}/cards/${encodeURIComponent(set.toLowerCase())}/${encodeURIComponent(collectorNumber)}`));
+}
+
+/** One printing by Scryfall id; cached. */
+export async function byScryfallId(id: string): Promise<ScryCard> {
+  const hit = byId.get(id);
+  if (hit) return hit;
+  return remember(await getJson<ScryCard>(`${API}/cards/${encodeURIComponent(id)}`));
+}
+
 export interface Ruling {
   source: string;
   published_at: string;
