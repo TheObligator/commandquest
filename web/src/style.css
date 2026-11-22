@@ -305,6 +305,8 @@ dialog.new-deck h3 { margin: 0; padding-right: 36px; }
 }
 .editor-head .back { font-size: 1.3rem; color: var(--muted); padding: 4px 8px; }
 .editor-head .back:hover { color: var(--text); text-decoration: none; }
+.editor-head .back.minor { font-size: .8rem; padding: 4px 6px; white-space: nowrap; }
+.search-page .back-to-deck { padding: 11px 22px; font-size: 1.05rem; font-weight: 700; }
 .deck-name { flex: 1 1 260px; max-width: 460px; font-size: 1.3rem; font-weight: 700; background: transparent; border-color: transparent; padding: 6px 10px; }
 .deck-name:hover { border-color: var(--line); }
 .editor-head select { width: auto; }

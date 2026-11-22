@@ -522,7 +522,8 @@ function DeckEditor({ initial }: { initial: Draft }) {
   return (
     <div className="editor">
       <div className="editor-head">
-        <a href="#/decks" className="back" title="Back to decks">←</a>
+        {/* While searching, the search page's own "Back to deck" is the way back; this one, to the deck list, steps aside. */}
+        <a href="#/decks" className={`back${searchQuery !== null ? " minor" : ""}`} title="Back to your decks">{searchQuery !== null ? "← Your decks" : "←"}</a>
         <input className="deck-name" value={deck.name} maxLength={100} aria-label="Deck name" onChange={(e) => change((d) => ({ ...d, name: e.target.value }))} />
         <select aria-label="Format" value={deck.format} onChange={(e) => change((d) => ({ ...d, format: e.target.value }))}>
           {FORMATS.map((f) => <option key={f} value={f}>{capitalize(f)}</option>)}

@@ -456,7 +456,7 @@ export function SearchResults(props: {
   return (
     <section className="panel search-page">
       <div className="search-page-head">
-        <button className="btn ghost small" onClick={props.onClose}>← Back to deck</button>
+        <button className="btn back-to-deck" onClick={props.onClose}>← Back to deck</button>
         <div className="search-page-box">
           <SearchBox key={props.query} initial={props.query} onSubmit={props.onSearch} onPick={props.onPickName} />
         </div>
