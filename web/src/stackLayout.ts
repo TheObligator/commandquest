@@ -1,47 +1,33 @@
 // Stacked and Spread views: how many columns each type gets. A column's height is its number of
-// card pictures (one per unique card, so "Island ×7" is one), so splitting only makes sense for the
-// type that sets the row's height, and only when it's clearly taller than the rest.
+// card pictures (one per unique card, so "Island ×7" is one). Columns the row has room for would
+// otherwise sit empty, so they go to splitting the types that make the row tall.
 
 /** Types with fewer card pictures than this stay in one column. */
 const MIN_TO_SPLIT = 7;
-/** Each extra column has to make the row at least this many cards shorter. */
-const MIN_GAIN = 3;
 /** The most columns one type can take. */
 const MAX_SPAN = 3;
 
 /**
  * How many columns (1 to 3) each group gets, given each group's number of card pictures and how many
- * columns fit in the row. Spare columns go to the types that set the row's height, in steps: each
- * step takes the fewest columns that make the row at least MIN_GAIN cards shorter per column used.
- * Usually that's one column for the tallest type, but when two types are about as tall, splitting
- * just one doesn't shorten the row, so both split together. Stops once no step is worth it.
+ * columns fit in the row: the shortest row those columns allow, using as few columns as that takes.
+ * So every type taller than that row height splits, and nothing else does. Removing one card can
+ * only keep the row the same height or make it shorter.
  */
 export function columnSpans(sizes: number[], cols: number): number[] {
-  let spans = sizes.map(() => 1);
-  const heightOf = (s: number[]) => Math.max(0, ...sizes.map((n, i) => Math.ceil(n / s[i])));
-  const used = (s: number[]) => s.reduce((a, b) => a + b, 0);
-  for (;;) {
-    const spare = cols - used(spans);
-    const height = heightOf(spans);
-    if (spare <= 0) break;
-    // For each number of extra columns, the shortest row it can buy: aim for each lower row height
-    // in turn, splitting every type that's taller than it.
-    const bestFor = new Map<number, number[]>();
-    for (let target = height - 1; target >= 1; target--) {
-      if (sizes.some((n, i) => n < MIN_TO_SPLIT && Math.ceil(n / spans[i]) > target)) break; // can't split
-      const next = sizes.map((n, i) => (n < MIN_TO_SPLIT ? spans[i] : Math.max(spans[i], Math.ceil(n / target))));
-      if (next.some((x) => x > MAX_SPAN)) break;
-      const extra = used(next) - used(spans);
-      if (extra > spare) break;
-      bestFor.set(extra, next); // lower targets overwrite: the shortest row for that many columns
-    }
-    const step = [...bestFor.entries()]
-      .sort(([a], [z]) => a - z)
-      .find(([extra, next]) => extra > 0 && height - heightOf(next) >= MIN_GAIN * extra);
-    if (!step) break;
-    spans = step[1];
+  const tallest = Math.max(0, ...sizes);
+  /** The fewest columns per type for a row `height` cards tall, or null if it can't be done. */
+  const spansFor = (height: number) => {
+    const spans = sizes.map((n) => (n < MIN_TO_SPLIT ? 1 : Math.ceil(n / height)));
+    const fits = spans.every((x, i) => x <= MAX_SPAN && Math.ceil(sizes[i] / x) <= height) && spans.reduce((a, b) => a + b, 0) <= cols;
+    return fits ? spans : null;
+  };
+  let best = sizes.map(() => 1);
+  for (let height = tallest - 1; height >= 1; height--) {
+    const spans = spansFor(height);
+    if (!spans) break; // a lower row only needs more columns
+    best = spans;
   }
-  return spans;
+  return best;
 }
 
 /** A group's cards split into `span` columns, the earlier columns taking any extra cards. */
