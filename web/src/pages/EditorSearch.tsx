@@ -184,6 +184,12 @@ async function suggestWithin(text: string, identity: IdentityFilter): Promise<st
 
 // ---- Full results page -----------------------------------------------------------------
 
+/** Which of a card's deck entries the − button takes one from: the add-to board first, the commander last. */
+function removeFrom(entries: DeckCard[], preferred: Board): DeckCard {
+  const order: Board[] = [preferred, "main", "side", "maybe", "commander"];
+  return [...entries].sort((a, z) => order.indexOf(a.board) - order.indexOf(z.board))[0];
+}
+
 /** Cards per page of Scryfall search results. */
 const SCRYFALL_PAGE = 175;
 
@@ -205,6 +211,8 @@ export function SearchResults(props: {
   /** `exact`: the search shows specific printings, so add that one instead of the default printing. */
   onAdd: (c: scry.ScryCard, b: Board, exact: boolean, copies?: number) => void;
   onQty: (entry: DeckCard, q: number) => void;
+  /** Takes one copy of this entry out of the deck. */
+  onRemoveOne: (entry: DeckCard) => void;
   onSearch: (q: string) => void;
   onPickName: (name: string) => void;
   onClose: () => void;
@@ -366,6 +374,8 @@ export function SearchResults(props: {
     return props.deck.filter((d) => d.name.toLowerCase() === name);
   };
 
+  const commanderFormat = props.format === "commander" || conquest;
+
   const tile = (c: scry.ScryCard, inclusion?: number) => {
     const inDeck = entries(c);
     const count = inDeck.reduce((n, e) => n + e.quantity, 0);
@@ -403,7 +413,13 @@ export function SearchResults(props: {
           </span>
         )}
         <div className="search-card-bar">
-          {count > 0 && (
+          {count > 0 && commanderFormat ? (
+            // Commander decks: the card is (nearly always) in one place, so − just takes one out:
+            // from the board new cards go to if it's there, else the main deck, sideboard, considering, commander.
+            <button className="menu-btn qty-btn" aria-label={`Remove one ${c.name}`} title={`Remove one ${c.name}`} onClick={() => props.onRemoveOne(removeFrom(inDeck, props.defaultBoard))}>
+              <span aria-hidden="true">−</span>
+            </button>
+          ) : count > 0 && (
             <CardMenu
               label={`Remove ${c.name}`}
               className="qty-btn"

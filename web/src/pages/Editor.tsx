@@ -251,13 +251,30 @@ function DeckEditor({ initial }: { initial: Draft }) {
     }
   }
 
+  // Entries are found by board and name, not by object: every change copies the cards, so an entry
+  // from an earlier render (two quick clicks) would otherwise not be found.
+  const entryIndex = (cards: DeckCard[], target: DeckCard) => cards.findIndex((c) => c.board === target.board && c.name === target.name);
+
   function setQty(target: DeckCard, q: number) {
-    const i = deck.cards.indexOf(target);
     change((d) => {
+      const i = entryIndex(d.cards, target);
+      if (i < 0) return d;
       if (q <= 0) d.cards.splice(i, 1);
       else d.cards[i].quantity = Math.min(q, MAX_QUANTITY);
       return d;
     });
+  }
+
+  /** Takes one copy out of the deck (each click counts, however quick). */
+  function removeOne(target: DeckCard) {
+    change((d) => {
+      const i = entryIndex(d.cards, target);
+      if (i < 0) return d;
+      if (d.cards[i].quantity <= 1) d.cards.splice(i, 1);
+      else d.cards[i].quantity--;
+      return d;
+    });
+    toast(`Removed ${target.name}${target.board === "main" ? "" : " from " + BOARDS.find((b) => b.id === target.board)!.label.toLowerCase()}`);
   }
 
   function moveCard(target: DeckCard, board: Board) {
@@ -562,6 +579,7 @@ function DeckEditor({ initial }: { initial: Draft }) {
           onDefaultBoard={setAddTo}
           onAdd={addCard}
           onQty={setQty}
+          onRemoveOne={removeOne}
           onSearch={setSearchQuery}
           onPickName={(n) => void addByName(n)}
           onClose={() => setSearchQuery(null)}
