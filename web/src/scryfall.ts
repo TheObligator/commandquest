@@ -314,7 +314,10 @@ async function page(url: string): Promise<SearchPage> {
   let result: SearchPage;
   try {
     const data = await getJson<{ data: ScryCard[]; total_cards: number; has_more: boolean; next_page?: string }>(url);
-    result = { cards: data.data.map(remember), total: data.total_cards, nextPage: data.has_more ? data.next_page : undefined };
+    // Art cards ("X // X", layout art_series) aren't cards you can play. Scryfall leaves them out of
+    // searches, except ones with a color-identity filter (art cards have no colors, so they pass).
+    const cards = data.data.filter((c) => c.layout !== "art_series");
+    result = { cards: cards.map(remember), total: data.total_cards - (data.data.length - cards.length), nextPage: data.has_more ? data.next_page : undefined };
   } catch (e) {
     if (e instanceof ScryfallError && e.status === 404) result = { cards: [], total: 0 }; // "no cards found"
     else throw e;

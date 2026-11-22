@@ -44,7 +44,8 @@ export function identityFilter(format: string, deck: DeckCard[], commanders: scr
   /** The ids of `cards` the deck can't play after all (only Conquest's hybrid cards get this far). */
   const offIds = (cards: scry.ScryCard[]) =>
     conquest ? new Set(offIdentity(cards.map((c) => ({ name: c.id, card: c })), commanders, fitsIdentity, extraColor).map((e) => e.name)) : new Set<string>();
-  return { clause: identityQuery(commanders, extraColor, conquest), fits, extraColor, offIds };
+  // Scryfall lets art cards (no colors, not playable) into searches with an identity filter.
+  return { clause: `${identityQuery(commanders, extraColor, conquest)} -layout:art_series`, fits, extraColor, offIds };
 }
 
 // ---- Name box with suggestions -----------------------------------------------------------
