@@ -13,7 +13,7 @@ import { toast } from "../dom";
 import { CardMenu, type MenuItem, type MenuSection } from "../components/CardMenu";
 import { ContextMenu, type ContextMenuState } from "../components/ContextMenu";
 import { ColorStats } from "../components/ColorStats";
-import { DeckBar } from "../components/DeckBar";
+import { DeckBar, DeckTypeCounts } from "../components/DeckBar";
 import { DeckBracket } from "../components/DeckBracket";
 import { deckAverages, playableLandBack } from "../deckstats";
 import { FORMATS } from "../deckFormats";
@@ -641,7 +641,7 @@ function DeckEditor({ initial }: { initial: Draft }) {
         <DeckBar cards={deck.cards} count={badge} countOk={badgeOk} bracket={deck.bracket} commander={deck.format === "commander"} />
       )}
       {searchQuery !== null && (
-        <DeckDrawer open={deckOpen} onToggle={() => setDeckOpen((o) => !o)} name={deck.name} badge={badge} badgeOk={badgeOk}>
+        <DeckDrawer open={deckOpen} onToggle={() => setDeckOpen((o) => !o)} name={deck.name} badge={badge} badgeOk={badgeOk} side={deck.cards.length > 0 && <DeckTypeCounts cards={deck.cards} className="in-drawer" />}>
           {deckView}
         </DeckDrawer>
       )}
@@ -1452,7 +1452,8 @@ function savedDrawerHeight(): number | null {
  * drag the bar to make it as tall or short as you like (dragging nearly all the way down closes
  * it). The height you leave it at is remembered in this browser.
  */
-function DeckDrawer({ open, onToggle, name, badge, badgeOk, children }: { open: boolean; onToggle: () => void; name: string; badge: string; badgeOk: boolean; children: React.ReactNode }) {
+/** `side`: shown over the right end of the bar (the deck's type counts). */
+function DeckDrawer({ open, onToggle, name, badge, badgeOk, side, children }: { open: boolean; onToggle: () => void; name: string; badge: string; badgeOk: boolean; side?: React.ReactNode; children: React.ReactNode }) {
   const [height, setHeight] = useState<number | null>(savedDrawerHeight);
   /** While dragging: the live height. */
   const [dragHeight, setDragHeight] = useState<number | null>(null);
@@ -1533,6 +1534,8 @@ function DeckDrawer({ open, onToggle, name, badge, badgeOk, children }: { open: 
         </span>
         <span className="deck-drawer-toggle">{open ? "Hide deck ▾" : "Show deck ▴"}</span>
       </button>
+      {/* Beside the bar's button, not in it: the counts are hoverable and focusable themselves. */}
+      {side}
       {(open || (dragHeight ?? 0) > DRAWER_BAR) && <div className="deck-drawer-body">{children}</div>}
     </div>
   );

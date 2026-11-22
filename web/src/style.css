@@ -920,3 +920,11 @@ dialog.new-deck.tag-editor { width: min(460px, calc(100vw - 32px)); }
 @media (max-width: 600px) {
   .deck-bar-types { margin-left: 0; }
 }
+
+/* The same type counts on the right of the search page's deck drawer bar (52px tall). */
+.deck-bar-types.in-drawer { position: absolute; top: 0; right: 16px; height: 52px; align-items: center; flex-wrap: nowrap; margin: 0; z-index: 1; }
+.deck-bar-types.in-drawer > li:not(.none):hover { background: var(--panel); }
+/* The bar's title is centered: below this width the counts would run into it. */
+@media (max-width: 1180px) {
+  .deck-bar-types.in-drawer { display: none; }
+}
