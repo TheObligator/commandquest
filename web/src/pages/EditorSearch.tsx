@@ -184,6 +184,9 @@ async function suggestWithin(text: string, identity: IdentityFilter): Promise<st
 
 // ---- Full results page -----------------------------------------------------------------
 
+/** Cards per page of Scryfall search results. */
+const SCRYFALL_PAGE = 175;
+
 const normName = (n: string) => n.split(" // ")[0].replace(/[‘’]/g, "'").toLowerCase();
 
 /** Query terms that choose printings rather than cards. */
@@ -465,7 +468,18 @@ export function SearchResults(props: {
         </label>
       </div>
       <p className="muted small">
-        {error ? <span className="form-error">{error}</span> : total === null ? "Searching…" : total ? `${total.toLocaleString()} cards for “${props.query}”` : `No cards found for “${props.query}”.`}
+        {error ? (
+          <span className="form-error">{error}</span>
+        ) : total === null ? (
+          "Searching…"
+        ) : total ? (
+          <span className="search-count">
+            <strong>{total.toLocaleString()} card{total === 1 ? "" : "s"}</strong> for “{props.query}”
+            {total > cards.length && <> · showing {cards.length.toLocaleString()}</>}
+          </span>
+        ) : (
+          `No cards found for “${props.query}”.`
+        )}
         {canFilter && (
           <label className="inline">
             {" "}
@@ -509,7 +523,11 @@ export function SearchResults(props: {
       <div className="search-grid">{shown.map((c) => tile(c))}</div>
       {next && (
         <button className="btn ghost wide" disabled={loadingMore} onClick={() => void more()}>
-          {loadingMore ? "Loading…" : "Load more"}
+          {loadingMore
+            ? "Loading…"
+            : total !== null && total > cards.length
+              ? `Load ${Math.min(SCRYFALL_PAGE, total - cards.length).toLocaleString()} more (${(total - cards.length).toLocaleString()} left)`
+              : "Load more"}
         </button>
       )}
     </section>

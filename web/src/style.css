@@ -643,6 +643,7 @@ kbd { font-family: var(--font-mono, ui-monospace, monospace); font-size: .72rem;
 .search-page { padding: 16px 18px 20px; display: grid; gap: 10px; }
 .search-page-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .search-page-box { flex: 1 1 320px; }
+.search-count strong { color: var(--text); font-size: 1rem; }
 .search-page > p { margin: 0; }
 .search-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 18px 14px; }
 .search-section { margin: 6px 0 0; font-size: 1rem; }
