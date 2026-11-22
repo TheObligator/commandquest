@@ -2,8 +2,8 @@
 //
 // Follows https://scryfall.com/docs/api and https://scryfall.com/docs/api/rate-limits:
 //  - Rate limits: /cards/search, /cards/named, /cards/random and /cards/collection allow 2 requests
-//    per second; everything else 10 per second. Every request goes through one queue that waits
-//    the right gap. Images and symbols come from *.scryfall.io, which has no rate limit, so
+//    per second; everything else 10 per second. Every request goes through one queue that spaces
+//    their starts by the right gap. Images and symbols come from *.scryfall.io, which has no rate limit, so
 //    they never go through the API.
 //  - On HTTP 429 we pause all requests for 30 seconds, as Scryfall requires.
 //  - The browser's own User-Agent is left intact and an Accept header is sent.
@@ -95,23 +95,23 @@ export interface SearchPage {
 
 // ---- Request queue ------------------------------------------------------------
 
-let lastAt = 0;
-let lastGap = 0;
+// Requests are spaced by when they start, not chained on finishing: Scryfall limits how many
+// arrive per second, so a slow response needn't hold up the next request. Every request is at least
+// FAST_GAP_MS after the last one, and the slow endpoints are also SLOW_GAP_MS after each other.
+let nextAny = 0;
+let nextSlow = 0;
 let pausedUntil = 0;
-let chain: Promise<unknown> = Promise.resolve();
 
 function queued<T>(path: string, fn: () => Promise<T>): Promise<T> {
-  const gap = SLOW.test(path) ? SLOW_GAP_MS : FAST_GAP_MS;
-  const run = chain.then(async () => {
-    // Wait for whichever is longer: the previous request's gap or this one's.
-    const wait = Math.max(lastAt + Math.max(gap, lastGap), pausedUntil) - Date.now();
-    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-    lastAt = Date.now();
-    lastGap = gap;
-    return fn();
-  });
-  chain = run.catch(() => undefined);
-  return run;
+  const slow = SLOW.test(path);
+  const now = Date.now();
+  const at = Math.max(now, nextAny, pausedUntil, slow ? nextSlow : 0);
+  nextAny = at + FAST_GAP_MS;
+  if (slow) nextSlow = at + SLOW_GAP_MS;
+  return new Promise<void>((r) => setTimeout(r, at - now)).then(() =>
+    // A 429 while this one waited: get back in line behind the pause.
+    Date.now() < pausedUntil ? queued(path, fn) : fn(),
+  );
 }
 
 class ScryfallError extends Error {
@@ -324,10 +324,20 @@ async function page(url: string): Promise<SearchPage> {
   return result;
 }
 
-export async function autocomplete(q: string): Promise<string[]> {
-  if (q.trim().length < 2) return [];
-  const data = await getJson<{ data: string[] }>(`${API}/cards/autocomplete?${new URLSearchParams({ q })}`);
-  return data.data;
+const autocompleted = new Map<string, Promise<string[]>>();
+
+/** Card names containing the text (Scryfall's autocomplete); remembered for the session. */
+export function autocomplete(q: string): Promise<string[]> {
+  const key = q.trim().toLowerCase();
+  if (key.length < 2) return Promise.resolve([]);
+  let hit = autocompleted.get(key);
+  if (!hit) {
+    hit = getJson<{ data: string[] }>(`${API}/cards/autocomplete?${new URLSearchParams({ q: key })}`).then((d) => d.data);
+    hit.catch(() => autocompleted.delete(key)); // don't remember a failure
+    if (autocompleted.size > 500) autocompleted.clear();
+    autocompleted.set(key, hit);
+  }
+  return hit;
 }
 
 /**
