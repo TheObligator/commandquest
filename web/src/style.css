@@ -868,3 +868,38 @@ dialog.new-deck.tag-editor { width: min(460px, calc(100vw - 32px)); }
 .tag-editor-sub { margin: 0 0 6px; }
 .tag-editor-add { display: flex; gap: 8px; }
 .tag-editor-add input { flex: 1; min-width: 0; }
+
+/* Mana curve: click a bar for that mana value's breakdown under the chart. */
+.bar-col { cursor: pointer; border-radius: 6px; }
+.bar-col.empty { cursor: default; }
+.bar-col.picked { background: rgb(224 168 79 / 12%); box-shadow: inset 0 0 0 1px rgb(224 168 79 / 45%); }
+.bar-col.picked .bar-label { color: var(--accent); font-weight: 700; }
+.curve-detail { margin-top: 16px; padding: 14px 16px; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); }
+.curve-detail header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.curve-detail h3 { margin: 0; font-size: 1rem; }
+.curve-odds { margin: 10px 0 12px; }
+.curve-odds strong { color: var(--accent-2); }
+.curve-breakdowns { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 20px; }
+.split-bar { display: flex; gap: 2px; margin-top: 4px; border-radius: 6px; overflow: hidden; }
+.split-bar > span { display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 42px; padding: 3px 6px; font-size: .8rem; font-weight: 700; color: #0e1016; white-space: nowrap; }
+.split-bar .type-icon { width: 13px; height: 13px; }
+.split-bar.colors > span { background: var(--panel); color: var(--text); }
+.split-bar .color-W { background: #e9e4c6 !important; color: #0e1016 !important; }
+.split-bar .color-U { background: #3f78b5 !important; }
+.split-bar .color-B { background: #4a4150 !important; }
+.split-bar .color-R { background: #b5473f !important; }
+.split-bar .color-G { background: #3e8a5c !important; }
+.split-bar .color-C { background: #6d7486 !important; }
+.curve-detail-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px 24px; margin-top: 14px; }
+.curve-detail-group h4 { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; font-size: .9rem; }
+.curve-detail-group ul { list-style: none; margin: 0; padding: 0; }
+.curve-detail-group li { padding: 3px 0; border-bottom: 1px solid var(--line); font-size: .88rem; cursor: default; }
+.curve-detail-group .qty-n { display: inline-block; min-width: 1.4em; font-variant-numeric: tabular-nums; }
+.type-icon { flex: none; width: 16px; height: 16px; vertical-align: -3px; }
+.type-icon.t-creature { color: var(--type-creature); }
+.type-icon.t-planeswalker { color: var(--type-planeswalker); }
+.type-icon.t-battle { color: var(--type-battle); }
+.type-icon.t-instant { color: var(--type-instant); }
+.type-icon.t-sorcery { color: var(--type-sorcery); }
+.type-icon.t-artifact { color: var(--type-artifact); }
+.type-icon.t-enchantment { color: var(--type-enchantment); }
