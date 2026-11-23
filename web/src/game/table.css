@@ -479,6 +479,24 @@ dialog.scry-dialog { width: min(760px, calc(100vw - 32px)); max-height: calc(100
 .scry-name { font-size: .75rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .scry-btns { display: flex; gap: 3px; flex-wrap: wrap; }
 .scry-btns .btn { padding: 2px 6px; }
+dialog.scry-dialog.big { width: min(820px, calc(100vw - 32px)); }
+.scry-dialog.big .scry-card { width: 200px; }
+.scry-dialog.big .scry-img { --cw: 200px; width: 200px; }
+
+/* Card windows (CardWindow.tsx): revealed cards, and cards a prompt offers from a hidden place. */
+dialog.card-window { overflow: auto; }
+.zv-grid.cw-big { grid-template-columns: repeat(auto-fill, minmax(200px, 240px)); }
+.zv-grid.cw-big .zv-card { --cw: 220px; }
+.cw-section { margin: 14px 0 8px; font-size: .9rem; }
+.cw-section .small { font-weight: 400; margin-left: 6px; }
+.zv-grid.cw-dim figure { opacity: .55; }
+.zv-grid.cw-dim figure:hover { opacity: 1; }
+.card-window figure.playable { cursor: pointer; }
+.card-window figure.playable .zv-card { box-shadow: 0 0 0 2px #5fd38a, 0 0 14px rgb(95 211 138 / 55%); border-radius: 6px; }
+.card-window figure.marked .zv-card { outline: 3px solid #c79bff; outline-offset: 2px; border-radius: 6px; }
+.cw-actions { position: sticky; bottom: -18px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 14px -18px -18px; padding: 12px 18px; background: var(--panel); border-top: 1px solid var(--line); }
+.cw-actions .ar-btn { width: auto; }
+.cw-actions .ask-spacer { flex: 1; }
 
 /* Several cards selected together (drag a box, or Shift/Ctrl/⌘-click): one right-click menu for all. */
 .slot.marked .bf-card, .hand-card.marked, .zone-viewer figure.marked .zv-card { outline: 3px solid #c79bff; outline-offset: 2px; border-radius: 6px; }

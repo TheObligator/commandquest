@@ -83,7 +83,7 @@ public final class BrowserSeat implements IRemote {
     private record Preferred(int id, String label) {
     }
 
-    /** A question waiting for the browser, with how to turn its answer into Forge's value. */
+    /** A question waiting for the browser, with how to turn its answer into Forge's value ({@code ev} null: a scry window). */
     private record Pending(CompletableFuture<Object> answer, List<?> options, GuiGameEvent ev, ObjectNode ask) {
     }
 
@@ -470,8 +470,8 @@ public final class BrowserSeat implements IRemote {
                 offer.add(views.card(gv, c, me, true));
             }
         }
-        // The other cards you're looking at there right now (Harald's top five: the ones you can't
-        // take), so the prompt can show them too, not clickable.
+        // The other cards you're looking at there right now (Harald's top five, or your whole
+        // library while you search it: the ones you can't take), so the window shows them too, not clickable.
         ArrayNode alsoSeen = o.putArray("seen");
         if (!offer.isEmpty()) {
             java.util.Set<Integer> offered = new java.util.HashSet<>();
@@ -493,9 +493,6 @@ public final class BrowserSeat implements IRemote {
                         alsoSeen.add(views.card(gv, v, me));
                     }
                 }
-            }
-            if (alsoSeen.size() > 15) {
-                alsoSeen.removeAll(); // a whole library on show: the offered cards are enough
             }
         }
         for (Object t : s.targets()) {
@@ -800,6 +797,15 @@ public final class BrowserSeat implements IRemote {
         }
         // a reveal shows cards outright; any other question may let you look at some (scry, a hand)
         sawCards("info".equals(o.path("kind").asText()) ? options : null);
+        Object answer = waitFor(o, options, ev);
+        return answer == NO_ANSWER ? defaultAnswer(ev) : answer;
+    }
+
+    /** What {@link #waitFor} returns when the seat closed or the wait was interrupted. */
+    private static final Object NO_ANSWER = new Object();
+
+    /** Sends question {@code o} and blocks the game thread until the browser answers it. */
+    private Object waitFor(ObjectNode o, List<?> options, GuiGameEvent ev) {
         int id = askIds.incrementAndGet();
         o.put("id", id);
         Pending p = new Pending(new CompletableFuture<>(), options, ev, o);
@@ -810,12 +816,79 @@ public final class BrowserSeat implements IRemote {
             return p.answer().get();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return defaultAnswer(ev);
+            return NO_ANSWER;
         } catch (ExecutionException e) {
-            return defaultAnswer(ev);
+            return NO_ANSWER;
         } finally {
             pending.remove(id);
         }
+    }
+
+    /**
+     * Scry or surveil in one window (kind {@code scry}): each of {@code cards} stays on top of the
+     * library, in an order, or goes {@code away} ("bottom" or "graveyard"). The browser answers
+     * with card indexes: the top ones (top card first), -1, then the ones going away. Returns
+     * [top, away] as indexes, or null without a usable answer (the browser left).
+     */
+    @SuppressWarnings("unchecked")
+    public List<List<Integer>> arrangeTop(String title, List<?> cards, String away) {
+        if (closed) {
+            return null;
+        }
+        GameView gv = gui == null ? null : gui.getGameView();
+        ObjectNode o = msg("ask");
+        o.put("kind", "scry");
+        o.put("title", title);
+        o.put("message", title);
+        o.put("away", away);
+        o.set("options", options(gv, cards, null));
+        o.put("min", 0);
+        o.put("max", cards.size());
+        sawCards(cards);
+        Object answer = waitFor(o, cards, null);
+        return answer instanceof List<?> l ? (List<List<Integer>>) l : null;
+    }
+
+    /** A scry answer ({@link #arrangeTop}): [top, away], each card exactly once; else null. */
+    static List<List<Integer>> topAndAway(JsonNode choice, int n) {
+        if (choice == null || !choice.isArray()) {
+            return null;
+        }
+        List<Integer> top = new ArrayList<>();
+        List<Integer> away = new ArrayList<>();
+        Set<Integer> seen = new HashSet<>();
+        boolean past = false;
+        for (JsonNode x : choice) {
+            int i = x.asInt(-2);
+            if (i == -1 && !past) {
+                past = true;
+            } else if (i >= 0 && i < n && seen.add(i)) {
+                (past ? away : top).add(i);
+            } else {
+                return null;
+            }
+        }
+        return seen.size() == n ? List.of(top, away) : null;
+    }
+
+    /**
+     * Cards shown to this player ({@code shown}): a window with them that the player closes; the
+     * game doesn't wait. {@code note} says why there are none ("no cards in X's hand").
+     */
+    public void showCards(String title, List<CardView> cards, String note) {
+        if (closed) {
+            return;
+        }
+        sawCards(cards);
+        GameView gv = gui == null ? null : gui.getGameView();
+        ObjectNode o = msg("shown");
+        o.put("title", title);
+        if (note != null) {
+            o.put("note", note);
+        }
+        ArrayNode a = o.putArray("cards");
+        cards.forEach(c -> a.add(views.card(gv, c, me, true)));
+        emit(o);
     }
 
     private ArrayNode options(GameView gv, List<?> items, FSerializableFunction<Object, String> display) {
@@ -884,6 +957,14 @@ public final class BrowserSeat implements IRemote {
     public void answer(int id, JsonNode choice, String text) {
         Pending p = pending.get(id);
         if (p == null) {
+            return;
+        }
+        if (p.ev() == null) {
+            // a scry window: ignore an answer that doesn't place every card, so it can be fixed
+            List<List<Integer>> piles = topAndAway(choice, p.options().size());
+            if (piles != null) {
+                p.answer().complete(piles);
+            }
             return;
         }
         List<Integer> picked = new ArrayList<>();
@@ -1034,7 +1115,7 @@ public final class BrowserSeat implements IRemote {
 
     /** Answers every open question with Forge's default (e.g. before conceding, which can't happen while Forge waits on one). */
     public void answerOpenWithDefaults() {
-        pending.values().forEach(p -> p.answer().complete(defaultAnswer(p.ev())));
+        pending.values().forEach(p -> p.answer().complete(p.ev() == null ? null : defaultAnswer(p.ev())));
     }
 
     /** The browser left: release every waiting question so the game thread never hangs. */

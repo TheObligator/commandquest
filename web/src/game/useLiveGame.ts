@@ -51,6 +51,14 @@ export interface AskOption {
   card?: CardView;
 }
 
+/** Cards revealed to you, in a window you close; the game doesn't wait. `note` says why there are none. */
+export interface LiveShown {
+  n: number;
+  title: string;
+  note?: string;
+  cards: CardView[];
+}
+
 /** A question that blocks the game until answered. */
 export interface LiveAsk {
   id: number;
@@ -59,7 +67,9 @@ export interface LiveAsk {
    * order: put options in order (answer: their indexes in order, min..max of them);
    * distribute: divide `amount` among the options (answer: one number per option).
    */
-  kind: "choose" | "text" | "info" | "order" | "distribute" | "arrange";
+  kind: "choose" | "text" | "info" | "order" | "distribute" | "arrange" | "scry";
+  /** scry (a scry or surveil window): where the cards not kept on top go. Answer: top indexes (top first), -1, the others. */
+  away?: "bottom" | "graveyard";
   /** arrange (scry…): whether cards may go on top / on the bottom of the library. */
   toTop?: boolean;
   toBottom?: boolean;
@@ -204,6 +214,9 @@ export function useLiveGame() {
   const [searchList, setSearchList] = useState<LibraryList | null>(null);
   const searchOwner = useRef<string | null>(null);
   const [notice, setNotice] = useState<{ message: string; n: number } | null>(null);
+  /** Revealed cards waiting to be looked at, oldest first. */
+  const [shown, setShown] = useState<LiveShown[]>([]);
+  const shownCount = useRef(0);
   /** A table's game waiting for its players (docs/tables.md): who's still to come. */
   const [tableWaiting, setTableWaiting] = useState<TableWaiting | null>(null);
   /** The table's game this page asked to join isn't on (any more). */
@@ -348,6 +361,9 @@ export function useLiveGame() {
           case "notice":
             setNotice((n) => ({ message: m.message, n: (n?.n ?? 0) + 1 }));
             break;
+          case "shown":
+            setShown((q) => [...q, { n: ++shownCount.current, title: m.title ?? "", note: m.note, cards: m.cards ?? [] }].slice(-20));
+            break;
           case "actions": {
             const waiters = actionWaiters.current.get(m.id) ?? [];
             actionWaiters.current.delete(m.id);
@@ -423,6 +439,9 @@ export function useLiveGame() {
     ask,
     error,
     notice,
+    shown,
+    /** Closes the oldest revealed-cards window. */
+    dismissShown: () => setShown((q) => q.slice(1)),
     autoPass,
     libraryList,
     searchList,
@@ -439,6 +458,7 @@ export function useLiveGame() {
       setPrompt(null);
       setAsk(null);
       setAutoPassState(null);
+      setShown([]);
       setStatus("starting");
       send({ t: "start", deck, name, opponents, freePlay, rewind });
     },
@@ -450,6 +470,7 @@ export function useLiveGame() {
       setPrompt(null);
       setAsk(null);
       setAutoPassState(null);
+      setShown([]);
       setStatus("starting");
       send({ t: "table", key, deck });
     },

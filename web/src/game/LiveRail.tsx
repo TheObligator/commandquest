@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { AUTO_PASS } from "./ActionRail";
 import { manaChoiceFor } from "./manaOptions";
+import { OfferWindow } from "./CardWindow";
 import { RewindPanel } from "./RewindPanel";
+import { ScryDialog } from "./ScryDialog";
 import { Kbd, useHotkeys } from "./useHotkeys";
 import { cardImage, previewFor, usePreview, type Preview } from "./cards";
 import { logParts } from "./logText";
@@ -30,6 +32,8 @@ export function LiveRail(props: {
         </section>
       ) : game.ask?.kind === "order" ? (
         <OrderPanel key={game.ask.id} ask={game.ask} game={game} />
+      ) : game.ask?.kind === "scry" ? (
+        <ScryPanel key={game.ask.id} ask={game.ask} game={game} />
       ) : game.ask?.kind === "arrange" ? (
         <ArrangePanel key={game.ask.id} ask={game.ask} game={game} />
       ) : game.ask?.kind === "distribute" ? (
@@ -101,13 +105,14 @@ function PromptPanel({ game, nameOf }: { game: LiveGame; nameOf: (id: string) =>
       {rest.length > 0 && <p className="ar-prompt-text">{point.text(rest.join("\n"))}</p>}
       {!!game.view?.revealed?.length && <RevealedCards cards={game.view.revealed} />}
       {!!game.view?.selection?.offer?.length && (
-        <OfferedCards cards={game.view.selection.offer} chosen={game.view.selection.chosen} onPick={game.clickCard} />
-      )}
-      {!!game.view?.selection?.seen?.length && (
-        <>
-          <p className="ar-sub">Also looking at (can't be chosen):</p>
-          <RevealedCards cards={game.view.selection.seen} />
-        </>
+        <Offer
+          key={game.view.selection.offer.map((c) => c.id).join()}
+          message={p.message}
+          offer={game.view.selection.offer}
+          seen={game.view.selection.seen ?? []}
+          chosen={game.view.selection.chosen}
+          game={game}
+        />
       )}
       <div className="ar-actions">
         {p.ok.label && (
@@ -145,9 +150,61 @@ function RevealedCards({ cards }: { cards: CardView[] }) {
 }
 
 /**
- * Cards the prompt offers from places the table doesn't show (your library while you search it…):
- * click one to choose it, like a card on the table.
+ * Cards the prompt offers from places the table doesn't show (your library while you search it,
+ * the top cards you're looking at): a window with them all, the ones you can take first. Here in
+ * the rail, the cards you can take, and a button to bring the window back once hidden.
  */
+function Offer({ message, offer, seen, chosen, game }: { message: string; offer: CardView[]; seen: CardView[]; chosen: (number | string)[]; game: LiveGame }) {
+  const [open, setOpen] = useState(true);
+  const p = game.prompt;
+  return (
+    <>
+      <button className="ar-btn" onClick={() => setOpen(true)}>
+        Show the cards ({offer.length + seen.length})
+      </button>
+      <OfferedCards cards={offer} chosen={chosen} onPick={game.clickCard} />
+      {open && (
+        <OfferWindow
+          title={message}
+          offer={offer}
+          seen={seen}
+          chosen={chosen}
+          onPick={game.clickCard}
+          ok={p ? { ...p.ok, onClick: game.ok } : undefined}
+          cancel={p ? { ...p.cancel, onClick: game.cancel } : undefined}
+          onHide={() => setOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
+/** A scry or surveil: the cards in a window (ScryDialog); here, a way back to it once hidden. */
+function ScryPanel({ ask, game }: { ask: LiveAsk; game: LiveGame }) {
+  const [open, setOpen] = useState(true);
+  const kind = ask.away === "graveyard" ? "surveil" : "scry";
+  const opts = ask.options ?? [];
+  const cards = opts.map((o, i) => o.card ?? ({ id: o.cardId ?? -1 - i, name: o.label } as CardView));
+  const index = (id: number) => cards.findIndex((c) => c.id === id);
+  const answer = (top: number[], away: number[]) => game.answer(ask.id, [...top.map(index), -1, ...away.map(index)]);
+  useHotkeys({ ok: () => (open ? false : setOpen(true)) });
+  return (
+    <section className="ar-decision live ar-ask">
+      <div className="ar-ribbon">Decision</div>
+      <h3>{ask.title || (kind === "scry" ? "Scry" : "Surveil")}</h3>
+      <p className="ar-sub">{kind === "scry" ? "Keep each card on top, or put it on the bottom." : "Keep each card on top, or put it into your graveyard."}</p>
+      <div className="ar-actions">
+        <button className="ar-btn primary" onClick={() => setOpen(true)}>
+          Show the cards
+          <Kbd action="ok" />
+        </button>
+      </div>
+      {open && <ScryDialog forced kind={kind} cards={cards} onClose={() => setOpen(false)} onApply={answer} />}
+    </section>
+  );
+}
+
+/** The cards the prompt lets you take, listed in the rail: click one to choose it, like a card on the table. */
 function OfferedCards({ cards, chosen, onPick }: { cards: CardView[]; chosen: (number | string)[]; onPick: (id: number) => void }) {
   const setPreview = usePreview();
   // Copies of the same card are one row ("Forest ×16"); clicking it picks the next copy not chosen yet.

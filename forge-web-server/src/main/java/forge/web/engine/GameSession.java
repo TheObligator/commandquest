@@ -107,7 +107,7 @@ public final class GameSession {
         for (Seat seat : seats) {
             RegisteredPlayer rp = RegisteredPlayer.forCommander(seat.deck());
             if (seat.human()) {
-                rp.setPlayer(new WebLobbyPlayer(seat.name(), seat.remote() instanceof BrowserSeat b ? b::notice : null));
+                rp.setPlayer(new WebLobbyPlayer(seat.name(), seat.remote() instanceof BrowserSeat b ? b : null));
                 ProtocolGuiGame gui = new ProtocolGuiGame(seat.remote()) {
                     @Override
                     public void openView(forge.trackable.TrackableCollection<PlayerView> myPlayers) {

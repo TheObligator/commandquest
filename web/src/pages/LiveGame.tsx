@@ -33,6 +33,7 @@ import { ManaChoice } from "../game/ManaChoice";
 import { manaChoiceFor } from "../game/manaOptions";
 import { LibraryDialog, type LibraryCountAction } from "../game/LibraryDialog";
 import { ScryDialog, type ArrangeKind } from "../game/ScryDialog";
+import { ShownWindow } from "../game/CardWindow";
 import { CostDialog } from "../game/CostDialog";
 
 /** Combat steps once attackers are declared: when a creature can be put into combat attacking. */
@@ -973,6 +974,16 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
           manaChoice.via === "ask" ? game.answer(manaChoice.askId!, answer) : answer[0] === 0 ? game.ok() : game.cancel()
         }
         onCancel={manaChoice.cancellable ? () => game.answer(manaChoice.askId!, []) : undefined}
+      />
+    )}
+    {game.shown[0] && (
+      <ShownWindow
+        key={game.shown[0].n}
+        title={game.shown[0].title}
+        note={game.shown[0].note}
+        cards={game.shown[0].cards}
+        more={game.shown.length - 1}
+        onClose={game.dismissShown}
       />
     )}
     {game.prompt?.pay && !game.ask && <PayPrompt prompt={game.prompt} pool={view.players[0].mana} game={{ ok, cancel, payFree: game.payFree, payPool: game.payPool }} />}

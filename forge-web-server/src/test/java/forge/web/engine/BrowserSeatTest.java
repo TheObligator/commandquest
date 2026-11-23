@@ -121,4 +121,40 @@ public class BrowserSeatTest {
         Assert.assertEquals(bad, List.of("a", "b", "c"));
         seat.close();
     }
+
+    /** Scry and surveil in one window: the top cards in order, -1, then the ones going away; a bad answer is ignored. */
+    @Test
+    public void scryWindow() throws Exception {
+        ObjectMapper json = new ObjectMapper();
+        List<String> sent = new CopyOnWriteArrayList<>();
+        BrowserSeat seat = new BrowserSeat(json, sent::add);
+        java.util.concurrent.CompletableFuture<List<List<Integer>>> result = java.util.concurrent.CompletableFuture.supplyAsync(
+                () -> seat.arrangeTop("Surveil 3", List.of("a", "b", "c"), "graveyard"));
+        JsonNode ask = null;
+        long end = System.currentTimeMillis() + 3000;
+        while (ask == null && System.currentTimeMillis() < end) {
+            for (String m : sent) {
+                JsonNode n = json.readTree(m);
+                if (n.path("t").asText().equals("ask")) {
+                    ask = n;
+                }
+            }
+            Thread.sleep(20);
+        }
+        Assert.assertNotNull(ask, "asked");
+        Assert.assertEquals(ask.path("kind").asText(), "scry");
+        Assert.assertEquals(ask.path("away").asText(), "graveyard");
+        Assert.assertEquals(ask.path("options").size(), 3);
+        int id = ask.path("id").asInt();
+        seat.answer(id, json.readTree("[2,-1,0]"), null); // b missing: ignored
+        seat.answer(id, json.readTree("[2,2,-1,0,1]"), null); // c twice: ignored
+        Thread.sleep(100);
+        Assert.assertFalse(result.isDone(), "still waiting for a good answer");
+        seat.answer(id, json.readTree("[2,0,-1,1]"), null);
+        Assert.assertEquals(result.get(3, java.util.concurrent.TimeUnit.SECONDS), List.of(List.of(2, 0), List.of(1)));
+
+        // Everything kept on top (no -1) is fine too.
+        Assert.assertEquals(BrowserSeat.topAndAway(json.readTree("[1,0]"), 2), List.of(List.of(1, 0), List.of()));
+        seat.close();
+    }
 }

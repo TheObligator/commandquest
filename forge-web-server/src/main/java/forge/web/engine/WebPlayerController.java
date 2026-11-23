@@ -18,8 +18,11 @@ import forge.util.collect.FCollection;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import forge.game.card.CardView;
+import forge.util.Localizer;
+import forge.util.MessageUtil;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
-import java.util.function.Consumer;
 
 /**
  * A browser player's controller: Forge's human controller with the mulligan done as Commander
@@ -31,20 +34,24 @@ import java.util.function.Consumer;
  *       you see the new seven and decide again; only the hand you keep has cards put back. Forge
  *       asks for them straight after each mulligan, before you've decided to keep.</li>
  *   <li><b>An automatic upkeep stop</b> when you can use an upkeep-only ability ({@link UpkeepStop}).</li>
+ *   <li><b>Revealed cards show in a window you close</b>, without stopping the game. Forge waits
+ *       on an OK (with "End Turn" beside it) or a list to dismiss.</li>
+ *   <li><b>Scry and surveil in one window</b> with the cards, for any number of cards. Forge asks
+ *       about a single card by name, and about several in two steps.</li>
  * </ul>
  */
 public class WebPlayerController extends PlayerControllerHuman {
 
-    /** Tells the player's browser something (a {@code notice}); may be null. */
-    private final Consumer<String> notice;
+    /** This player's browser; null when there's none (questions then go Forge's way). */
+    private final BrowserSeat seat;
     /** The card {@link UpkeepStop} found when this player last got priority, or null. */
     private volatile Card upkeepCard;
     /** Turn on which the player was last told about an automatic upkeep stop. */
     private int toldOnTurn = -1;
 
-    public WebPlayerController(Game game, Player p, LobbyPlayer lp, Consumer<String> notice) {
+    public WebPlayerController(Game game, Player p, LobbyPlayer lp, BrowserSeat seat) {
         super(game, p, lp);
-        this.notice = notice;
+        this.seat = seat;
     }
 
     /**
@@ -98,9 +105,9 @@ public class WebPlayerController extends PlayerControllerHuman {
             return skip;
         }
         int turn = getGame().getPhaseHandler().getTurn();
-        if (notice != null && toldOnTurn != turn) {
+        if (seat != null && toldOnTurn != turn) {
             toldOnTurn = turn;
-            notice.accept("Stopped in upkeep: " + card.getName() + " has an ability you can only use now.");
+            seat.notice("Stopped in upkeep: " + card.getName() + " has an ability you can only use now.");
         }
         return false;
     }
@@ -203,12 +210,71 @@ public class WebPlayerController extends PlayerControllerHuman {
     @Override
     public ImmutablePair<CardCollection, CardCollection> arrangeForScry(CardCollection topN) {
         ImmutablePair<CardCollection, CardCollection> p = planned(topN);
-        return p != null ? p : super.arrangeForScry(topN);
+        if (p != null || seat == null) {
+            return p != null ? p : super.arrangeForScry(topN);
+        }
+        getGame().getUndoManager().barrier("Scry");
+        return topOrAway(topN, "Scry " + topN.size(), "bottom");
     }
 
     @Override
     public ImmutablePair<CardCollection, CardCollection> arrangeForSurveil(CardCollection topN) {
         ImmutablePair<CardCollection, CardCollection> p = planned(topN);
-        return p != null ? p : super.arrangeForSurveil(topN);
+        if (p != null || seat == null) {
+            return p != null ? p : super.arrangeForSurveil(topN);
+        }
+        getGame().getUndoManager().barrier("Surveil");
+        return topOrAway(topN, "Surveil " + topN.size(), "graveyard");
+    }
+
+    /**
+     * Asks in one window where each of {@code topN} goes: on top of the library (in an order) or
+     * {@code away} ("bottom" or "graveyard"). Returns (top, away), top card first; null for an
+     * empty pile. Without an answer (the browser left), everything stays on top as it was.
+     */
+    private ImmutablePair<CardCollection, CardCollection> topOrAway(CardCollection topN, String title, String away) {
+        tempShowCards(topN);
+        try {
+            List<CardView> views = new ArrayList<>();
+            topN.forEach(c -> views.add(c.getView()));
+            List<List<Integer>> piles = seat.arrangeTop(title, views, away);
+            if (piles == null) {
+                return ImmutablePair.of(new CardCollection(topN), null);
+            }
+            CardCollection top = new CardCollection();
+            CardCollection rest = new CardCollection();
+            piles.get(0).forEach(i -> top.add(topN.get(i)));
+            piles.get(1).forEach(i -> rest.add(topN.get(i)));
+            return ImmutablePair.of(top.isEmpty() ? null : top, rest.isEmpty() ? null : rest);
+        } finally {
+            endTempShowCards();
+        }
+    }
+
+    /**
+     * Cards revealed to this player (an opponent's hand, a card someone revealed, a library you
+     * searched and found nothing in): a window the player closes, while the game goes on.
+     */
+    @Override
+    protected void reveal(CardCollectionView cards, ZoneType zone, PlayerView owner, String message, boolean addSuffix) {
+        if (seat == null) {
+            super.reveal(cards, zone, owner, message, addSuffix);
+            return;
+        }
+        getGame().getUndoManager().barrier("Information revealed");
+        Localizer loc = Localizer.getInstance();
+        String zoneName = zone.getTranslatedName().toLowerCase();
+        if (StringUtils.isBlank(message)) {
+            message = loc.getMessage("lblLookCardInPlayerZone", "{player's}", zoneName);
+        } else if (addSuffix) {
+            message += " " + loc.getMessage("lblPlayerZone", "{player's}", zoneName);
+        }
+        String title = MessageUtil.formatMessage(message, getLocalPlayerView(), owner);
+        List<CardView> views = new ArrayList<>();
+        cards.forEach(c -> views.add(c.getView()));
+        String note = views.isEmpty()
+                ? MessageUtil.formatMessage(loc.getMessage("lblThereNoCardInPlayerZone", "{player's}", zoneName), getLocalPlayerView(), owner)
+                : null;
+        seat.showCards(title, views, note);
     }
 }
