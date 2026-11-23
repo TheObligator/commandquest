@@ -2,6 +2,7 @@
 // prompt (with Forge's own button labels) or question, and the auto-pass skips.
 import { useEffect, useState } from "react";
 import { AUTO_PASS } from "./ActionRail";
+import { isAttackPrompt } from "./AttackArrows";
 import { manaChoiceFor } from "./manaOptions";
 import { RewindPanel } from "./RewindPanel";
 import { ScryDialog } from "./ScryDialog";
@@ -53,6 +54,8 @@ export function LiveRail(props: {
         </section>
       ) : game.ask ? (
         <AskPanel ask={game.ask} game={game} nameOf={nameOf} />
+      ) : game.prompt && isAttackPrompt(game.prompt) && game.view?.active === game.view?.viewer ? (
+        <AttackPanel game={game} nameOf={nameOf} />
       ) : (
         <PromptPanel game={game} nameOf={nameOf} onShowPick={props.onShowPick} />
       )}
@@ -127,6 +130,60 @@ function PromptPanel({ game, nameOf, onShowPick }: { game: LiveGame; nameOf: (id
             <Kbd action="ok" />
           </button>
         )}
+        {p.cancel.label && (
+          <button className="ar-btn" disabled={!p.cancel.enabled} onClick={game.cancel}>
+            {p.cancel.label}
+            <Kbd action="cancel" />
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Declaring attackers: how to (drag), who you're attacking so far, and why a creature couldn't
+ * (Forge's reason, after its own instructions), with Forge's OK and Alpha strike / Call back.
+ */
+function AttackPanel({ game, nameOf }: { game: LiveGame; nameOf: (id: string) => string }) {
+  const p = game.prompt!;
+  const v = game.view!;
+  useHotkeys({
+    ok: () => (p.ok.enabled ? game.ok() : false),
+    cancel: () => (p.cancel.enabled ? game.cancel() : false),
+  });
+  const reason = p.message.split("\n\n").slice(1).join("\n\n").trim();
+  // Who's attacked, with how many: players first, then planeswalkers and battles.
+  const counts = new Map<string, number>();
+  for (const c of v.players[0].battlefield) {
+    if (!c.attacking) continue;
+    const pw = c.attackingCard !== undefined ? v.players.flatMap((x) => x.battlefield).find((x) => x.id === c.attackingCard) : undefined;
+    const who = pw ? `${pw.name ?? "a planeswalker"} (${nameOf(c.attacking)})` : nameOf(c.attacking);
+    counts.set(who, (counts.get(who) ?? 0) + 1);
+  }
+  const alpha = p.cancel.label === "Alpha Strike";
+  return (
+    <section className="ar-decision live">
+      <div className="ar-ribbon">Decision</div>
+      <h3>Declare attackers</h3>
+      <p className="ar-prompt-text">
+        Drag from a creature to an opponent's board, or to their planeswalker, to attack it. Select several first (drag a box, or Shift-click) to send them together. Drag back onto your board to call them back.
+      </p>
+      {counts.size > 0 ? (
+        <ul className="atk-summary">
+          {[...counts].map(([who, n]) => (
+            <li key={who}>⚔ {n} → <strong>{who}</strong></li>
+          ))}
+        </ul>
+      ) : (
+        <p className="ar-sub">No attackers yet. OK to skip combat{alpha ? `, or ${p.cancel.label} to attack with everything` : ""}.</p>
+      )}
+      {reason && <p className="ar-prompt-text atk-reason">{reason}</p>}
+      <div className="ar-actions">
+        <button className="ar-btn primary" disabled={!p.ok.enabled} onClick={game.ok}>
+          {counts.size ? "Attack" : "No attack"}
+          <Kbd action="ok" />
+        </button>
         {p.cancel.label && (
           <button className="ar-btn" disabled={!p.cancel.enabled} onClick={game.cancel}>
             {p.cancel.label}

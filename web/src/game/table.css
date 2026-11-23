@@ -560,3 +560,23 @@ dialog.pick-dialog:not([open]) { display: none; }
 .zone-viewer figure.selectable { cursor: pointer; }
 .zone-viewer figure.chosen .zv-card { box-shadow: 0 0 0 3px #7fd1ff, 0 0 14px rgb(127 209 255 / 55%); border-radius: 6px; }
 @media (prefers-reduced-motion: reduce) { .pick-card.can:hover .pick-img { transform: none; } }
+
+/* Declaring attackers by dragging (AttackArrows.tsx) */
+.slot.can-attack { cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.slot.can-attack:not(.tapped) .bf-card { box-shadow: 0 0 0 2px rgb(239 107 107 / 55%), 0 0 10px rgb(239 107 107 / 30%); }
+.slot.attack-over .bf-card { box-shadow: 0 0 0 3px var(--danger), 0 0 22px rgb(239 107 107 / 75%); }
+.seat-board.attack-target { outline: 2px dashed rgb(239 107 107 / 45%); outline-offset: -3px; }
+.seat-board.attack-over { outline: 3px solid var(--danger); outline-offset: -3px; box-shadow: inset 0 0 40px rgb(239 107 107 / 22%); }
+.seat-board.attack-back { outline: 3px dashed #9fb3c8; outline-offset: -3px; }
+.attack-arrows { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 26; overflow: visible; }
+.attack-arrows .aa-glow { fill: none; stroke: rgb(0 0 0 / 50%); stroke-width: 6; stroke-linecap: round; }
+.attack-arrows .aa-line { fill: none; stroke: color-mix(in srgb, var(--seat, var(--danger)) 35%, var(--danger)); stroke-width: 3; stroke-linecap: round; }
+.attack-arrows marker path { fill: var(--danger); }
+.attack-arrows.dragging .aa-line { stroke: var(--danger); stroke-dasharray: 8 6; }
+.attack-arrows.dragging.locked .aa-line { stroke-dasharray: none; }
+.attack-arrows.dragging.back .aa-line { stroke: #9fb3c8; }
+.attack-arrows.dragging.back marker path { fill: #9fb3c8; }
+.attack-arrows rect { fill: #1a1712; stroke: var(--danger); stroke-width: 1.5; }
+.attack-arrows text { fill: #f1e9d6; font: 800 11px system-ui, sans-serif; text-anchor: middle; }
+.atk-summary { list-style: none; margin: 4px 0; padding: 0; display: grid; gap: 2px; font-size: 13px; }
+.atk-reason { color: var(--danger); }

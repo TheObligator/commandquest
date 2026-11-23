@@ -10,6 +10,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { ManaCost } from "../components/ManaCost";
 import { CardBack, CardBadges, CardFace, CostOverlay, previewFor, usePreview } from "./cards";
+import type { AttackHover } from "./AttackArrows";
 import { isMarkClick, useMarks, useMarquee } from "./marks";
 import type { OpenMenu } from "./TableBoard";
 import { arrange, dropRow, isPermanentCard, moveCards, shownRows, usedCols, type Arrangement, type CardView, type Pile, type PlayerView, type Row } from "./view";
@@ -90,6 +91,8 @@ export function SeatBoard(props: {
   /** Your cards you can use right now. */
   playable?: Set<number>;
   onMenu?: OpenMenu;
+  /** While you declare attackers: your creatures that can attack, and pressing one starts dragging an arrow. */
+  attack?: { candidates: Set<number>; begin: (e: React.PointerEvent, ids: number[]) => void; dragging: boolean; hover: AttackHover | null };
 }) {
   const { player: p, viewer, nameOf, colorOf } = props;
   const isMe = p.id === viewer;
@@ -104,8 +107,9 @@ export function SeatBoard(props: {
 
   return (
     <section
-      className={`seat-board${props.active ? " active" : ""}${isMe ? " mine" : ""}${props.focused ? " focused" : ""}${p.lost ? " out" : ""}`}
+      className={`seat-board${props.active ? " active" : ""}${isMe ? " mine" : ""}${props.focused ? " focused" : ""}${p.lost ? " out" : ""}${attackClass(props.attack, p.id, isMe, p.lost)}`}
       style={{ "--seat": p.color } as React.CSSProperties}
+      data-seat={p.id}
       aria-label={isMe ? "Your board" : `${p.name}'s board`}
       onDoubleClick={(e) => {
         // Double-click empty board space to enlarge it (or go back); cards and controls keep their own clicks.
@@ -363,13 +367,16 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
               })();
               const ids = pile.cards.map((x) => x.id);
               const marked = ids.some((id) => marks.marked.has(id));
+              const atk = props.attack;
+              const canAttack = !!atk && ids.some((id) => atk.candidates.has(id));
               return (
                 <div
                   key={pile.key}
-                  className={["slot", c.tapped && "tapped", anySelectable && "selectable", anyChosen && "chosen", props.playable?.has(c.id) && "playable", marked && "marked"].filter(Boolean).join(" ")}
+                  className={["slot", c.tapped && "tapped", anySelectable && "selectable", anyChosen && "chosen", props.playable?.has(c.id) && "playable", marked && "marked", canAttack && "can-attack", atk?.hover?.card === c.id && "attack-over"].filter(Boolean).join(" ")}
                   style={{ gridColumn: pile.col + 1 }}
                   data-card-ids={pile.cards.map((x) => x.id).join(" ")}
-                  draggable
+                  draggable={!canAttack}
+                  onPointerDown={canAttack ? (e) => !isMarkClick(e) && atk!.begin(e, ids) : undefined}
                   onDragStart={(e) => {
                     const d: DragData = { from: "battlefield", seat: p.id, ids: pile.cards.map((x) => x.id) };
                     setDrag(d);
@@ -377,7 +384,7 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
                     e.dataTransfer.effectAllowed = "move";
                   }}
                   onDragEnd={() => (setDrag(null), setDropAt(null))}
-                  aria-label={props.onCardClick ? `${c.name ?? "Face-down card"}: click to use or choose it, right-click for more, drag to move` : isMe && props.onTap ? `${c.name ?? "Face-down card"}: click to ${c.tapped ? "untap" : "tap"}, drag to move` : undefined}
+                  aria-label={canAttack ? `${c.name ?? "Face-down card"}: drag to an opponent to attack them, click to attack the chosen one` : props.onCardClick ? `${c.name ?? "Face-down card"}: click to use or choose it, right-click for more, drag to move` : isMe && props.onTap ? `${c.name ?? "Face-down card"}: click to ${c.tapped ? "untap" : "tap"}, drag to move` : undefined}
                   onClick={(e) => {
                     // Shift/Ctrl/⌘-click selects it (with others) for one right-click menu.
                     if (isMarkClick(e)) return marks.toggle(ids);
@@ -405,6 +412,13 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
       })}
     </div>
   );
+}
+
+/** A board's look while you drag an attack: where it can go, and where it would go now. */
+function attackClass(atk: Parameters<typeof SeatBoard>[0]["attack"], seat: string, isMe: boolean, lost?: boolean): string {
+  if (!atk?.dragging) return "";
+  const over = isMe ? !!atk.hover?.back : atk.hover?.seat === seat && atk.hover.card === undefined;
+  return `${isMe || lost ? "" : " attack-target"}${over ? (isMe ? " attack-back" : " attack-over") : ""}`;
 }
 
 /** Icons for common player counters (anything else gets a dot and its name). */

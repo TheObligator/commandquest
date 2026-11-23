@@ -261,6 +261,7 @@ public final class ViewJson {
                 o.put("attacking", id(pd));
             } else if (defender instanceof CardView cd && cd.getController() != null) {
                 o.put("attacking", id(cd.getController()));
+                o.put("attackingCard", cd.getId());   // the planeswalker or battle it attacks
             }
             // Blocking (also while blockers are being declared): the attacker it blocks, by name.
             for (CardView attacker : combat.getAttackers()) {

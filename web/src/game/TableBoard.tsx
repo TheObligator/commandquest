@@ -8,6 +8,7 @@ import { api } from "../../convex/_generated/api";
 import { errorMessage } from "../app/errors";
 import { toast } from "../dom";
 import { Log } from "./ActionRail";
+import { CombatArrows, useAttackDrag, type AttackTarget } from "./AttackArrows";
 import { ContextMenu, type ContextMenuState } from "../components/ContextMenu";
 import type { MenuSection } from "../components/CardMenu";
 import { PreviewContext, type Preview } from "./cards";
@@ -174,6 +175,9 @@ export function TableBoard(props: {
   /** The game's own menu (layout, full screen, concede…): on the board's and the background's
    *  right-click menus, and the ☰ button. Live games, where the page has no toolbar. */
   gameMenu?: MenuSection[];
+  /** Live games, while you declare attackers: your creatures that can attack, and what to do when
+   *  you drag them to a player or planeswalker (or back to your board: null). */
+  attack?: { candidates: Set<number>; declare: (ids: number[], to: AttackTarget) => void };
 }) {
   const { view: v, layout, stops: st } = props;
   const me = v.viewer;
@@ -207,6 +211,9 @@ export function TableBoard(props: {
     window.addEventListener("keydown", on);
     return () => window.removeEventListener("keydown", on);
   }, [marked.size]);
+
+  const attackDrag = useAttackDrag({ view: v, candidates: props.attack?.candidates, marked, onDeclare: (ids, to) => props.attack?.declare(ids, to) });
+  const attack = props.attack && { candidates: props.attack.candidates, begin: attackDrag.begin, dragging: attackDrag.dragging, hover: attackDrag.hover };
 
   const seatOf = (id: string) => v.players.find((p) => p.id === id);
   const nameOf = (id: string) => (id === me ? "you" : seatOf(id)?.name ?? id);
@@ -327,6 +334,7 @@ export function TableBoard(props: {
           targetable={props.targetPlayers?.has(id)}
           playable={props.playable}
           onMenu={openMenu}
+          attack={isMe ? attack : attack && { ...attack, candidates: NONE }}
         />
       </div>
     );
@@ -452,6 +460,8 @@ export function TableBoard(props: {
         />
       )}
       <StackArrows view={v} colorOf={colorOf} />
+      <CombatArrows view={v} colorOf={colorOf} />
+      {attackDrag.overlay}
       <HoverZoom preview={menu || inspect ? null : preview} />
       {inspect && (
         <CardInspect
@@ -484,6 +494,8 @@ function HoldPriority({ on, onChange }: { on: boolean; onChange: (on: boolean) =
     </button>
   );
 }
+
+const NONE: Set<number> = new Set();
 
 /** A card's current view anywhere on the table (it may have changed since a menu opened). */
 function findCard(v: GameView, id: number): CardView | undefined {

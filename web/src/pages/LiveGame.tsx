@@ -37,6 +37,7 @@ import { askPickCards, pickPiles, pilesFor } from "../game/pickZones";
 import { ScryDialog, type ArrangeKind } from "../game/ScryDialog";
 import { ShownWindow } from "../game/CardWindow";
 import { CostDialog } from "../game/CostDialog";
+import { isAttackPrompt, type AttackTarget } from "../game/AttackArrows";
 
 /** Combat steps once attackers are declared: when a creature can be put into combat attacking. */
 const AFTER_ATTACKERS = new Set<string>(["COMBAT_DECLARE_ATTACKERS", "COMBAT_DECLARE_BLOCKERS", "COMBAT_FIRST_STRIKE_DAMAGE", "COMBAT_DAMAGE"]);
@@ -465,6 +466,35 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
     return sel.players.length > 0 || sel.stack.length > 0 || sel.cards.some((id) => !inPiles.has(id));
   }, [sel, piles]);
   const playable = useMemo(() => new Set(game.prompt && isPriorityPrompt(game.prompt) && !game.ask ? view.playable ?? [] : []), [view.playable, game.prompt, game.ask]);
+
+  // Declaring attackers (Forge's InputAttack): drag your creatures to whom they attack. Forge's prompt
+  // attacks whichever defender was clicked last, so a drag clicks the defender, then each creature
+  // that isn't attacking it yet (a click on one attacking it would take it back out).
+  const attacking = !!game.prompt && !game.ask && isAttackPrompt(game.prompt) && view.active === view.viewer;
+  // Your untapped creatures, and ones attacking (to move or call back). Forge says why if one can't attack.
+  const attackCandidates = useMemo(
+    () => new Set(attacking ? view.players[0].battlefield.filter((c) => c.types?.includes("Creature") && (!c.tapped || c.attacking)).map((c) => c.id) : []),
+    [attacking, view.players],
+  );
+  const declareAttack = (ids: number[], to: AttackTarget) => {
+    const mine = view.players[0].battlefield;
+    const cards = ids.map((id) => mine.find((c) => c.id === id)).filter((c): c is CardView => !!c);
+    const pick = (t: NonNullable<AttackTarget>) => ("card" in t ? game.clickCard(t.card) : game.clickPlayer(t.player));
+    if (!to) {
+      // Back to your board: take each out, by picking what it attacks and clicking it again.
+      for (const c of cards) {
+        if (!c.attacking) continue;
+        pick(c.attackingCard !== undefined ? { card: c.attackingCard } : { player: c.attacking });
+        game.clickCard(c.id);
+      }
+      return;
+    }
+    pick(to);
+    for (const c of cards) {
+      const already = "card" in to ? c.attackingCard === to.card : c.attacking === to.player && c.attackingCard === undefined;
+      if (!already) game.clickCard(c.id);
+    }
+  };
 
   // Right-click menus. Forge's abilities for the card (enabled when you can use them now), then
   // the things players do by hand at a paper table: tap, counters, move it to another zone…
@@ -1077,6 +1107,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
       selectable={selectable}
       chosen={chosen}
       targetPlayers={targetPlayers}
+      attack={attacking ? { candidates: attackCandidates, declare: declareAttack } : undefined}
       menuFor={menuFor}
       detailsFor={game.details}
       gameMenu={gameMenu}
