@@ -85,6 +85,8 @@ export interface LiveAsk {
   min: number;
   max: number;
   card?: CardView;
+  /** A yes/no question (Forge's confirm): asked in the Decision panel, not a window. */
+  yesNo?: boolean;
   /** Every option is a color of mana: asked by the card being tapped (ManaChoice). */
   mana?: boolean;
   initial?: string;

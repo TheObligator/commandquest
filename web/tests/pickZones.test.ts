@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { askPickCards, pickPiles, pilesFor } from "../src/game/pickZones.ts";
+import { askBoard, askPickCards, pickPiles, pilesFor } from "../src/game/pickZones.ts";
 import type { LiveAsk } from "../src/game/useLiveGame.ts";
 import type { CardView, GameView, PlayerView } from "../src/game/view.ts";
 
@@ -43,16 +43,16 @@ const ask = (cards: (CardView | undefined)[], extra: Partial<LiveAsk> = {}) =>
 
 test("askPickCards: a question choosing among cards off the battlefield goes to the pick window", () => {
   const gy = [card(1, "me", "graveyard"), card(2, "me", "graveyard")];
-  assert.deepEqual(askPickCards(ask(gy))?.map((c) => c.id), [1, 2]);
-  assert.deepEqual(askPickCards(ask([card(3, "me", "library"), card(4, "al", "hand")]))?.map((c) => c.id), [3, 4]);
+  assert.deepEqual(askPickCards(ask(gy), "me")?.map((c) => c.id), [1, 2]);
+  assert.deepEqual(askPickCards(ask([card(3, "me", "library"), card(4, "al", "hand")]), "me")?.map((c) => c.id), [3, 4]);
 });
 
 test("askPickCards: anything else stays a list", () => {
-  assert.equal(askPickCards(null), null);
-  assert.equal(askPickCards(ask([card(1, "me", "graveyard"), card(2, "me", "battlefield")])), null); // a permanent among them
-  assert.equal(askPickCards(ask([card(1, "me", "graveyard"), undefined])), null); // an option that isn't a card
-  assert.equal(askPickCards(ask([card(1, "me", "graveyard")], { kind: "order" })), null);
-  assert.equal(askPickCards(ask([card(1, "me", "graveyard"), card(1, "me", "graveyard")])), null); // one card twice
+  assert.equal(askPickCards(null, "me"), null);
+  assert.equal(askPickCards(ask([card(1, "me", "graveyard"), card(2, "me", "battlefield")]), "me"), null); // a permanent among them
+  assert.equal(askPickCards(ask([card(1, "me", "graveyard"), undefined]), "me"), null); // an option that isn't a card
+  assert.equal(askPickCards(ask([card(1, "me", "graveyard")], { kind: "order" }), "me"), null);
+  assert.equal(askPickCards(ask([card(1, "me", "graveyard"), card(1, "me", "graveyard")]), "me"), null); // one card twice
 });
 
 test("pilesFor: a graveyard ask shows the rest of that graveyard, dimmed", () => {
@@ -61,4 +61,18 @@ test("pilesFor: a graveyard ask shows the rest of that graveyard, dimmed", () =>
   const [p] = pilesFor(view, [gy[0]]);
   assert.deepEqual(p.choosable.map((c) => c.id), [1]);
   assert.deepEqual(p.others.map((c) => c.id), [3, 2]);
+});
+
+test("askBoard: sacrifice and discard are clicked on the table; your own hand isn't a pick window", () => {
+  const sac = ask([card(1, "me", "battlefield"), card(2, "me", "battlefield")]);
+  assert.deepEqual([...askBoard(sac, "me")!.cards], [[1, 0], [2, 1]]);
+  const discard = ask([card(3, "me", "hand"), card(4, "me", "hand")], { max: 2 });
+  assert.ok(askBoard(discard, "me"));
+  assert.equal(askPickCards(discard, "me"), null);
+  // A permanent or a player: both clicked on the table.
+  const either = { ...ask([card(5, "al", "battlefield")]), options: [{ label: "Bear", card: card(5, "al", "battlefield") }, { label: "Alice", playerId: "al" }] } as LiveAsk;
+  assert.deepEqual([...askBoard(either, "me")!.players], [["al", 1]]);
+  // Yes/no and graveyard questions aren't.
+  assert.equal(askBoard({ ...sac, yesNo: true }, "me"), null);
+  assert.equal(askBoard(ask([card(6, "me", "graveyard")]), "me"), null);
 });

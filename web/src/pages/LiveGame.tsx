@@ -33,7 +33,9 @@ import { ManaChoice } from "../game/ManaChoice";
 import { manaChoiceFor } from "../game/manaOptions";
 import { LibraryDialog, type LibraryCountAction } from "../game/LibraryDialog";
 import { AskPick, PickDialog } from "../game/PickDialog";
-import { askPickCards, pickPiles, pilesFor } from "../game/pickZones";
+import { askBoard, askPickCards, pickPiles, pilesFor } from "../game/pickZones";
+import { askInWindow, DecisionWindow } from "../game/DecisionWindow";
+import { TargetBar } from "../game/TargetBar";
 import { ScryDialog, type ArrangeKind } from "../game/ScryDialog";
 import { ShownWindow } from "../game/CardWindow";
 import { CostDialog } from "../game/CostDialog";
@@ -445,20 +447,47 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
     const now = performance.now();
     if (lastClick.current.id === id && now - lastClick.current.at < 500) return;
     lastClick.current = { id, at: now };
+    if (board?.cards.has(id)) return toggleBoard(id); // a question answered by clicking on the table
     castFrom.current ??= view.stack.length;
     game.clickCard(id);
   };
+  const clickPlayer = (id: string) => (board?.players.has(id) ? toggleBoard(id) : game.clickPlayer(id));
+  // A question answered by clicking on the table (sacrifice a permanent, discard from your hand): what
+  // you've clicked so far, kept here until OK answers it.
+  const board = useMemo(() => askBoard(game.ask, view.viewer), [game.ask, view.viewer]);
+  const [boardPick, setBoardPick] = useState<{ ask: number; picked: (number | string)[] }>({ ask: -1, picked: [] });
+  const boardPicked = board && game.ask && boardPick.ask === game.ask.id ? boardPick.picked : [];
+  const toggleBoard = (key: number | string) => {
+    const a = game.ask;
+    if (!a) return;
+    const now = boardPick.ask === a.id ? boardPick.picked : [];
+    const next = now.includes(key) ? now.filter((x) => x !== key) : a.max === 1 ? [key] : now.length < a.max ? [...now, key] : now;
+    setBoardPick({ ask: a.id, picked: next });
+  };
+  const answerBoard = () => {
+    if (!board || !game.ask) return;
+    game.answer(game.ask.id, boardPicked.map((k) => (typeof k === "number" ? board.cards.get(k)! : board.players.get(k)!)));
+  };
+
   // What Forge's prompt lets you click: cards to pick or target, and while paying, your mana sources.
   const sel = view.selection;
-  const selectable = useMemo(() => new Set([...(sel?.cards ?? []), ...(game.prompt?.pay?.sources ?? [])]), [sel, game.prompt?.pay]);
-  const chosen = useMemo(() => new Set((sel?.chosen ?? []).filter((x): x is number => typeof x === "number")), [sel]);
-  const targetPlayers = useMemo(() => new Set(sel?.players ?? []), [sel]);
+  const selectable = useMemo(
+    () => new Set([...(sel?.cards ?? []), ...(game.prompt?.pay?.sources ?? []), ...(board?.cards.keys() ?? [])]),
+    [sel, game.prompt?.pay, board],
+  );
+  const chosen = useMemo(
+    () => new Set([...(sel?.chosen ?? []), ...boardPicked].filter((x): x is number => typeof x === "number")),
+    [sel, boardPicked],
+  );
+  const targetPlayers = useMemo(() => new Set([...(sel?.players ?? []), ...(board?.players.keys() ?? [])]), [sel, board]);
   // Choosing cards from a pile (a graveyard, a library…): the pick window, until you hide it for this prompt.
   const piles = useMemo(() => (game.prompt && !game.prompt.pay && !game.ask ? pickPiles(view) : []), [view, game.prompt, game.ask]);
   // …or a question whose options are cards in piles (a tutor, "return a card from your graveyard").
-  const askCards = useMemo(() => askPickCards(game.ask), [game.ask]);
+  const askCards = useMemo(() => askPickCards(game.ask, view.viewer), [game.ask, view.viewer]);
   const askPiles = useMemo(() => (askCards ? pilesFor(view, askCards) : []), [view, askCards]);
-  const pickKey = askCards && game.ask ? `ask:${game.ask.id}` : piles.length ? `${game.prompt?.message}|${piles.map((p) => p.key).join(",")}` : "";
+  // …or any other question but yes/no (and the ones clicked on the table): its own window.
+  const windowAsk = !!game.ask && !askCards && !board && askInWindow(game.ask);
+  const pickKey = (askCards || windowAsk) && game.ask ? `ask:${game.ask.id}` : piles.length ? `${game.prompt?.message}|${piles.map((p) => p.key).join(",")}` : "";
   const [pickHidden, setPickHidden] = useState("");
   const alsoTable = useMemo(() => {
     if (!sel || !piles.length) return false;
@@ -466,6 +495,10 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
     return sel.players.length > 0 || sel.stack.length > 0 || sel.cards.some((id) => !inPiles.has(id));
   }, [sel, piles]);
   const playable = useMemo(() => new Set(game.prompt && isPriorityPrompt(game.prompt) && !game.ask ? view.playable ?? [] : []), [view.playable, game.prompt, game.ask]);
+  // Choosing on the table (targets, a sacrifice…): a bar over it with what and the buttons.
+  const targeting = !!game.prompt && !game.prompt.pay && !game.ask && !!sel
+    && sel.cards.length + sel.players.length + sel.stack.length > 0
+    && !isPriorityPrompt(game.prompt) && !isAttackPrompt(game.prompt) && !isBlockPrompt(game.prompt);
 
   // Declaring attackers (Forge's InputAttack): drag your creatures to whom they attack. Forge's prompt
   // attacks whichever defender was clicked last, so a drag clicks the defender, then each creature
@@ -1034,7 +1067,18 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
     {pickKey && pickHidden !== pickKey && askCards && game.ask && (
       <AskPick key={pickKey} ask={game.ask} cards={askCards} piles={askPiles} onAnswer={(i) => game.answer(game.ask!.id, i)} onHide={() => setPickHidden(pickKey)} />
     )}
-    {pickKey && pickHidden !== pickKey && !askCards && game.prompt && (
+    {pickKey && pickHidden !== pickKey && windowAsk && game.ask && (
+      <DecisionWindow
+        key={pickKey}
+        ask={game.ask}
+        onAnswer={(choice, text) => game.answer(game.ask!.id, choice, text)}
+        onHide={() => setPickHidden(pickKey)}
+        viewer={view.viewer}
+        nameOf={nameOf}
+        colorOf={colorOf}
+      />
+    )}
+    {pickKey && pickHidden !== pickKey && !askCards && !windowAsk && piles.length > 0 && game.prompt && (
       <PickDialog
         key={pickKey}
         message={game.prompt.message}
@@ -1092,7 +1136,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
       layout={layout}
       stops={st}
       priority={!!game.prompt?.ok.enabled || !!game.ask}
-      rail={(preview) => <LiveRail game={{ ...game, ok, cancel, setAutoPass, clickCard: click }} nameOf={nameOf} colorOf={colorOf} preview={preview} pickAsk={!!askCards} onShowPick={pickKey && pickHidden === pickKey ? () => setPickHidden("") : undefined} />}
+      rail={(preview) => <LiveRail game={{ ...game, ok, cancel, setAutoPass, clickCard: click }} nameOf={nameOf} colorOf={colorOf} preview={preview} boardAsk={board && game.ask ? { onOk: boardPicked.length >= game.ask.min && boardPicked.length <= game.ask.max ? answerBoard : null } : undefined} pickAsk={!!askCards || windowAsk} onShowPick={pickKey && pickHidden === pickKey ? () => setPickHidden("") : undefined} />}
       hand={{
         onPlay: click,
         onClick: click,
@@ -1101,7 +1145,22 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
       onCardClick={click}
       onPayPool={game.prompt?.pay && !game.ask ? game.payPool : undefined}
       payPool={game.prompt?.pay?.pool}
-      onPlayerClick={game.clickPlayer}
+      onPlayerClick={clickPlayer}
+      banner={
+        board && game.ask ? (
+          <TargetBar
+            message={game.ask.title ? `${game.ask.title}\n${game.ask.message}` : game.ask.message}
+            status={`Click on the table · ${boardPicked.length} of ${game.ask.min === game.ask.max ? game.ask.min : game.ask.min ? `${game.ask.min}–${game.ask.max}` : `up to ${game.ask.max}`} chosen`}
+            ok={{
+              label: boardPicked.length === 0 && game.ask.min === 0 ? "Choose none" : "OK",
+              enabled: boardPicked.length >= game.ask.min && boardPicked.length <= game.ask.max,
+              onClick: answerBoard,
+            }}
+          />
+        ) : targeting && game.prompt ? (
+          <TargetBar message={game.prompt.message} ok={{ ...game.prompt.ok, onClick: ok }} cancel={{ ...game.prompt.cancel, onClick: cancel }} />
+        ) : null
+      }
       onCastCommander={click}
       playable={playable}
       selectable={selectable}
@@ -1140,6 +1199,11 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
 }
 
 /** Forge's "you have priority" prompt (InputPassPriority): OK, and End Turn or Undo. */
+/** Declaring blockers (Forge's InputBlock): clicked on the board, like attackers. */
+function isBlockPrompt(p: { message: string }) {
+  return p.message.startsWith("Select creatures to block") || p.message.startsWith("Select another attacker to declare blockers");
+}
+
 function isPriorityPrompt(p: { ok: { label: string }; cancel: { label: string } }) {
   return p.ok.label === "OK" && (p.cancel.label === "End Turn" || p.cancel.label.startsWith("Undo"));
 }

@@ -160,6 +160,8 @@ export function TableBoard(props: {
   selectable?: Set<number>;
   /** Cards chosen so far for the current prompt. */
   chosen?: Set<number>;
+  /** Over the top of the table: what you're choosing on it (TargetBar). */
+  banner?: React.ReactNode;
   /** Players the current prompt lets you choose. */
   targetPlayers?: Set<string>;
   /** Your cards you can use right now (a green glow). */
@@ -377,6 +379,7 @@ export function TableBoard(props: {
         </div>
 
         <div className="game-center">
+          {props.banner}
           <StackWindow view={v} nameOf={nameOf} colorOf={colorOf} itemMenu={props.stackItemMenu} />
           <div
             className={`game-table layout-${layout}`}

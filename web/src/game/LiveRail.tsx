@@ -20,7 +20,9 @@ export function LiveRail(props: {
   preview: Preview | null;
   /** The pick window (cards to choose from a pile) is hidden: bring it back. */
   onShowPick?: () => void;
-  /** The question (`game.ask`) is answered in the pick window. */
+  /** The question (`game.ask`) is answered by clicking on the table; this answers it with what's clicked (null: not yet allowed). */
+  boardAsk?: { onOk: (() => void) | null };
+  /** The question (`game.ask`) is answered in a window over the table (pick window, DecisionWindow). */
   pickAsk?: boolean;
 }) {
   const { game, nameOf } = props;
@@ -34,24 +36,12 @@ export function LiveRail(props: {
           <h3>Which mana?</h3>
           <p>Choose by the card you're tapping.</p>
         </section>
-      ) : game.ask?.kind === "order" ? (
-        <OrderPanel key={game.ask.id} ask={game.ask} game={game} />
       ) : game.ask?.kind === "scry" ? (
         <ScryPanel key={game.ask.id} ask={game.ask} game={game} />
-      ) : game.ask?.kind === "arrange" ? (
-        <ArrangePanel key={game.ask.id} ask={game.ask} game={game} />
-      ) : game.ask?.kind === "distribute" ? (
-        <DistributePanel key={game.ask.id} ask={game.ask} game={game} />
+      ) : game.ask && props.boardAsk ? (
+        <BoardPanel title={game.ask.title || game.ask.message.split("\n")[0] || "Decision"} onOk={props.boardAsk.onOk} />
       ) : game.ask && props.pickAsk ? (
-        <section className="ar-decision live">
-          <div className="ar-ribbon">Decision</div>
-          <h3>{game.ask.title || game.ask.message.split("\n")[0] || "Choose cards"}</h3>
-          {props.onShowPick ? (
-            <button className="ar-btn" onClick={props.onShowPick}>Show the cards to choose from</button>
-          ) : (
-            <p>Choose in the window over the table.</p>
-          )}
-        </section>
+        <WindowPanel title={game.ask.title || game.ask.message.split("\n")[0] || "Decision"} onShow={props.onShowPick} />
       ) : game.ask ? (
         <AskPanel ask={game.ask} game={game} nameOf={nameOf} />
       ) : game.prompt && isAttackPrompt(game.prompt) && game.view?.active === game.view?.viewer ? (
@@ -237,182 +227,40 @@ function ScryPanel({ ask, game }: { ask: LiveAsk; game: LiveGame }) {
   );
 }
 
-/** One option's picture and name, with its preview on hover. */
-function OptionLabel({ o }: { o: LiveAsk["options"] extends (infer T)[] | undefined ? T : never }) {
-  const setPreview = usePreview();
-  const img = o.card && !o.card.hidden && o.card.name ? cardImage(o.card.name, "small") : undefined;
+/** The question is answered on the table (sacrifice, discard): the bar over it has the buttons. */
+function BoardPanel({ title, onOk }: { title: string; onOk: (() => void) | null }) {
+  useHotkeys({ ok: () => (onOk ? onOk() : false) });
   return (
-    <span className="ask-label" onMouseEnter={() => o.card && setPreview({ card: o.card })} onMouseLeave={() => setPreview(null)}>
-      {img && <img src={img} alt="" />}
-      <span>{o.label}</span>
-    </span>
-  );
-}
-
-/** Put things in order (cards on top of your library, triggers…); some may be left out when Forge allows. */
-function OrderPanel({ ask, game }: { ask: LiveAsk; game: LiveGame }) {
-  const all = ask.options ?? [];
-  const [order, setOrder] = useState<number[]>(() => all.map((_, i) => i));
-  const [out, setOut] = useState<number[]>(() => (ask.max < all.length ? all.map((_, i) => i).slice(ask.max) : []));
-  const kept = order.filter((i) => !out.includes(i));
-  const ok = kept.length >= ask.min && kept.length <= ask.max;
-  const canLeaveOut = ask.min < all.length;
-  const move = (pos: number, by: number) =>
-    setOrder((o) => {
-      const n = [...o];
-      const to = pos + by;
-      if (to < 0 || to >= n.length) return o;
-      [n[pos], n[to]] = [n[to], n[pos]];
-      return n;
-    });
-  const done = () => ok && game.answer(ask.id, kept);
-  useHotkeys({ ok: () => (ok ? done() : false) });
-  return (
-    <section className="ar-decision live ar-ask">
+    <section className="ar-decision live">
       <div className="ar-ribbon">Decision</div>
-      <h3>{ask.message || "Put these in order"}</h3>
-      <p className="ar-sub">
-        {ask.top ? `First: ${ask.top}. ` : ""}Use ↑ ↓ to reorder{canLeaveOut ? `; keep ${ask.min === ask.max ? ask.min : `${ask.min} to ${ask.max}`}` : ""}.
-      </p>
-      <ol className="ask-options order-list">
-        {order.map((i, pos) => (
-          <li key={i} className={out.includes(i) ? "left-out" : undefined}>
-            <span className="ask-option info">
-              <OptionLabel o={all[i]} />
-            </span>
-            <span className="order-btns">
-              <button type="button" aria-label="Move up" disabled={pos === 0} onClick={() => move(pos, -1)}>↑</button>
-              <button type="button" aria-label="Move down" disabled={pos === order.length - 1} onClick={() => move(pos, 1)}>↓</button>
-              {canLeaveOut && (
-                <button type="button" aria-pressed={!out.includes(i)} title={out.includes(i) ? "Keep it" : "Leave it out"} onClick={() => setOut((o) => (o.includes(i) ? o.filter((x) => x !== i) : [...o, i]))}>
-                  {out.includes(i) ? "+" : "−"}
-                </button>
-              )}
-            </span>
-          </li>
-        ))}
-      </ol>
-      <div className="ar-actions">
-        <button className="ar-btn primary" disabled={!ok} onClick={done}>
-          Done
-          <Kbd action="ok" />
-        </button>
-      </div>
+      <h3>{title}</h3>
+      <p>Click the glowing cards on the table, then OK in the bar above it.</p>
     </section>
   );
 }
 
-/** Scry and the like: each card to the top or the bottom of your library, in order. */
-function ArrangePanel({ ask, game }: { ask: LiveAsk; game: LiveGame }) {
-  const all = ask.options ?? [];
-  const [top, setTop] = useState<number[]>(() => (ask.toTop !== false ? all.map((_, i) => i) : []));
-  const [bottom, setBottom] = useState<number[]>(() => (ask.toTop !== false ? [] : all.map((_, i) => i)));
-  const move = (list: number[], set: (v: number[]) => void, pos: number, by: number) => {
-    const to = pos + by;
-    if (to < 0 || to >= list.length) return;
-    const n = [...list];
-    [n[pos], n[to]] = [n[to], n[pos]];
-    set(n);
-  };
-  const flip = (i: number, toBottom: boolean) => {
-    if (toBottom) {
-      setTop((t) => t.filter((x) => x !== i));
-      setBottom((b) => [...b, i]);
-    } else {
-      setBottom((b) => b.filter((x) => x !== i));
-      setTop((t) => [...t, i]);
-    }
-  };
-  const done = () => game.answer(ask.id, [...top, -1, ...bottom]);
-  useHotkeys({ ok: () => done() });
-  const rows = (list: number[], set: (v: number[]) => void, onBottom: boolean) =>
-    list.map((i, pos) => (
-      <li key={i}>
-        <span className="ask-option info">
-          <OptionLabel o={all[i]} />
-        </span>
-        <span className="order-btns">
-          {list.length > 1 && (
-            <>
-              <button type="button" aria-label="Move up" disabled={pos === 0} onClick={() => move(list, set, pos, -1)}>↑</button>
-              <button type="button" aria-label="Move down" disabled={pos === list.length - 1} onClick={() => move(list, set, pos, 1)}>↓</button>
-            </>
-          )}
-          {(onBottom ? ask.toTop !== false : ask.toBottom !== false) && (
-            <button type="button" className="flip" title={onBottom ? "Put it on top" : "Put it on the bottom"} onClick={() => flip(i, !onBottom)}>
-              {onBottom ? "Top" : "Bottom"}
-            </button>
-          )}
-        </span>
-      </li>
-    ));
+/** The question is in a window over the table; once you've hidden it, a button brings it back. */
+function WindowPanel({ title, onShow }: { title: string; onShow?: () => void }) {
+  useHotkeys({ ok: () => (onShow ? onShow() : false) });
   return (
-    <section className="ar-decision live ar-ask">
+    <section className="ar-decision live">
       <div className="ar-ribbon">Decision</div>
-      <h3>{ask.message || "Top or bottom?"}</h3>
-      <p className="ar-sub">Top of library (first = top)</p>
-      <ol className="ask-options order-list">{top.length ? rows(top, setTop, false) : <li className="ar-sub">None</li>}</ol>
-      {(ask.toBottom !== false || bottom.length > 0) && (
-        <>
-          <p className="ar-sub">Bottom of library (last = bottom)</p>
-          <ol className="ask-options order-list">{bottom.length ? rows(bottom, setBottom, true) : <li className="ar-sub">None</li>}</ol>
-        </>
+      <h3>{title}</h3>
+      {onShow ? (
+        <div className="ar-actions">
+          <button className="ar-btn primary" onClick={onShow}>
+            Show the question
+            <Kbd action="ok" />
+          </button>
+        </div>
+      ) : (
+        <p>Answer in the window over the table.</p>
       )}
-      <div className="ar-actions">
-        <button className="ar-btn primary" onClick={done}>
-          Done
-          <Kbd action="ok" />
-        </button>
-      </div>
     </section>
   );
 }
 
-/** Divide an amount (damage, counters…) among targets: − and + for each, adding up to the total. */
-function DistributePanel({ ask, game }: { ask: LiveAsk; game: LiveGame }) {
-  const all = ask.options ?? [];
-  const total = ask.amount ?? 0;
-  const low = ask.atLeastOne ? 1 : 0;
-  const [n, setN] = useState<number[]>(() => {
-    const start = all.map(() => low);
-    if (start.length) start[0] += Math.max(0, total - low * all.length);
-    return start;
-  });
-  const sum = n.reduce((a, b) => a + b, 0);
-  const ok = sum === total && n.every((x) => x >= low);
-  const set = (i: number, by: number) => setN((v) => v.map((x, j) => (j === i ? Math.max(low, Math.min(total, x + by)) : x)));
-  const done = () => ok && game.answer(ask.id, n);
-  useHotkeys({ ok: () => (ok ? done() : false) });
-  return (
-    <section className="ar-decision live ar-ask">
-      <div className="ar-ribbon">Decision</div>
-      <h3>{ask.message || `Divide ${total}`}</h3>
-      <p className="ar-sub">{sum} of {total} assigned{ask.atLeastOne ? " · at least 1 each" : ""}</p>
-      <ul className="ask-options order-list">
-        {all.map((o, i) => (
-          <li key={i}>
-            <span className="ask-option info">
-              <OptionLabel o={o} />
-            </span>
-            <span className="order-btns">
-              <button type="button" aria-label="Less" disabled={n[i] <= low} onClick={() => set(i, -1)}>−</button>
-              <b className="dist-n">{n[i]}</b>
-              <button type="button" aria-label="More" disabled={sum >= total} onClick={() => set(i, 1)}>+</button>
-            </span>
-          </li>
-        ))}
-      </ul>
-      <div className="ar-actions">
-        <button className="ar-btn primary" disabled={!ok} onClick={done}>
-          Done
-          <Kbd action="ok" />
-        </button>
-      </div>
-    </section>
-  );
-}
-
-/** A question that blocks the game: pick min..max of the options, or type an answer. */
+/** A yes/no question (and anything without a window): pick min..max of the options, or type an answer. */
 function AskPanel({ ask, game, nameOf }: { ask: LiveAsk; game: LiveGame; nameOf: (id: string) => string }) {
   const [picked, setPicked] = useState<number[]>(ask.selected ?? []);
   const [text, setText] = useState(ask.initial ?? "");

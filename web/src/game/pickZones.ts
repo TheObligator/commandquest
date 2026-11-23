@@ -39,17 +39,45 @@ export function pickPiles(view: GameView): PickPile[] {
 
 /**
  * The cards a question asks you to choose among, when the pick window is the way to answer it: a
- * "choose" ask whose options are all cards off the battlefield. Null otherwise (it stays a list).
+ * "choose" ask whose options are all cards off the battlefield and out of your hand (those you click
+ * where they are, `askBoard`). Null otherwise.
  */
-export function askPickCards(ask: LiveAsk | null | undefined): CardView[] | null {
-  if (!ask || ask.kind !== "choose" || ask.mana || !ask.options?.length || ask.max < 1) return null;
+export function askPickCards(ask: LiveAsk | null | undefined, viewer: string): CardView[] | null {
+  if (!choosing(ask)) return null;
   const cards: CardView[] = [];
-  for (const o of ask.options) {
-    if (!o.card || !PILE_ZONES.has(o.card.zone)) return null;
+  for (const o of ask.options!) {
+    if (!o.card || !PILE_ZONES.has(o.card.zone) || onBoard(o.card, viewer)) return null;
     cards.push(o.card);
   }
   // Two options for one card would be two answers we couldn't tell apart.
   return new Set(cards.map((c) => c.id)).size === cards.length ? cards : null;
+}
+
+/**
+ * A question you answer by clicking on the table (sacrifice a permanent, discard from your hand,
+ * choose a player): every option is a permanent, a card in your hand or a player. Option index by
+ * card id and by player id; null otherwise.
+ */
+export function askBoard(ask: LiveAsk | null | undefined, viewer: string): { cards: Map<number, number>; players: Map<string, number> } | null {
+  if (!choosing(ask)) return null;
+  const cards = new Map<number, number>();
+  const players = new Map<string, number>();
+  ask.options!.forEach((o, i) => {
+    if (o.card && onBoard(o.card, viewer)) cards.set(o.card.id, i);
+    else if (o.playerId && !o.card) players.set(o.playerId, i);
+  });
+  // Players alone are a window (Choose a player); with permanents, they're clicked like targets.
+  if (!cards.size || cards.size + players.size !== ask.options!.length) return null;
+  return { cards, players };
+}
+
+function choosing(ask: LiveAsk | null | undefined): ask is LiveAsk {
+  return !!ask && ask.kind === "choose" && !ask.mana && !ask.yesNo && !!ask.options?.length && ask.max >= 1;
+}
+
+/** On the battlefield, or in your own hand (the hand bar shows it). */
+function onBoard(c: CardView, viewer: string) {
+  return c.zone === "battlefield" || (c.zone === "hand" && c.owner === viewer);
 }
 
 /** Groups the cards into their piles, and adds what else you can see of each graveyard and exile. */

@@ -106,6 +106,43 @@ public class BrowserSeatTest {
         seat.close();
     }
 
+    /** Yes/no questions are marked, so the browser keeps them in its Decision panel; other choices get a window. */
+    @Test
+    public void yesNoQuestionsAreMarked() throws Exception {
+        ObjectMapper json = new ObjectMapper();
+        List<String> sent = new CopyOnWriteArrayList<>();
+        BrowserSeat seat = new BrowserSeat(json, sent::add);
+        java.util.concurrent.CompletableFuture<Object> yes = java.util.concurrent.CompletableFuture.supplyAsync(() ->
+                seat.sendAndWait(new GuiGameEvent(ProtocolMethod.confirm, null, "Pay {2}?", true, null)));
+        JsonNode ask = waitForAsk(sent, json);
+        Assert.assertTrue(ask.path("yesNo").asBoolean(), "confirm is yes/no");
+        sent.clear();
+        seat.answer(ask.path("id").asInt(), json.readTree("[0]"), null);
+        Assert.assertEquals(yes.get(3, java.util.concurrent.TimeUnit.SECONDS), true);
+
+        java.util.concurrent.CompletableFuture<Object> pick = java.util.concurrent.CompletableFuture.supplyAsync(() ->
+                seat.sendAndWait(new GuiGameEvent(ProtocolMethod.getChoices, "Choose a mode", 1, 1, List.of("A", "B", "C"), null, null)));
+        ask = waitForAsk(sent, json);
+        Assert.assertFalse(ask.has("yesNo"), "a list of options isn't yes/no");
+        seat.answer(ask.path("id").asInt(), json.readTree("[1]"), null);
+        Assert.assertEquals(pick.get(3, java.util.concurrent.TimeUnit.SECONDS), List.of("B"));
+        seat.close();
+    }
+
+    private static JsonNode waitForAsk(List<String> sent, ObjectMapper json) throws Exception {
+        long end = System.currentTimeMillis() + 3000;
+        while (System.currentTimeMillis() < end) {
+            for (String m : sent) {
+                JsonNode n = json.readTree(m);
+                if (n.path("t").asText().equals("ask")) {
+                    return n;
+                }
+            }
+            Thread.sleep(20);
+        }
+        throw new AssertionError("asked");
+    }
+
     @Test
     public void scryArrangement() throws Exception {
         ObjectMapper json = new ObjectMapper();

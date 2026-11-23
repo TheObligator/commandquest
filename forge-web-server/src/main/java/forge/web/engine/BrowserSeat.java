@@ -680,6 +680,7 @@ public final class BrowserSeat implements IRemote {
                 o.set("options", options(gv, options, null));
             }
             case confirm -> {
+                o.put("yesNo", true); // the browser asks these in the Decision panel, not a window
                 o.put("message", str(a[1]));
                 List<String> opts = a[3] == null ? List.of("Yes", "No") : (List<String>) a[3];
                 options = opts;
@@ -690,6 +691,7 @@ public final class BrowserSeat implements IRemote {
                 o.putArray("selected").add(Boolean.TRUE.equals(a[2]) ? 0 : 1);
             }
             case showConfirmDialog -> {
+                o.put("yesNo", true);
                 o.put("title", str(a[1]));
                 o.put("message", str(a[0]));
                 options = List.of(a[2] == null ? "Yes" : str(a[2]), a[3] == null ? "No" : str(a[3]));
