@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { AUTO_PASS } from "./ActionRail";
 import { manaChoiceFor } from "./manaOptions";
-import { OfferWindow } from "./CardWindow";
 import { RewindPanel } from "./RewindPanel";
 import { ScryDialog } from "./ScryDialog";
 import { Kbd, useHotkeys } from "./useHotkeys";
@@ -18,6 +17,10 @@ export function LiveRail(props: {
   nameOf: (id: string) => string;
   colorOf: (id: string) => string;
   preview: Preview | null;
+  /** The pick window (cards to choose from a pile) is hidden: bring it back. */
+  onShowPick?: () => void;
+  /** The question (`game.ask`) is answered in the pick window. */
+  pickAsk?: boolean;
 }) {
   const { game, nameOf } = props;
   return (
@@ -38,10 +41,20 @@ export function LiveRail(props: {
         <ArrangePanel key={game.ask.id} ask={game.ask} game={game} />
       ) : game.ask?.kind === "distribute" ? (
         <DistributePanel key={game.ask.id} ask={game.ask} game={game} />
+      ) : game.ask && props.pickAsk ? (
+        <section className="ar-decision live">
+          <div className="ar-ribbon">Decision</div>
+          <h3>{game.ask.title || game.ask.message.split("\n")[0] || "Choose cards"}</h3>
+          {props.onShowPick ? (
+            <button className="ar-btn" onClick={props.onShowPick}>Show the cards to choose from</button>
+          ) : (
+            <p>Choose in the window over the table.</p>
+          )}
+        </section>
       ) : game.ask ? (
         <AskPanel ask={game.ask} game={game} nameOf={nameOf} />
       ) : (
-        <PromptPanel game={game} nameOf={nameOf} />
+        <PromptPanel game={game} nameOf={nameOf} onShowPick={props.onShowPick} />
       )}
 
       <section className="ar-autopass">
@@ -69,7 +82,7 @@ export function LiveRail(props: {
 }
 
 /** Forge's prompt: OK / Cancel with Forge's labels (OK passes priority; Cancel is often "End Turn"). */
-function PromptPanel({ game, nameOf }: { game: LiveGame; nameOf: (id: string) => string }) {
+function PromptPanel({ game, nameOf, onShowPick }: { game: LiveGame; nameOf: (id: string) => string; onShowPick?: () => void }) {
   const p = game.prompt;
   const point = usePointing(game, nameOf, [p?.message ?? ""]);
   useHotkeys({
@@ -104,15 +117,8 @@ function PromptPanel({ game, nameOf }: { game: LiveGame; nameOf: (id: string) =>
       <h3>{title ? point.text(title) : "Your move"}</h3>
       {rest.length > 0 && <p className="ar-prompt-text">{point.text(rest.join("\n"))}</p>}
       {!!game.view?.revealed?.length && <RevealedCards cards={game.view.revealed} />}
-      {!!game.view?.selection?.offer?.length && (
-        <Offer
-          key={game.view.selection.offer.map((c) => c.id).join()}
-          message={p.message}
-          offer={game.view.selection.offer}
-          seen={game.view.selection.seen ?? []}
-          chosen={game.view.selection.chosen}
-          game={game}
-        />
+      {onShowPick && (
+        <button className="ar-btn" onClick={onShowPick}>Show the cards to choose from</button>
       )}
       <div className="ar-actions">
         {p.ok.label && (
@@ -149,36 +155,6 @@ function RevealedCards({ cards }: { cards: CardView[] }) {
   );
 }
 
-/**
- * Cards the prompt offers from places the table doesn't show (your library while you search it,
- * the top cards you're looking at): a window with them all, the ones you can take first. Here in
- * the rail, the cards you can take, and a button to bring the window back once hidden.
- */
-function Offer({ message, offer, seen, chosen, game }: { message: string; offer: CardView[]; seen: CardView[]; chosen: (number | string)[]; game: LiveGame }) {
-  const [open, setOpen] = useState(true);
-  const p = game.prompt;
-  return (
-    <>
-      <button className="ar-btn" onClick={() => setOpen(true)}>
-        Show the cards ({offer.length + seen.length})
-      </button>
-      <OfferedCards cards={offer} chosen={chosen} onPick={game.clickCard} />
-      {open && (
-        <OfferWindow
-          title={message}
-          offer={offer}
-          seen={seen}
-          chosen={chosen}
-          onPick={game.clickCard}
-          ok={p ? { ...p.ok, onClick: game.ok } : undefined}
-          cancel={p ? { ...p.cancel, onClick: game.cancel } : undefined}
-          onHide={() => setOpen(false)}
-        />
-      )}
-    </>
-  );
-}
-
 /** A scry or surveil: the cards in a window (ScryDialog); here, a way back to it once hidden. */
 function ScryPanel({ ask, game }: { ask: LiveAsk; game: LiveGame }) {
   const [open, setOpen] = useState(true);
@@ -201,50 +177,6 @@ function ScryPanel({ ask, game }: { ask: LiveAsk; game: LiveGame }) {
       </div>
       {open && <ScryDialog forced kind={kind} cards={cards} onClose={() => setOpen(false)} onApply={answer} />}
     </section>
-  );
-}
-
-/** The cards the prompt lets you take, listed in the rail: click one to choose it, like a card on the table. */
-function OfferedCards({ cards, chosen, onPick }: { cards: CardView[]; chosen: (number | string)[]; onPick: (id: number) => void }) {
-  const setPreview = usePreview();
-  // Copies of the same card are one row ("Forest ×16"); clicking it picks the next copy not chosen yet.
-  const groups: CardView[][] = [];
-  const byName = new Map<string, CardView[]>();
-  for (const c of cards) {
-    const key = c.hidden ? `hidden-${c.id}` : c.name ?? String(c.id);
-    let g = byName.get(key);
-    if (!g) {
-      g = [];
-      byName.set(key, g);
-      groups.push(g);
-    }
-    g.push(c);
-  }
-  return (
-    <ul className="ask-options" aria-label="Cards to choose from">
-      {groups.map((g) => {
-        const c = g[0];
-        const picked = g.filter((x) => chosen.includes(x.id)).length;
-        const next = g.find((x) => !chosen.includes(x.id)) ?? c;
-        return (
-          <li key={c.id}>
-            <button
-              className={`ask-option${picked ? " on" : ""}`}
-              aria-pressed={picked > 0}
-              onClick={() => onPick(next.id)}
-              onMouseEnter={() => setPreview({ card: c })}
-              onMouseLeave={() => setPreview(null)}
-            >
-              {!c.hidden && c.name && <img src={cardImage(c.name, "small")} alt="" />}
-              <span>
-                {c.hidden ? "Hidden card" : c.name}
-                {g.length > 1 && <small> ×{g.length}{picked ? ` · ${picked} chosen` : ""}</small>}
-              </span>
-            </button>
-          </li>
-        );
-      })}
-    </ul>
   );
 }
 

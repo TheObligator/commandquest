@@ -168,10 +168,10 @@ export function SeatBoard(props: {
           <ZoneTile label="Lib" count={p.libraryCount} back={p.libraryCount > 0} hint={`Library: ${p.libraryCount} cards`}
             onMenu={props.onMenu && ((e) => props.onMenu!(e, { kind: "zone", owner: p.id, zone: "library" }))} />
           <ZoneTile label="GY" count={p.graveyard.length} card={top(p.graveyard)} hover={hover}
-            onClick={() => props.onOpenZone(p.id, "graveyard")} title="See the graveyard"
+            onClick={() => props.onOpenZone(p.id, "graveyard")} title="See the graveyard" glow={p.graveyard.some((c) => props.selectable?.has(c.id))}
             onMenu={props.onMenu && ((e) => props.onMenu!(e, { kind: "zone", owner: p.id, zone: "graveyard" }))} />
           <ZoneTile label="Exile" count={p.exile.length} card={top(p.exile)} hover={hover}
-            onClick={() => props.onOpenZone(p.id, "exile")} title="See exiled cards"
+            onClick={() => props.onOpenZone(p.id, "exile")} title="See exiled cards" glow={p.exile.some((c) => props.selectable?.has(c.id))}
             onMenu={props.onMenu && ((e) => props.onMenu!(e, { kind: "zone", owner: p.id, zone: "exile" }))} />
           <CommandTile
             onMenu={props.onMenu}
@@ -244,6 +244,8 @@ function ZoneTile(props: {
   title?: string;
   hint?: string;
   onMenu?: (e: React.MouseEvent) => void;
+  /** Forge's prompt can choose cards in this pile. */
+  glow?: boolean;
 }) {
   const { card } = props;
   const Tag = props.onClick ? "button" : "div";
@@ -255,7 +257,7 @@ function ZoneTile(props: {
         {props.extra && <b className="zt-extra">{props.extra}</b>}
         {props.onClick && props.label !== "Cmd" && <i aria-hidden>⌄</i>}
       </span>
-      <div className="zt-card" data-card-ids={card?.id}>
+      <div className={`zt-card${props.glow ? " selectable" : ""}`} data-card-ids={card?.id}>
         {card ? (
           <>
             <CardFace card={card} knownFaceDown={card.faceDown && !card.hidden} />

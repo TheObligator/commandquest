@@ -32,6 +32,8 @@ import { PayPrompt } from "../game/PayPrompt";
 import { ManaChoice } from "../game/ManaChoice";
 import { manaChoiceFor } from "../game/manaOptions";
 import { LibraryDialog, type LibraryCountAction } from "../game/LibraryDialog";
+import { AskPick, PickDialog } from "../game/PickDialog";
+import { askPickCards, pickPiles, pilesFor } from "../game/pickZones";
 import { ScryDialog, type ArrangeKind } from "../game/ScryDialog";
 import { ShownWindow } from "../game/CardWindow";
 import { CostDialog } from "../game/CostDialog";
@@ -450,6 +452,18 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
   const selectable = useMemo(() => new Set([...(sel?.cards ?? []), ...(game.prompt?.pay?.sources ?? [])]), [sel, game.prompt?.pay]);
   const chosen = useMemo(() => new Set((sel?.chosen ?? []).filter((x): x is number => typeof x === "number")), [sel]);
   const targetPlayers = useMemo(() => new Set(sel?.players ?? []), [sel]);
+  // Choosing cards from a pile (a graveyard, a library…): the pick window, until you hide it for this prompt.
+  const piles = useMemo(() => (game.prompt && !game.prompt.pay && !game.ask ? pickPiles(view) : []), [view, game.prompt, game.ask]);
+  // …or a question whose options are cards in piles (a tutor, "return a card from your graveyard").
+  const askCards = useMemo(() => askPickCards(game.ask), [game.ask]);
+  const askPiles = useMemo(() => (askCards ? pilesFor(view, askCards) : []), [view, askCards]);
+  const pickKey = askCards && game.ask ? `ask:${game.ask.id}` : piles.length ? `${game.prompt?.message}|${piles.map((p) => p.key).join(",")}` : "";
+  const [pickHidden, setPickHidden] = useState("");
+  const alsoTable = useMemo(() => {
+    if (!sel || !piles.length) return false;
+    const inPiles = new Set(piles.flatMap((p) => p.choosable.map((c) => c.id)));
+    return sel.players.length > 0 || sel.stack.length > 0 || sel.cards.some((id) => !inPiles.has(id));
+  }, [sel, piles]);
   const playable = useMemo(() => new Set(game.prompt && isPriorityPrompt(game.prompt) && !game.ask ? view.playable ?? [] : []), [view.playable, game.prompt, game.ask]);
 
   // Right-click menus. Forge's abilities for the card (enabled when you can use them now), then
@@ -987,6 +1001,24 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
       />
     )}
     {game.prompt?.pay && !game.ask && <PayPrompt prompt={game.prompt} pool={view.players[0].mana} game={{ ok, cancel, payFree: game.payFree, payPool: game.payPool }} />}
+    {pickKey && pickHidden !== pickKey && askCards && game.ask && (
+      <AskPick key={pickKey} ask={game.ask} cards={askCards} piles={askPiles} onAnswer={(i) => game.answer(game.ask!.id, i)} onHide={() => setPickHidden(pickKey)} />
+    )}
+    {pickKey && pickHidden !== pickKey && !askCards && game.prompt && (
+      <PickDialog
+        key={pickKey}
+        message={game.prompt.message}
+        piles={piles}
+        chosen={chosen}
+        ok={game.prompt.ok}
+        cancel={game.prompt.cancel}
+        alsoTable={alsoTable}
+        onPick={game.clickCard}
+        onOk={ok}
+        onCancel={cancel}
+        onHide={() => setPickHidden(pickKey)}
+      />
+    )}
     {libDialog && (
       <LibraryDialog
         size={myLibrary}
@@ -1030,7 +1062,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
       layout={layout}
       stops={st}
       priority={!!game.prompt?.ok.enabled || !!game.ask}
-      rail={(preview) => <LiveRail game={{ ...game, ok, cancel, setAutoPass, clickCard: click }} nameOf={nameOf} colorOf={colorOf} preview={preview} />}
+      rail={(preview) => <LiveRail game={{ ...game, ok, cancel, setAutoPass, clickCard: click }} nameOf={nameOf} colorOf={colorOf} preview={preview} pickAsk={!!askCards} onShowPick={pickKey && pickHidden === pickKey ? () => setPickHidden("") : undefined} />}
       hand={{
         onPlay: click,
         onClick: click,

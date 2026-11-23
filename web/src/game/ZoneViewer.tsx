@@ -19,6 +19,9 @@ export function ZoneViewer(props: {
   /** Live games: click a card to use it (flashback, escape, commander…). */
   onCardClick?: (id: number) => void;
   playable?: Set<number>;
+  /** Cards Forge's prompt lets you choose (click to choose), and the ones chosen so far. */
+  selectable?: Set<number>;
+  chosen?: Set<number>;
   onMenu?: OpenMenu;
   /** `cards` are already top first (a library listing); otherwise the last card is the top. */
   topFirst?: boolean;
@@ -81,13 +84,13 @@ export function ZoneViewer(props: {
               <figure
                 key={c.id}
                 data-card-ids={c.id}
-                className={[props.playable?.has(c.id) && "playable", marks.marked.has(c.id) && "marked"].filter(Boolean).join(" ") || undefined}
+                className={[props.playable?.has(c.id) && "playable", props.selectable?.has(c.id) && "selectable", props.chosen?.has(c.id) && "chosen", marks.marked.has(c.id) && "marked"].filter(Boolean).join(" ") || undefined}
                 onMouseEnter={() => setPreview({ card: c, note })}
                 onMouseLeave={() => setPreview(null)}
                 onContextMenu={props.onMenu ? (e) => props.onMenu!(e, { kind: "card", card: c, where: "zone" }) : undefined}
                 onClick={(e) => {
                   if (isMarkClick(e)) return marks.toggle([c.id]);
-                  if (props.onCardClick && props.playable?.has(c.id)) props.onCardClick(c.id);
+                  if (props.onCardClick && (props.playable?.has(c.id) || props.selectable?.has(c.id) || props.chosen?.has(c.id))) props.onCardClick(c.id);
                 }}
               >
                 <div className="zv-card">

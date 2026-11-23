@@ -435,6 +435,8 @@ export function TableBoard(props: {
           onClose={() => setZone(null)}
           onCardClick={props.onCardClick}
           playable={props.playable}
+          selectable={props.selectable}
+          chosen={props.chosen}
           onMenu={openMenu}
         />
       )}

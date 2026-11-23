@@ -487,16 +487,11 @@ dialog.scry-dialog.big { width: min(820px, calc(100vw - 32px)); }
 dialog.card-window { overflow: auto; }
 .zv-grid.cw-big { grid-template-columns: repeat(auto-fill, minmax(200px, 240px)); }
 .zv-grid.cw-big .zv-card { --cw: 220px; }
-.cw-section { margin: 14px 0 8px; font-size: .9rem; }
-.cw-section .small { font-weight: 400; margin-left: 6px; }
-.zv-grid.cw-dim figure { opacity: .55; }
-.zv-grid.cw-dim figure:hover { opacity: 1; }
 .card-window figure.playable { cursor: pointer; }
 .card-window figure.playable .zv-card { box-shadow: 0 0 0 2px #5fd38a, 0 0 14px rgb(95 211 138 / 55%); border-radius: 6px; }
 .card-window figure.marked .zv-card { outline: 3px solid #c79bff; outline-offset: 2px; border-radius: 6px; }
 .cw-actions { position: sticky; bottom: -18px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 14px -18px -18px; padding: 12px 18px; background: var(--panel); border-top: 1px solid var(--line); }
 .cw-actions .ar-btn { width: auto; }
-.cw-actions .ask-spacer { flex: 1; }
 
 /* Several cards selected together (drag a box, or Shift/Ctrl/⌘-click): one right-click menu for all. */
 .slot.marked .bf-card, .hand-card.marked, .zone-viewer figure.marked .zv-card { outline: 3px solid #c79bff; outline-offset: 2px; border-radius: 6px; }
@@ -538,3 +533,30 @@ button.sb-mana:hover { background: rgb(255 210 122 / 18%); }
 .mana-choice-none { margin-top: 8px; background: none; border: 0; color: #bfb39b; cursor: pointer; font-size: .8rem; padding: 0; }
 .live-deck { display: grid; gap: 6px; }
 .live-deck select { max-width: 100%; }
+
+/* ---- Pick dialog: choose cards from a pile (graveyard, exile, a library) ---- */
+dialog.pick-dialog { display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+dialog.pick-dialog:not([open]) { display: none; }
+.pick-dialog .dialog-head { margin-bottom: 0; padding-right: 40px; }
+.pick-sub { margin: 4px 0 0; white-space: pre-line; }
+.pick-piles { overflow-y: auto; min-height: 120px; display: grid; gap: 12px; border-radius: 10px; padding: 4px; }
+.pick-pile h4, .pick-tray h4 { margin: 0 0 8px; font-size: .85rem; }
+.pick-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+.pick-card { margin: 0; width: 112px; display: grid; gap: 4px; }
+.pick-card figcaption { font-size: .75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pick-img { --cw: 112px; --seat: #888; position: relative; aspect-ratio: 488 / 680; border-radius: 6px; }
+.pick-card.can { cursor: pointer; }
+.pick-card.can .pick-img { box-shadow: 0 0 0 2px var(--accent-2, #ffd27a), 0 0 12px rgb(255 210 122 / 45%); }
+.pick-card.can:hover .pick-img { transform: translateY(-3px); }
+.pick-card.cant { opacity: .38; filter: grayscale(.7); cursor: default; }
+.pick-tray { flex: none; min-height: 150px; max-height: 40vh; overflow-y: auto; border: 2px dashed var(--line); border-radius: 10px; padding: 10px; }
+.pick-tray .pick-card .pick-img { box-shadow: 0 0 0 3px #7fd1ff, 0 0 14px rgb(127 209 255 / 55%); }
+.pick-tray.over, .pick-piles.over { border-color: #7fd1ff; background: rgb(127 209 255 / 8%); }
+.pick-piles.over { outline: 2px dashed #7fd1ff; }
+.pick-empty { margin: 0; padding: 30px 0; width: 100%; text-align: center; }
+.pick-btns { justify-content: flex-end; }
+.zt-card.selectable { box-shadow: 0 0 0 2px var(--accent-2, #ffd27a), 0 0 12px rgb(255 210 122 / 45%); border-radius: 6px; }
+.zone-viewer figure.selectable .zv-card { box-shadow: 0 0 0 2px var(--accent-2, #ffd27a), 0 0 12px rgb(255 210 122 / 45%); border-radius: 6px; }
+.zone-viewer figure.selectable { cursor: pointer; }
+.zone-viewer figure.chosen .zv-card { box-shadow: 0 0 0 3px #7fd1ff, 0 0 14px rgb(127 209 255 / 55%); border-radius: 6px; }
+@media (prefers-reduced-motion: reduce) { .pick-card.can:hover .pick-img { transform: none; } }
