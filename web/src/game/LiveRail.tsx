@@ -6,8 +6,10 @@ import { manaChoiceFor } from "./manaOptions";
 import { RewindPanel } from "./RewindPanel";
 import { Kbd, useHotkeys } from "./useHotkeys";
 import { cardImage, previewFor, usePreview, type Preview } from "./cards";
+import { logParts } from "./logText";
+import { PointArrows } from "./PointArrows";
 import type { LiveAsk, LiveGame } from "./useLiveGame";
-import type { CardView } from "./view";
+import type { CardView, GameView } from "./view";
 
 export function LiveRail(props: {
   game: LiveGame;
@@ -35,7 +37,7 @@ export function LiveRail(props: {
       ) : game.ask ? (
         <AskPanel ask={game.ask} game={game} nameOf={nameOf} />
       ) : (
-        <PromptPanel game={game} />
+        <PromptPanel game={game} nameOf={nameOf} />
       )}
 
       <section className="ar-autopass">
@@ -63,8 +65,9 @@ export function LiveRail(props: {
 }
 
 /** Forge's prompt: OK / Cancel with Forge's labels (OK passes priority; Cancel is often "End Turn"). */
-function PromptPanel({ game }: { game: LiveGame }) {
+function PromptPanel({ game, nameOf }: { game: LiveGame; nameOf: (id: string) => string }) {
   const p = game.prompt;
+  const point = usePointing(game, nameOf, [p?.message ?? ""]);
   useHotkeys({
     ok: () => (p?.ok.enabled ? game.ok() : false),
     cancel: () => (p?.cancel.enabled ? game.cancel() : false),
@@ -91,10 +94,11 @@ function PromptPanel({ game }: { game: LiveGame }) {
   }
   const [title, ...rest] = p.message.split("\n");
   return (
-    <section className="ar-decision live">
+    <section className="ar-decision live" {...point.section}>
+      {point.arrows}
       <div className="ar-ribbon">Decision</div>
-      <h3>{title || "Your move"}</h3>
-      {rest.length > 0 && <p className="ar-prompt-text">{rest.join("\n")}</p>}
+      <h3>{title ? point.text(title) : "Your move"}</h3>
+      {rest.length > 0 && <p className="ar-prompt-text">{point.text(rest.join("\n"))}</p>}
       {!!game.view?.revealed?.length && <RevealedCards cards={game.view.revealed} />}
       {!!game.view?.selection?.offer?.length && (
         <OfferedCards cards={game.view.selection.offer} chosen={game.view.selection.chosen} onPick={game.clickCard} />
@@ -385,6 +389,7 @@ function AskPanel({ ask, game, nameOf }: { ask: LiveAsk; game: LiveGame; nameOf:
     setPicked((p) => (p.includes(i) ? p.filter((x) => x !== i) : p.length < ask.max ? [...p, i] : p));
   };
   const viewer = game.view?.viewer ?? "";
+  const point = usePointing(game, nameOf, [ask.title ?? "", ask.message, ...(ask.options ?? []).map((o) => o.label)]);
   useHotkeys({
     ok: () => {
       if (info) game.answer(ask.id, []);
@@ -395,11 +400,12 @@ function AskPanel({ ask, game, nameOf }: { ask: LiveAsk; game: LiveGame; nameOf:
   });
 
   return (
-    <section className="ar-decision live ar-ask">
+    <section className="ar-decision live ar-ask" {...point.section}>
+      {point.arrows}
       <div className="ar-ribbon">Decision</div>
-      <h3>{ask.title || ask.message.split("\n")[0] || "Choose"}</h3>
-      {ask.title && <p className="ar-prompt-text">{ask.message}</p>}
-      {!ask.title && ask.message.includes("\n") && <p className="ar-prompt-text">{ask.message.split("\n").slice(1).join("\n")}</p>}
+      <h3>{point.text(ask.title || ask.message.split("\n")[0] || "Choose")}</h3>
+      {ask.title && <p className="ar-prompt-text">{point.text(ask.message)}</p>}
+      {!ask.title && ask.message.includes("\n") && <p className="ar-prompt-text">{point.text(ask.message.split("\n").slice(1).join("\n"))}</p>}
       {ask.kind === "text" ? (
         <form
           className="ar-actions"
@@ -431,7 +437,7 @@ function AskPanel({ ask, game, nameOf }: { ask: LiveAsk; game: LiveGame; nameOf:
                     onMouseLeave={() => setPreview(null)}
                   >
                     {img && <img src={img} alt="" />}
-                    <span>{o.label}</span>
+                    <span>{point.text(o.label)}</span>
                   </button>
                 </li>
               );
@@ -461,4 +467,60 @@ function AskPanel({ ask, game, nameOf }: { ask: LiveAsk; game: LiveGame; nameOf:
       )}
     </section>
   );
+}
+
+/** A card in the game by id: on the table, on the stack, or shown with the current prompt. */
+function cardIn(v: GameView | null | undefined, id: number): CardView | undefined {
+  if (!v) return undefined;
+  for (const p of v.players) for (const z of [p.hand, p.battlefield, p.graveyard, p.exile, p.command]) {
+    const c = z.find((x) => x.id === id);
+    if (c) return c;
+  }
+  return (
+    v.stack.find((s) => s.card?.id === id)?.card ??
+    v.selection?.offer?.find((c) => c.id === id) ??
+    v.selection?.seen?.find((c) => c.id === id) ??
+    v.revealed?.find((c) => c.id === id)
+  );
+}
+
+/**
+ * Forge names cards in its prompts as "Name (id)". This shows them by name alone, and points at
+ * them: hovering the decision draws a line to every card it names, hovering one name draws a line
+ * to that card and shows it.
+ */
+function usePointing(game: LiveGame, nameOf: (id: string) => string, texts: string[]) {
+  const setPreview = usePreview();
+  const [el, setEl] = useState<HTMLElement | null>(null);
+  const [over, setOver] = useState(false);
+  const [one, setOne] = useState<number | null>(null);
+  const v = game.view;
+  const cardOf = (id: number) => cardIn(v, id);
+  const all = [...new Set(texts.flatMap((t) => logParts(t, (id) => cardOf(id)?.name).flatMap((p) => (typeof p === "string" ? [] : [p.id]))))];
+  const ids = one !== null ? [one] : over ? all : [];
+  const text = (t: string) =>
+    logParts(t, (id) => cardOf(id)?.name).map((part, k) =>
+      typeof part === "string" ? part : (
+        <span
+          key={k}
+          className="log-card"
+          onMouseEnter={() => {
+            setOne(part.id);
+            const c = cardOf(part.id);
+            if (c) setPreview(previewFor(c, v?.viewer ?? "", nameOf));
+          }}
+          onMouseLeave={() => {
+            setOne(null);
+            setPreview(null);
+          }}
+        >
+          {part.name}
+        </span>
+      ),
+    );
+  return {
+    section: { ref: setEl, onMouseEnter: () => setOver(true), onMouseLeave: () => setOver(false) },
+    arrows: <PointArrows from={el} ids={ids} color={v?.players[0]?.color ?? "#e0b04a"} />,
+    text,
+  };
 }

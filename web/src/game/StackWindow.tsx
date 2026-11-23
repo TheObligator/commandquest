@@ -308,12 +308,12 @@ export function StackArrows({ view, colorOf }: { view: GameView; colorOf: (id: s
         const color = colorRef.current(s.controller);
         const ends: { el: HTMLElement; dashed: boolean; key: string }[] = [];
         for (const t of s.targets ?? []) {
-          const el = t.cardId !== undefined ? findCard(t.cardId) : t.playerId !== undefined ? document.querySelector<HTMLElement>(`[data-player-id="${t.playerId}"]`) : null;
+          const el = t.cardId !== undefined ? findCardEl(t.cardId) : t.playerId !== undefined ? document.querySelector<HTMLElement>(`[data-player-id="${t.playerId}"]`) : null;
           if (el) ends.push({ el, dashed: false, key: `${t.cardId ?? "p" + t.playerId}` });
         }
         // An ability's source permanent (spells' cards are on the stack itself).
         if (s.card && s.cardId === undefined && s.card.zone === "battlefield") {
-          const el = findCard(s.card.id);
+          const el = findCardEl(s.card.id);
           if (el && !ends.some((e) => e.el === el)) ends.push({ el, dashed: true, key: `src${s.card.id}` });
         }
         for (const end of ends) {
@@ -357,7 +357,7 @@ export function StackArrows({ view, colorOf }: { view: GameView; colorOf: (id: s
 }
 
 /** A card on the table by id: a battlefield slot (piles list every id), a hand card or a zone tile card. */
-function findCard(id: number): HTMLElement | null {
+export function findCardEl(id: number): HTMLElement | null {
   return document.querySelector<HTMLElement>(`[data-card-ids~="${id}"]`);
 }
 
