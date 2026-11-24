@@ -16,7 +16,7 @@ function versionFile(): Plugin {
   };
 }
 
-/** The card names for the editor's search: there before a build, and fetched as the dev server starts. */
+/** The card names for the editor's search: there before a build, and brought up to date as the dev server starts. */
 function cardNames(): Plugin {
   let dev = false;
   return {

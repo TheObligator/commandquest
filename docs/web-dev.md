@@ -75,8 +75,14 @@ and misspellings are found as you type. `scripts/cardnames.ts` builds the list
 (`web/public/card-names.json`, not committed) from Scryfall's daily bulk data: names in EDHREC
 popularity order, plus what the color identity rules need (including Conquest's hybrid rule and
 Rulebreakers, so those rules run on the list unchanged). `vite.config.ts` runs it before every build,
-and when the dev server starts if the file is over a day old. If Scryfall can't be reached, the build
-only warns. `node scripts/cardnames.ts` refreshes it by hand.
+and when the dev server starts; a list less than a day old is used as it is.
+
+If Scryfall can't be reached, the build warns and uses the newest list it has: the last one that
+downloaded, or the committed copy in `web/data/card-names.json`. On CI, the last one comes from GitHub's
+build cache. `web` deploys save it (`.github/workflows/web.yml`), and `live` deploys read it too. GitHub
+drops it after 7 days without use, which is when the committed copy matters. `npm run cardnames`
+downloads a new list and updates that copy; commit it now and then, and whenever `CARD_NAMES_VERSION`
+goes up (`npm test` fails until you do).
 
 `src/cardsearch.ts` is the matching, `src/cardsearch.worker.ts` runs it in a Web Worker, and
 `src/localsearch.ts` is how the search box asks it. Scryfall is still asked when the list isn't loaded

@@ -6,8 +6,14 @@
 
 import type { RulesCard } from "./formats/conquest";
 
+/** The format of {@link CardNamesData}. Raise it when that changes, then run `npm run cardnames`. */
+export const CARD_NAMES_VERSION = 1;
+
 /** /card-names.json. Cards are in EDHREC popularity order; the columns line up by position. */
 export interface CardNamesData {
+  version: number;
+  /** When it was made from Scryfall's data (ISO date and time). */
+  built: string;
   names: string[];
   /** Color identity, one base-32 digit per card: the sum of W 1, U 2, B 4, R 8, G 16. */
   identity: string;
@@ -47,7 +53,7 @@ export interface BulkCard {
 /** Things Scryfall has that aren't cards for a deck. */
 const NOT_CARDS = new Set(["token", "double_faced_token", "art_series", "emblem", "planar", "scheme", "vanguard"]);
 
-export function buildCardNames(cards: Iterable<BulkCard>): CardNamesData {
+export function buildCardNames(cards: Iterable<BulkCard>, built = new Date()): CardNamesData {
   const byName = new Map<string, BulkCard>();
   for (const c of cards) {
     if (NOT_CARDS.has(c.layout) || c.name.startsWith("A-") || /^(.+) \/\/ \1$/.test(c.name)) continue; // "A-": Alchemy rebalances
@@ -56,7 +62,7 @@ export function buildCardNames(cards: Iterable<BulkCard>): CardNamesData {
   }
   const list = [...byName.values()].sort((a, z) => (a.edhrec_rank ?? 1e9) - (z.edhrec_rank ?? 1e9) || (a.name < z.name ? -1 : 1));
   const types = new Map<string, number>();
-  const data: CardNamesData = { names: [], identity: "", types: [], type: [], power: {}, mv: {}, hybrid: {}, indicator: {} };
+  const data: CardNamesData = { version: CARD_NAMES_VERSION, built: built.toISOString(), names: [], identity: "", types: [], type: [], power: {}, mv: {}, hybrid: {}, indicator: {} };
   list.forEach((c, i) => {
     const faces = c.card_faces?.length ? c.card_faces : [c];
     data.names.push(c.name);

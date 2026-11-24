@@ -1,5 +1,5 @@
 // Runs the card-name search (cardsearch.ts) off the main thread. Talks only to localsearch.ts.
-import { CardSearch, cardAt, plainFits, type CardNamesData, type IdentityRules, type NameResults } from "./cardsearch";
+import { CARD_NAMES_VERSION, CardSearch, cardAt, plainFits, type CardNamesData, type IdentityRules, type NameResults } from "./cardsearch";
 import { fitsIdentity } from "./formats/conquest";
 import { offIdentity } from "./formats/rulebreakers";
 
@@ -12,6 +12,7 @@ async function load() {
   const res = await fetch("/card-names.json");
   if (!res.ok) throw new Error(`card-names.json: ${res.status}`);
   const data = (await res.json()) as CardNamesData; // not JSON when there's no file (Vite's dev server answers with index.html)
+  if (data.version !== CARD_NAMES_VERSION) throw new Error("card-names.json is from another version of the site");
   return { data, search: new CardSearch(data.names) };
 }
 

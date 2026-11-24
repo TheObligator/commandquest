@@ -76,9 +76,27 @@ jobs:
       - name: Type-check Convex functions
         run: npx tsc -p convex --noEmit
         working-directory: web
+      # The last card-name list that downloaded (web/scripts/cardnames.ts), for when Scryfall is down.
+      # Only `web` saves it; `live` reads that one, as `web` is the default branch.
+      - name: Restore the last card-name list
+        id: cardnames
+        uses: actions/cache/restore@v5
+        with:
+          path: web/public/card-names.json
+          key: card-names-none
+          restore-keys: card-names-
       - name: Build (type-checks the client)
         run: npm run ${{ github.ref_name == 'live' && 'build' || 'build:staging' }}
         working-directory: web
+      - name: Save the card-name list
+        if: >-
+          github.ref_name == 'web' && hashFiles('web/public/card-names.json') != '' &&
+          steps.cardnames.outputs.cache-matched-key != format('card-names-{0}', hashFiles('web/public/card-names.json'))
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: web/public/card-names.json
+          key: card-names-${{ hashFiles('web/public/card-names.json') }}
       - uses: actions/upload-artifact@v4
         with:
           name: site
