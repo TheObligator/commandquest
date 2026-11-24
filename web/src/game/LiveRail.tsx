@@ -9,6 +9,9 @@ import { ScryDialog } from "./ScryDialog";
 import { Kbd, useHotkeys } from "./useHotkeys";
 import { cardImage, previewFor, usePreview, type Preview } from "./cards";
 import { logParts } from "./logText";
+import { CardImg } from "../components/CardImg";
+import { Waiting } from "../components/Spinner";
+import { PressButton } from "./PressButton";
 import { PointArrows } from "./PointArrows";
 import type { LiveAsk, LiveGame } from "./useLiveGame";
 import type { CardView, GameView } from "./view";
@@ -87,8 +90,27 @@ function PromptPanel({ game, nameOf, onShowPick }: { game: LiveGame; nameOf: (id
     return (
       <section className="ar-decision">
         <div className="ar-ribbon">Decision</div>
-        <h3>{game.status === "over" ? "Game over" : "Waiting"}</h3>
-        <p>{game.status === "over" ? "Nothing more to decide in this game." : "Other players are deciding…"}</p>
+        {game.status === "over" ? (
+          <>
+            <h3>Game over</h3>
+            <p>Nothing more to decide in this game.</p>
+          </>
+        ) : game.status === "reconnecting" ? (
+          <>
+            <h3>Connection lost</h3>
+            <p><Waiting text="Reconnecting…" /></p>
+          </>
+        ) : game.sent?.what === "answer" ? (
+          <>
+            <h3>Your answer</h3>
+            <p><Waiting text={game.sent.slow ? "Waiting for the game server…" : "Sending it to the game…"} /></p>
+          </>
+        ) : (
+          <>
+            <h3>Waiting</h3>
+            <p>Other players are deciding…</p>
+          </>
+        )}
       </section>
     );
   }
@@ -115,20 +137,20 @@ function PromptPanel({ game, nameOf, onShowPick }: { game: LiveGame; nameOf: (id
       )}
       <div className="ar-actions">
         {p.ok.label && (
-          <button className="ar-btn primary" disabled={!p.ok.enabled} onClick={game.ok}>
-            {p.ok.label}
-            <Kbd action="ok" />
-          </button>
+          <PressButton what="ok" sent={game.sent} className="ar-btn primary" disabled={!p.ok.enabled} onClick={game.ok} hint={<Kbd action="ok" />}>{p.ok.label}</PressButton>
         )}
         {p.cancel.label && (
-          <button className="ar-btn" disabled={!p.cancel.enabled} onClick={game.cancel}>
-            {p.cancel.label}
-            <Kbd action="cancel" />
-          </button>
+          <PressButton what="cancel" sent={game.sent} className="ar-btn" disabled={!p.cancel.enabled} onClick={game.cancel} hint={<Kbd action="cancel" />}>{p.cancel.label}</PressButton>
         )}
       </div>
+      <SlowServer game={game} />
     </section>
   );
+}
+
+/** Under the buttons, once the server has taken a good while over the one you pressed. */
+function SlowServer({ game }: { game: LiveGame }) {
+  return game.sent?.slow ? <p className="ar-sub"><Waiting text="Waiting for the game server…" className="" /></p> : null;
 }
 
 /**
@@ -170,17 +192,12 @@ function AttackPanel({ game, nameOf }: { game: LiveGame; nameOf: (id: string) =>
       )}
       {reason && <p className="ar-prompt-text atk-reason">{reason}</p>}
       <div className="ar-actions">
-        <button className="ar-btn primary" disabled={!p.ok.enabled} onClick={game.ok}>
-          {counts.size ? "Attack" : "No attack"}
-          <Kbd action="ok" />
-        </button>
+        <PressButton what="ok" sent={game.sent} className="ar-btn primary" disabled={!p.ok.enabled} onClick={game.ok} hint={<Kbd action="ok" />}>{counts.size ? "Attack" : "No attack"}</PressButton>
         {p.cancel.label && (
-          <button className="ar-btn" disabled={!p.cancel.enabled} onClick={game.cancel}>
-            {p.cancel.label}
-            <Kbd action="cancel" />
-          </button>
+          <PressButton what="cancel" sent={game.sent} className="ar-btn" disabled={!p.cancel.enabled} onClick={game.cancel} hint={<Kbd action="cancel" />}>{p.cancel.label}</PressButton>
         )}
       </div>
+      <SlowServer game={game} />
     </section>
   );
 }
@@ -193,7 +210,7 @@ function RevealedCards({ cards }: { cards: CardView[] }) {
       {cards.map((c) => (
         <li key={c.id}>
           <div className="ask-option info" onMouseEnter={() => setPreview({ card: c })} onMouseLeave={() => setPreview(null)}>
-            {!c.hidden && c.name && <img src={cardImage(c.name, "small")} alt="" />}
+            {!c.hidden && cardImage(c.name, "small") && <CardImg tiny src={cardImage(c.name, "small")!} name={c.name ?? ""} alt="" />}
             <span>{c.hidden ? "Hidden card" : c.name}</span>
           </div>
         </li>
@@ -330,7 +347,7 @@ function AskPanel({ ask, game, nameOf }: { ask: LiveAsk; game: LiveGame; nameOf:
                     onMouseEnter={() => o.card && setPreview(previewFor(o.card, viewer, nameOf))}
                     onMouseLeave={() => setPreview(null)}
                   >
-                    {img && <img src={img} alt="" />}
+                    {img && <CardImg tiny src={img} name={o.label} alt="" />}
                     <span>{point.text(o.label)}</span>
                   </button>
                 </li>

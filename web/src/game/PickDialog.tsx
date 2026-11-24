@@ -7,8 +7,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { cached } from "../scryfall";
 import { CardBadges, CardFace, useCardData, usePreview } from "./cards";
 import type { PickPile } from "./pickZones";
+import { PressButton } from "./PressButton";
 import { compileQuery } from "./scryquery";
 import { useHotkeys } from "./useHotkeys";
+import type { Sent } from "./sending";
 import type { LiveAsk, LiveButton } from "./useLiveGame";
 import type { CardView } from "./view";
 
@@ -28,6 +30,8 @@ export function PickDialog(props: {
   onCancel: () => void;
   /** Close the window without answering (to look at the table); the prompt panel brings it back. */
   onHide: () => void;
+  /** The button the game server hasn't answered yet. */
+  sent?: Sent | null;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const setPreview = usePreview();
@@ -162,10 +166,10 @@ export function PickDialog(props: {
       </section>
       <div className="cd-btns pick-btns">
         {props.ok.label && (
-          <button className="btn small" disabled={!props.ok.enabled} onClick={props.onOk}>{props.ok.label}</button>
+          <PressButton what="ok" sent={props.sent ?? null} className="btn small" disabled={!props.ok.enabled} onClick={props.onOk}>{props.ok.label}</PressButton>
         )}
         {props.cancel.label && (
-          <button className="btn small ghost" disabled={!props.cancel.enabled} onClick={props.onCancel}>{props.cancel.label}</button>
+          <PressButton what="cancel" sent={props.sent ?? null} className="btn small ghost" disabled={!props.cancel.enabled} onClick={props.onCancel}>{props.cancel.label}</PressButton>
         )}
         <button className="btn small ghost" onClick={props.onHide}>Look at the table</button>
       </div>

@@ -5,6 +5,7 @@ import type { CardAbility, Decision } from "./abilities";
 import { useAuthToken } from "@convex-dev/auth/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { setGameInProgress } from "../app/busy";
+import { Sending, type Sent } from "./sending";
 import type { AutoPassMode, StepId } from "./phases";
 import type { CardView, GameView, RewindLevel } from "./view";
 
@@ -258,10 +259,29 @@ export function useLiveGame() {
   }, [status]);
   useEffect(() => () => setGameInProgress(false), []);
 
-  const send = useCallback((m: object) => {
+  /** False if there's no connection to send it on. */
+  const send = useCallback((m: object): boolean => {
     const s = ws.current;
-    if (s && s.readyState === WebSocket.OPEN) s.send(JSON.stringify(m));
+    if (!s || s.readyState !== WebSocket.OPEN) return false;
+    s.send(JSON.stringify(m));
+    return true;
   }, []);
+
+  // Buttons you've pressed that the server hasn't answered yet (src/game/sending.ts): one for the
+  // prompt you're answering, one for rewinding.
+  const [sent, setSent] = useState<Sent | null>(null);
+  const [rewindSent, setRewindSent] = useState<Sent | null>(null);
+  const [sending] = useState(() => {
+    const noAnswer = (what: string) =>
+      setNotice((n) => ({ message: what === "answer" ? "The game server hasn't answered yet." : "The game server hasn't answered. You can try that again.", n: (n?.n ?? 0) + 1 }));
+    return { prompt: new Sending(setSent, noAnswer), rewind: new Sending(setRewindSent, noAnswer) };
+  });
+  /** Sends a button press, unless the server is still dealing with the last one. */
+  const press = useCallback((on: Sending, what: string, m: object, byState = false) => {
+    if (on.busy) return;
+    if (send(m)) on.begin(what, byState);
+    else setNotice((n) => ({ message: "Not connected to the game server. Try that again in a moment.", n: (n?.n ?? 0) + 1 }));
+  }, [send]);
 
   useEffect(() => {
     let closed = false;
@@ -275,6 +295,8 @@ export function useLiveGame() {
       s.close();
       if (ws.current !== s) return;
       ws.current = null;
+      sending.prompt.clear();
+      sending.rewind.clear();
       if (closed) return;
       setPrompt(null);
       setAsk(null);
@@ -308,6 +330,8 @@ export function useLiveGame() {
       s.onmessage = (e) => {
         heard = Date.now();
         const m = JSON.parse(e.data as string);
+        sending.prompt.heard(m.t);
+        sending.rewind.heard(m.t);
         switch (m.t) {
           case "hello":
             // `game`: we're back in a running game; its state, prompt and questions follow.
@@ -451,6 +475,12 @@ export function useLiveGame() {
     error,
     notice,
     shown,
+    /** The prompt's button the server is taking a while to answer, if any: it spins and the others wait. */
+    sent,
+    /** The same for the rewind panel. */
+    rewindSent,
+    /** The server is still dealing with the prompt button you pressed: another press does nothing. */
+    busy: () => sending.prompt.busy,
     /** Closes the oldest revealed-cards window. */
     dismissShown: () => setShown((q) => q.slice(1)),
     autoPass,
@@ -485,8 +515,8 @@ export function useLiveGame() {
       setStatus("starting");
       send({ t: "table", key, deck });
     },
-    ok: () => send({ t: "ok" }),
-    cancel: () => send({ t: "cancel" }),
+    ok: () => press(sending.prompt, "ok", { t: "ok" }),
+    cancel: () => press(sending.prompt, "cancel", { t: "cancel" }),
     /** Free play: draw, mill or exile the top `n` cards of your library, reveal its top card to `to`, or shuffle it. */
     library: (action: LibraryAction, n = 1, to?: string[]) => send({ t: "library", action, n, to: to?.map(Number) }),
     /** Scry or surveil by hand: `top` (top first) stays, `away` goes to the bottom / graveyard. */
@@ -508,7 +538,7 @@ export function useLiveGame() {
       send({ t: "endSearch", owner: Number(owner) });
     },
     /** Free play: pay the mana cost you're paying now with nothing. */
-    payFree: () => send({ t: "payFree" }),
+    payFree: () => press(sending.prompt, "payFree", { t: "payFree" }),
     /** The ways these cards can be tapped for mana now. */
     manaOptions(ids: number[]): Promise<ManaOptions> {
       return new Promise((resolve) => {
@@ -526,8 +556,8 @@ export function useLiveGame() {
     /** Tap cards for mana, each as picked (its mana goes to your pool). */
     tapForMana: (picks: { card: number; source: number; ability: number; choice: string }[]) => send({ t: "tapForMana", picks }),
     /** While paying: use floating mana of one color ("W"…"C"), or "all" it can. */
-    payPool: (color: string) => send({ t: "payPool", color }),
-    clickCard: (id: number) => send({ t: "card", id }),
+    payPool: (color: string) => press(sending.prompt, `payPool:${color}`, { t: "payPool", color }),
+    clickCard: (id: number): void => void send({ t: "card", id }),
     /** What this card can do right now (for its right-click menu). */
     actions(id: number): Promise<CardActions> {
       return new Promise((resolve) => {
@@ -575,16 +605,21 @@ export function useLiveGame() {
     clickPlayer: (id: string) => send({ t: "player", id: Number(id) }),
     concede: () => send({ t: "concede" }),
     /** Ask to rewind to a point of `view.rewind.options` (everyone else in the game has to agree). */
-    rewindTo: (point: number, kind: "timeline" | "attackers" | "blockers" = "timeline") => send({ t: "rewind", action: "ask", point, kind }),
+    rewindTo: (point: number, kind: "timeline" | "attackers" | "blockers" = "timeline") => press(sending.rewind, `ask:${kind}:${point}`, { t: "rewind", action: "ask", point, kind }, true),
     /** Put these creatures of yours in or out of this combat's attack (or blocks): a rewind to redeclare, with the rest as declared. */
-    rewindChange: (cards: number[]) => send({ t: "rewind", action: "change", cards }),
+    rewindChange: (cards: number[]) => press(sending.rewind, "change", { t: "rewind", action: "change", cards }, true),
     /** Answer someone else's rewind request. */
-    rewindVote: (yes: boolean) => send({ t: "rewind", action: yes ? "yes" : "no" }),
+    rewindVote: (yes: boolean) => press(sending.rewind, yes ? "yes" : "no", { t: "rewind", action: yes ? "yes" : "no" }, true),
     /** Take back your own rewind request. */
-    rewindCancel: () => send({ t: "rewind", action: "cancel" }),
+    rewindCancel: () => press(sending.rewind, "cancel", { t: "rewind", action: "cancel" }, true),
     answer(id: number, choice: number[] | null, text?: string) {
+      // Not sent (no connection): keep the question up, to answer again.
+      if (!send({ t: "answer", id, choice: choice ?? [], text })) {
+        setNotice((n) => ({ message: "Not connected to the game server. Try that again in a moment.", n: (n?.n ?? 0) + 1 }));
+        return;
+      }
       setAsk(null);
-      send({ t: "answer", id, choice: choice ?? [], text });
+      sending.prompt.begin("answer", true);
     },
     /** Where you stop, per player id: the steps on that player's turn where you want priority. */
     setStops(stops: Record<string, StepId[]>) {

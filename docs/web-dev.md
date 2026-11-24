@@ -90,6 +90,21 @@ The deck editor, its search results and the game start screen mark cards that wo
 A few names are spelled differently by Forge and Scryfall ("All Good Things . . ." and "All Good
 Things..."). Matching ignores those differences, and the game start sends Forge's spelling.
 
+### Loading, empty and failed
+
+Anything a player waits on says so, and something on its way never looks like something that isn't
+coming. What's loading moves; what has stopped stands still and says why, with a way to try again.
+Use the shared pieces (`web/src/loading.css`) rather than plain "Loading…" text:
+
+- A card's picture: `CardImg` (`web/src/components/CardImg.tsx`), or `CardWait` / `CardNone` while
+  its data is looked up or when there's none. Grids that are loading: `CardSkeletons`, `DeckSkeletons`.
+- A page: `Loading`. One line: `Waiting`, or `ScryfallWaiting` when it's Scryfall (it says when
+  Scryfall is slow, and counts down a 429's pause). A button that's working: `BusyLabel`. All in
+  `web/src/components/Spinner.tsx`.
+- A game button that asks the server for something: `PressButton`. `web/src/game/sending.ts` ignores
+  further presses until the server answers, shows the spinner after 0.3 s, and lets the player press
+  again after 10 s without an answer.
+
 ## Opening the dev client from another machine (Tailscale)
 
 Both servers listen on loopback only. To reach the client from another device on your tailnet,

@@ -2,6 +2,7 @@
 // other people are playing they all have to agree, and a request from someone else shows here
 // with Yes / No.
 import { useState } from "react";
+import { PressButton } from "./PressButton";
 import type { LiveGame } from "./useLiveGame";
 import type { RewindLevel, RewindPoint, RewindView } from "./view";
 
@@ -34,12 +35,12 @@ export function RewindPanel({ game, rewind }: { game: LiveGame; rewind: RewindVi
         </p>
         {p.needsMe && (
           <div className="ar-actions">
-            <button className="ar-btn primary" onClick={() => game.rewindVote(true)}>Yes, rewind</button>
-            <button className="ar-btn" onClick={() => game.rewindVote(false)}>No</button>
+            <PressButton what="yes" sent={game.rewindSent} className="ar-btn primary" onClick={() => game.rewindVote(true)}>Yes, rewind</PressButton>
+            <PressButton what="no" sent={game.rewindSent} className="ar-btn" onClick={() => game.rewindVote(false)}>No</PressButton>
           </div>
         )}
         {p.mine && !p.approved && (
-          <button className="ar-skip" onClick={game.rewindCancel}>Take it back</button>
+          <PressButton what="cancel" sent={game.rewindSent} className="ar-skip" onClick={game.rewindCancel}>Take it back</PressButton>
         )}
       </section>
     );
@@ -56,18 +57,20 @@ export function RewindPanel({ game, rewind }: { game: LiveGame; rewind: RewindVi
         <h3>Rewind</h3>
         <span className="ar-sub">{REWIND_LEVELS[rewind.level]?.label.toLowerCase()}</span>
       </header>
-      <button className="ar-skip" disabled={!undo} title={undo?.label ?? "Nothing of yours to take back this turn (or it showed you something new)"} onClick={() => undo && ask(undo)}>
+      <PressButton what={undo ? `ask:${undo.kind}:${undo.point}` : ""} sent={game.rewindSent} className="ar-skip" disabled={!undo} title={undo?.label ?? "Nothing of yours to take back this turn (or it showed you something new)"} onClick={() => undo && ask(undo)}>
         Undo last action
-      </button>
+      </PressButton>
       {combat.map((o) => (
-        <button
+        <PressButton
           key={o.kind}
+          what={`ask:${o.kind}:${o.point}`}
+          sent={game.rewindSent}
           className="ar-skip"
           title={o.kind === "attackers" ? "Back to just before attackers were declared, to declare them again" : "Back to just before blockers were declared, to declare them again (add or change blockers)"}
           onClick={() => ask(o)}
         >
           {o.label}
-        </button>
+        </PressButton>
       ))}
       {rewind.level >= 2 && (
         <button className="ar-skip" disabled={options.length < 2} aria-expanded={open} onClick={() => setOpen(!open)}>

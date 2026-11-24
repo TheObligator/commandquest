@@ -13,6 +13,7 @@ import { useGameChecks } from "../useGameDecks";
 import { toast } from "../dom";
 import { AbilityPanel, AbilityProvider, abilityItems, type AbilityControls } from "../game/AbilityMenu";
 import "../game/abilityMarks.css";
+import { BusyLabel, Spinner, Waiting } from "../components/Spinner";
 import { useCardData } from "../game/cards";
 import { LiveRail } from "../game/LiveRail";
 import { REWIND_LEVELS } from "../game/RewindPanel";
@@ -225,7 +226,8 @@ export function LiveGame() {
       </div>
 
       {game.status === "reconnecting" && (
-        <div className="live-banner">
+        <div className="live-banner lost" role="status">
+          <Spinner />
           <strong>Connection lost.</strong>
           <span className="muted">Reconnecting… Your game is kept for 5 minutes.</span>
         </div>
@@ -261,7 +263,7 @@ export function LiveGame() {
       ) : (
         <div className="card live-start">
           {decks === undefined || (decks.length > 0 && !ready) ? (
-            <p className="muted">Checking your decks…</p>
+            <p><Waiting text="Checking your decks…" slow="Still checking your decks… Scryfall is slow right now." /></p>
           ) : !decks.length ? (
             <p>You have no decks yet. <a className="link" href="#/decks">Build or import one first</a></p>
           ) : (
@@ -342,7 +344,9 @@ export function LiveGame() {
                 </p>
               )}
               <button className="btn" onClick={start} disabled={!deck || game.status !== "ready" || deckProblems.length > 0 || (needsFreePlay.length > 0 && !freePlay)}>
-                {game.status === "starting" ? "Starting…" : game.status === "ready" ? "Start game" : STATUS[game.status]}
+                {deckId && deck === undefined ? <><Spinner /> Loading your deck…</>
+                  : game.status === "ready" || game.status === "starting" ? <BusyLabel busy={game.status === "starting"} working="Starting…">Start game</BusyLabel>
+                  : <>{CONNECTING.has(game.status) && <Spinner />} {STATUS[game.status]}</>}
               </button>
             </>
           )}
@@ -361,22 +365,35 @@ function TableJoin({ game, table, tableId, hasDeck }: {
 }) {
   const back = <a className="btn" href={`#/tables/${tableId}`}>Back to the table</a>;
   let body: React.ReactNode;
-  if (table === undefined) body = <p className="muted">Loading the table…</p>;
+  if (table === undefined) body = <p><Waiting text="Loading the table…" /></p>;
   else if (table === null) body = <><p>You're not at this table any more.</p><p><a className="btn" href="#/play">Back to Play</a></p></>;
   else if (game.tableGone) body = <><p>{game.tableGone}</p><p>{back}</p></>;
   else if (table.status !== "playing") body = <><p>This table's game isn't on: it hasn't started, or it's over.</p><p>{back}</p></>;
-  else if (game.tableWaiting) {
+  else {
     const w = game.tableWaiting;
+    const connected = !CONNECTING.has(game.status);
+    // What joining takes, in order; the first that isn't done yet is the one being waited on.
+    const steps: { label: string; done: boolean; doing: string }[] = [
+      { label: "Connected to the game server", done: connected, doing: game.status === "offline" ? "Can't reach the game server. Retrying…" : game.status === "signing-in" ? "Signing in to the game server…" : "Connecting to the game server…" },
+      { label: "Your deck is loaded", done: hasDeck, doing: "Loading your deck…" },
+      { label: "Joined the game", done: !!w, doing: "Joining the game…" },
+      { label: "", done: false, doing: w ? `Waiting for ${w.waitingFor.join(", ") || "the others"} (${w.joined} of ${w.total} here)` : "Waiting for everyone to join" },
+    ];
+    const now = steps.findIndex((s) => !s.done);
     body = (
       <>
-        <p>
-          Waiting for {w.waitingFor.join(", ") || "the others"} ({w.joined} of {w.total} here).
-        </p>
-        <p className="muted small">If they haven't joined within {w.seconds} seconds, the game starts without them.</p>
+        <ol className="join-steps" role="status">
+          {steps.map((s, i) => (
+            <li key={i} className={s.done ? "done" : i === now ? "now" : "later"}>
+              {s.done ? <span className="join-tick" aria-hidden="true">✓</span> : i === now ? <Spinner /> : <span className="join-later" aria-hidden="true" />}
+              <span>{s.done ? s.label : s.doing}</span>
+            </li>
+          ))}
+        </ol>
+        {w && <p className="muted small">If they haven't joined within {w.seconds} seconds, the game starts without them.</p>}
       </>
     );
-  } else if (!hasDeck) body = <><p className="muted">Loading your deck…</p></>;
-  else body = <p className="muted">{game.status === "offline" ? "Can't reach the game server. Retrying…" : "Joining the game…"}</p>;
+  }
   return (
     <div className="card live-start">
       <h2>{table?.name ?? "Table"}</h2>
@@ -392,6 +409,9 @@ function gameOverText(log: string[], me: string): string {
   if (me && line.startsWith(`${me} has won`)) return "You won" + line.slice(`${me} has won`.length);
   return line.replace(/ has won/, " won");
 }
+
+/** Not connected to the game server yet (or any more), but trying. */
+const CONNECTING = new Set<ReturnType<typeof useLiveGame>["status"]>(["connecting", "signing-in", "reconnecting", "offline"]);
 
 const STATUS: Record<ReturnType<typeof useLiveGame>["status"], string> = {
   connecting: "Connecting to the game server…",
@@ -704,6 +724,11 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
     const list = game.libraryList;
     if (arrange && !arrange.cards && list && list.top === arrange.n) setArrange({ ...arrange, cards: list.cards.slice(0, arrange.n) });
   }, [game.libraryList, arrange]);
+  // Refused (free play is off, say): the cards aren't coming, so stop waiting for them.
+  useEffect(() => {
+    if (arrange && !arrange.cards) setArrange(null);
+    if (peek && game.libraryList?.top !== peek.top) setPeek(null);
+  }, [game.notice]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
   /** Until end of turn ▸ for a permanent: groups of effects, creature ones only on creatures. */
@@ -1023,6 +1048,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
   });
   const priorityPrompt = !!game.prompt && !game.ask && isPriorityPrompt(game.prompt);
   const ok = () => {
+    if (game.busy()) return; // the server is still on the last press
     // Only OK at "you have priority" passes; OK while casting (Auto-pay, skipping convoke, done
     // choosing targets) is part of the cast, so keep watching for it to land.
     if (priorityPrompt) {
@@ -1033,6 +1059,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
     game.ok();
   };
   const cancel = () => {
+    if (game.busy()) return;
     if (priorityPrompt && game.prompt?.cancel.label === "End Turn" && !landCheck("skip")) return;
     castFrom.current = null;
     castDone.current = false;
@@ -1081,7 +1108,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
         onClose={game.dismissShown}
       />
     )}
-    {game.prompt?.pay && !game.ask && <PayPrompt prompt={game.prompt} pool={view.players[0].mana} game={{ ok, cancel, payFree: game.payFree, payPool: game.payPool }} />}
+    {game.prompt?.pay && !game.ask && <PayPrompt prompt={game.prompt} pool={view.players[0].mana} game={{ ok, cancel, payFree: game.payFree, payPool: game.payPool, sent: game.sent }} />}
     {pickKey && pickHidden !== pickKey && askCards && game.ask && (
       <AskPick key={pickKey} ask={game.ask} cards={askCards} piles={askPiles} onAnswer={(i) => game.answer(game.ask!.id, i)} onHide={() => setPickHidden(pickKey)} />
     )}
@@ -1108,6 +1135,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
         onPick={game.clickCard}
         onOk={ok}
         onCancel={cancel}
+        sent={game.sent}
         onHide={() => setPickHidden(pickKey)}
       />
     )}
@@ -1118,6 +1146,9 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
         onClose={() => setLibDialog(null)}
         onApply={(action, n) => (action === "look" ? openPeek(n) : action === "scry" || action === "surveil" ? startArrange(action, n) : game.library(action, n))}
       />
+    )}
+    {arrange && !arrange.cards && (
+      <div className="game-wait"><Waiting text="Getting the top cards of your library…" slow="Still getting the cards… the game server is slow right now." className="" /></div>
     )}
     {arrange?.cards && (
       <ScryDialog
@@ -1167,6 +1198,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
       banner={
         board && game.ask ? (
           <TargetBar
+            sent={game.sent}
             message={game.ask.title ? `${game.ask.title}\n${game.ask.message}` : game.ask.message}
             status={`Click on the table · ${boardPicked.length} of ${game.ask.min === game.ask.max ? game.ask.min : game.ask.min ? `${game.ask.min}–${game.ask.max}` : `up to ${game.ask.max}`} chosen`}
             ok={{
@@ -1176,7 +1208,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
             }}
           />
         ) : targeting && game.prompt ? (
-          <TargetBar message={game.prompt.message} ok={{ ...game.prompt.ok, onClick: ok }} cancel={{ ...game.prompt.cancel, onClick: cancel }} />
+          <TargetBar sent={game.sent} message={game.prompt.message} ok={{ ...game.prompt.ok, onClick: ok }} cancel={{ ...game.prompt.cancel, onClick: cancel }} />
         ) : null
       }
       onCastCommander={click}
@@ -1190,7 +1222,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
       gameMenu={gameMenu}
       peek={searchOf && game.searchList?.owner === searchOf
         ? { title: `${searchPlayer?.name ?? "Their"}'s library (they let you search it; right-click a card to exile it)`, cards: game.searchList.cards, onClose: () => game.endSearch(searchOf) }
-        : peek ? { title: peek.top > 0 ? `Top ${peek.top === 1 ? "card" : `${peek.top} cards`} of your library` : "Your library (only you see this)", cards: peekCards, onClose: closePeek } : null}
+        : peek ? { title: peek.top > 0 ? `Top ${peek.top === 1 ? "card" : `${peek.top} cards`} of your library` : "Your library (only you see this)", cards: peekCards, loading: game.libraryList?.top !== peek.top, onClose: closePeek } : null}
       stackItemMenu={(s) => [
         {
           items: s.yieldKey
