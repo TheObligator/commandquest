@@ -364,7 +364,7 @@ public final class BrowserSeat implements IRemote {
         try {
             Game g = game.get();
             Player p = g == null || me == null ? null : g.getPlayer(me.getId());
-            if (p == null || g.isGameOver() || !g.getPhaseHandler().isPlayerTurn(p)) {
+            if (p == null || GameSession.isOver(g) || !g.getPhaseHandler().isPlayerTurn(p)) {
                 return false;
             }
             for (Card c : p.getCardsIn(ZoneType.Hand)) {
@@ -387,7 +387,7 @@ public final class BrowserSeat implements IRemote {
         try {
             Game g = game.get();
             Player p = g == null || me == null ? null : g.getPlayer(me.getId());
-            if (p == null || g.getPhaseHandler().getPriorityPlayer() != p || g.isGameOver()) {
+            if (p == null || g.getPhaseHandler().getPriorityPlayer() != p || GameSession.isOver(g)) {
                 return ids;
             }
             Set<Integer> seen = new HashSet<>();

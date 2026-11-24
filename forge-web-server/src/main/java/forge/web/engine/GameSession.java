@@ -4,6 +4,7 @@ import forge.deck.Deck;
 import forge.game.Game;
 import forge.game.GameEndReason;
 import forge.game.GameRules;
+import forge.game.GameStage;
 import forge.game.GameType;
 import forge.game.GameView;
 import forge.game.event.GameEvent;
@@ -154,7 +155,7 @@ public final class GameSession {
             @com.google.common.eventbus.AllowConcurrentEvents
             public void on(GameEvent ev) {
                 endIfNoHumansLeft(g);
-                if (g.isGameOver()) {
+                if (isOver(g)) {
                     fireOver();
                 }
             }
@@ -178,12 +179,22 @@ public final class GameSession {
     private volatile boolean ending;
 
     /**
+     * Has this game ended? Forge's own {@code isGameOver()} takes the game's lock, which Forge holds
+     * while it ends a game and fires the events for that. Anything that runs because of an event
+     * (sending a seat the state, for one) holds that event's lock, so asking Forge there can deadlock
+     * with a player conceding on the forge-ui thread, and every other game on the server uses that thread.
+     */
+    static boolean isOver(Game g) {
+        return g.getAge() == GameStage.GameOver;
+    }
+
+    /**
      * Once every human seat has lost (conceded, or lost in a game still going on), the game ends,
      * as Forge's own client does: AI playing on alone would only keep a game slot busy, and the
      * player waits for a game that is over for them.
      */
     private void endIfNoHumansLeft(Game g) {
-        if (ending || g.isGameOver()) {
+        if (ending || isOver(g)) {
             return;
         }
         boolean anyHuman = false;

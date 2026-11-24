@@ -294,7 +294,7 @@ public final class Rewind {
             execute(go);
             return;
         }
-        if (game.isGameOver()) {
+        if (GameSession.isOver(game)) {
             return;
         }
         PhaseHandler ph = game.getPhaseHandler();
@@ -697,7 +697,7 @@ public final class Rewind {
         if (level == 0) {
             return "Rewinding is off in this game.";
         }
-        if (by == null || by.hasLost() || game.isGameOver()) {
+        if (by == null || by.hasLost() || GameSession.isOver(game)) {
             return "You can't rewind now.";
         }
         if (pending != null) {
@@ -879,7 +879,7 @@ public final class Rewind {
     synchronized List<Option> options(Player me) {
         List<Option> out = new ArrayList<>();
         int n = points.size();
-        if (level == 0 || n == 0 || game.isGameOver()) {
+        if (level == 0 || n == 0 || GameSession.isOver(game)) {
             return out;
         }
         PhaseHandler ph = game.getPhaseHandler();

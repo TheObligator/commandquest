@@ -174,9 +174,14 @@ public class TableGameTest {
                     Assert.assertTrue(p.path("hand").isNull() || p.path("hand").isEmpty(), "Ana can't see " + p.path("name") + "'s hand: " + p.path("hand"));
                 }
             }
-            Assert.assertEquals(json.readTree(HttpClient.newHttpClient().send(
-                    java.net.http.HttpRequest.newBuilder(URI.create("http://localhost:" + app.port() + "/health")).build(),
-                    java.net.http.HttpResponse.BodyHandlers.ofString()).body()).path("games").asInt(), 1, "one game, two players");
+            // The first state can arrive a moment before the server has noted that the game is on.
+            int games = 0;
+            for (long until = System.currentTimeMillis() + 10_000; games == 0 && System.currentTimeMillis() < until; Thread.sleep(50)) {
+                games = json.readTree(HttpClient.newHttpClient().send(
+                        java.net.http.HttpRequest.newBuilder(URI.create("http://localhost:" + app.port() + "/health")).build(),
+                        java.net.http.HttpResponse.BodyHandlers.ofString()).body()).path("games").asInt();
+            }
+            Assert.assertEquals(games, 1, "one game, two players");
 
             // Both keep their hands and play on until Bob has priority; then Bob closes his tab for good.
             // Ana keeps answering whatever she's asked throughout; `seen` is what she was sent.
@@ -212,7 +217,8 @@ public class TableGameTest {
                 }
                 return false;
             });
-            Assert.assertNotNull(withoutBob, "Bob conceded when he didn't come back: " + seen.subList(Math.max(before - 3, seen.size() - 12), seen.size()).stream()
+            List<JsonNode> sent = List.copyOf(seen); // more keeps arriving while the message below is put together
+            Assert.assertNotNull(withoutBob, "Bob conceded when he didn't come back: " + sent.subList(Math.max(0, Math.max(before - 3, sent.size() - 12)), sent.size()).stream()
                     .map(m -> m.path("t").asText() + (m.path("t").asText().equals("state") ? " T" + m.path("view").path("turn") + " " + m.path("view").path("step")
                             + " active=" + m.path("view").path("active") + " prio=" + m.path("view").path("priority") + " " + m.path("view").path("players").findValuesAsText("name")
                             + " log=" + m.path("view").path("log") : " " + m.path("message").asText() + " " + m.path("ok"))).toList());
