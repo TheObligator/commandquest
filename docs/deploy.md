@@ -98,9 +98,17 @@ themselves get a new list when they're next deployed. GitHub often starts schedu
 1. merges `upstream/master` into `web` (as one merge commit),
 2. regenerates `web/public/precons.json` and `card-support.json` into that commit,
 3. runs the server's and the site's tests and the staging build,
-4. pushes `master` (the mirror) and `web` together, never forced,
-5. starts the Web workflow, which deploys staging. The Mac's auto-deploy then picks up the new game
-   server once nobody's playing.
+4. makes that merge again on a clean machine that never runs Forge's code, checks it's exactly what
+   was tested, and pushes `master` (the mirror) and `web` together, never forced,
+5. which starts the Web workflow, which deploys staging. The Mac's auto-deploy then picks up the new
+   game server once nobody's playing.
+
+The push uses a deploy key with write access ("Forge sync (Actions)" under Settings → Deploy keys; its
+private half is the Actions secret `FORGE_SYNC_DEPLOY_KEY`, kept nowhere else). GitHub never lets a
+workflow's own token push workflow files, and Forge changes its own now and then; such a run has a
+warning listing the files, to look over. To replace the key, or turn it off if it ever leaks: delete it
+under Deploy keys, then make a new pair (`ssh-keygen -t ed25519 -N ""`), add the `.pub` there with write
+access and put the private half in the secret.
 
 Nothing is pushed if the merge conflicts or a test fails: the run fails, and GitHub emails a failed
 scheduled run to whoever last changed its schedule. Then merge by hand: `git fetch upstream`,

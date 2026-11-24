@@ -1,8 +1,13 @@
 # Nightly: merge upstream Forge into `web`, so staging gets Forge's card fixes and new cards.
 #
 #   fetch Card-Forge/forge master -> merge into web -> regenerate precons.json and card-support.json
-#   -> server and site tests -> push master (the mirror) and web -> start the Web workflow (deploys
-#   staging; the Mac's auto-deploy picks up the game server when no game is running)
+#   -> server and site tests -> push master (the mirror) and web, which starts the Web workflow
+#   (deploys staging; the Mac's auto-deploy picks up the game server when no game is running)
+#
+# The push uses a deploy key (secret FORGE_SYNC_DEPLOY_KEY), because GitHub never lets a workflow's
+# own token push changes to workflow files, and Forge changes its own now and then. Unlike that
+# token the key doesn't expire, so the job that has it never runs Forge's code: it makes the merge
+# again on a clean machine, checks that it's exactly what was tested, and pushes that.
 #
 # Nothing is pushed unless every test passes. A conflict or a failing test fails the run, and GitHub
 # emails a failed scheduled run to whoever last changed its schedule. `live` is never touched. See
@@ -15,8 +20,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write # push master and web
-  actions: write # start the Web workflow: a push made with GITHUB_TOKEN doesn't trigger it
+  contents: read
 
 concurrency:
   group: forge-sync
@@ -29,8 +33,13 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    outputs:
+      commits: ${{ steps.merge.outputs.commits }}
+      web: ${{ steps.merge.outputs.web }}
+      upstream: ${{ steps.merge.outputs.upstream }}
+      tree: ${{ steps.tested.outputs.tree }}
     steps:
-      # No stored credentials: Forge's build and tests run below, and only the push step gets the token.
+      # No stored credentials: Forge's build and tests run below.
       - uses: actions/checkout@v5
         with:
           ref: web
@@ -46,7 +55,7 @@ jobs:
           git remote add upstream https://github.com/Card-Forge/forge.git
           git fetch --no-tags upstream master
           n=$(git rev-list --count HEAD..upstream/master)
-          echo "commits=$n" >> "$GITHUB_OUTPUT"
+          { echo "commits=$n"; echo "web=$(git rev-parse HEAD)"; echo "upstream=$(git rev-parse upstream/master)"; } >> "$GITHUB_OUTPUT"
           if [ "$n" = 0 ]; then
             echo "Already up to date with Forge."
             exit 0
@@ -89,24 +98,18 @@ jobs:
           npx tsc -p convex --noEmit
           npm run build:staging
 
-      # --atomic: master and web move together or not at all. If web moved during the run, the push
-      # is refused (never forced) and tomorrow's run merges again.
-      - name: Push master and web
+      - name: Note what was tested
+        id: tested
         if: steps.merge.outputs.commits != '0'
-        env:
-          TOKEN: ${{ github.token }}
-        run: |
-          auth=$(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)
-          git -c core.hooksPath=/dev/null -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
-            push --atomic "https://github.com/${{ github.repository }}.git" \
-            upstream/master:refs/heads/master HEAD:refs/heads/web
-          git log -1 --format='Pushed %h: %s'
-
-      - name: Deploy staging
+        run: echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
         if: steps.merge.outputs.commits != '0'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh workflow run web.yml --repo "${{ github.repository }}" --ref web
+        with:
+          name: regenerated
+          path: |
+            web/public/precons.json
+            web/public/card-support.json
+          retention-days: 3
 
       # Never fails the run: closed Forge issues show as a warning and in the run's summary.
       - name: Check known-broken cards
@@ -121,3 +124,70 @@ jobs:
           cat broken.txt
           echo "::warning::Some known-broken cards' Forge issues have closed: recheck them (npm run broken:check)"
           { echo "### Known-broken cards to recheck"; echo; echo '```'; cat broken.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+  push:
+    needs: sync
+    if: needs.sync.outputs.commits != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.sync.outputs.web }}
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: regenerated
+          path: ${{ runner.temp }}/regenerated
+
+      - name: Make the tested merge again
+        env:
+          UPSTREAM: ${{ needs.sync.outputs.upstream }}
+          COMMITS: ${{ needs.sync.outputs.commits }}
+          TREE: ${{ needs.sync.outputs.tree }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/Card-Forge/forge.git
+          git fetch --no-tags upstream master
+          git merge-base --is-ancestor "$UPSTREAM" upstream/master
+          git merge --no-edit -m "Merge upstream Forge: $COMMITS commits" "$UPSTREAM"
+          cp "$RUNNER_TEMP"/regenerated/precons.json "$RUNNER_TEMP"/regenerated/card-support.json web/public/
+          if ! git diff --quiet -- web/public; then
+            git add web/public
+            git commit --amend --no-edit
+          fi
+          if [ "$(git rev-parse 'HEAD^{tree}')" != "$TREE" ]; then
+            git diff --stat "$TREE" HEAD || true
+            echo "::error::The merge isn't the one that was tested"
+            exit 1
+          fi
+          # Forge's own workflows can run here too, so say when they change.
+          changed=$(git diff --name-only HEAD^1 HEAD -- .github)
+          if [ -n "$changed" ]; then
+            echo "::warning::Forge changed files under .github, look them over: $(echo $changed)"
+          fi
+
+      # --atomic: master and web move together or not at all. If web moved during the run, the push
+      # is refused (never forced) and tomorrow's run merges again.
+      - name: Push master and web
+        env:
+          KEY: ${{ secrets.FORGE_SYNC_DEPLOY_KEY }}
+          UPSTREAM: ${{ needs.sync.outputs.upstream }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::The FORGE_SYNC_DEPLOY_KEY secret is missing (docs/deploy.md)"
+            exit 1
+          fi
+          umask 077
+          d=$(mktemp -d)
+          trap 'rm -rf "$d"' EXIT
+          printf '%s\n' "$KEY" > "$d/key"
+          # GitHub's published host key (https://api.github.com/meta).
+          echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > "$d/known_hosts"
+          GIT_SSH_COMMAND="ssh -F /dev/null -i $d/key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$d/known_hosts" \
+            git -c core.hooksPath=/dev/null push --atomic "git@github.com:${{ github.repository }}.git" \
+            "$UPSTREAM:refs/heads/master" HEAD:refs/heads/web
+          git log -1 --format='Pushed %h: %s'
