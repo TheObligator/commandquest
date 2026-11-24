@@ -4,6 +4,7 @@
 // and (live games) its auto-yield settings. Lines run from each item to what it targets.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { MenuSection } from "../components/CardMenu";
+import { CardImg } from "../components/CardImg";
 import { cached, imageUrl } from "../scryfall";
 import { tokenImage, usePreview } from "./cards";
 import { AbilityMarks } from "./AbilityMenu";
@@ -156,9 +157,9 @@ export function StackWindow(props: {
                 <span className="stk-num" aria-label={`Stack position ${n}`}>{n}</span>
                 <div className="stk-name">{s.name}</div>
                 {whole ? (
-                  <img className="stk-card" src={whole} alt={s.name} draggable={false} />
+                  <CardImg className="stk-card" src={whole} name={s.name} alt={s.name} draggable={false} />
                 ) : src ? (
-                  <img className="stk-art" src={src} alt="" draggable={false} />
+                  <CardImg tiny className="stk-art" src={src} name={s.name} alt="" draggable={false} />
                 ) : (
                   <div className="stk-art none" />
                 )}
@@ -237,9 +238,9 @@ function StackDetail(props: { item: StackItemView; number: number; x: number; y:
           <button className="dialog-close" aria-label="Close" onClick={onClose}>×</button>
         </header>
         {whole ? (
-          <img className="stk-card" src={whole} alt={item.name} draggable={false} />
+          <CardImg className="stk-card" src={whole} name={item.name} alt={item.name} draggable={false} />
         ) : (
-          props.src && <img className="stk-art" src={props.src} alt="" draggable={false} />
+          props.src && <CardImg tiny className="stk-art" src={props.src} name={item.name} alt="" draggable={false} />
         )}
         <div className="stk-kind">{item.kind}</div>
         <p className="stk-full">{text.text || item.name}</p>

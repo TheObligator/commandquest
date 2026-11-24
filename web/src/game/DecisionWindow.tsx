@@ -10,6 +10,7 @@
 // - ArrangeWindow: each card to the top or the bottom of your library.
 // - DistributeWindow: divide an amount (damage, counters) among cards and players.
 import { useEffect, useMemo, useRef, useState } from "react";
+import { CardImg } from "../components/CardImg";
 import { cardImage, CardFace, previewFor, usePreview } from "./cards";
 import { useHotkeys } from "./useHotkeys";
 import type { AskOption, LiveAsk } from "./useLiveGame";
@@ -75,7 +76,7 @@ function Frame(props: {
       <button className="dialog-close" aria-label="Hide (look at the table)" title="Hide: look at the table" onClick={props.onHide}>×</button>
       <div className="dw-head">
         {src && srcImg && (
-          <img className="dw-src" src={srcImg} alt="" onMouseEnter={() => setPreview({ card: src })} onMouseLeave={() => setPreview(null)} />
+          <CardImg tiny className="dw-src" name={src.name ?? ""} src={srcImg} alt="" onMouseEnter={() => setPreview({ card: src })} onMouseLeave={() => setPreview(null)} />
         )}
         <div>
           <h3>{first}</h3>
@@ -96,7 +97,7 @@ function Frame(props: {
 /** An option's picture: its card's art, a player's colored initials, or a mana symbol's color. */
 function OptionArt({ o, colorOf }: { o: AskOption; colorOf: (id: string) => string }) {
   const img = o.card && !o.card.hidden ? cardImage(o.card.name, "small") : undefined;
-  if (img) return <img className="dw-art" src={img} alt="" />;
+  if (img) return <CardImg tiny className="dw-art" name={o.label} src={img} alt="" />;
   if (o.playerId) return <span className="dw-ava" style={{ background: colorOf(o.playerId) }}>{initials(o.label)}</span>;
   if (o.mana) return <span className={`dw-pip mana-${o.mana}`} aria-hidden />;
   return null;

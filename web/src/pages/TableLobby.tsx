@@ -8,7 +8,7 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { errorMessage } from "../app/errors";
 import { navigate } from "../app/router";
-import { Loading } from "../components/Spinner";
+import { Loading, Waiting } from "../components/Spinner";
 import { toast } from "../dom";
 import { REWIND_LEVELS } from "../game/RewindPanel";
 import { useTablePresence } from "../game/useTablePresence";
@@ -33,7 +33,7 @@ export function TableLobby({ id }: { id: string }) {
     lastStatus.current = table.status;
   }, [table]);
 
-  if (table === undefined) return <Loading />;
+  if (table === undefined) return <Loading text="Loading the table…" />;
   if (table === null) {
     return (
       <div className="card live-start">
@@ -191,7 +191,7 @@ function Lobby({ table }: { table: TableView }) {
         <section className="card lobby-me">
           <h2>Your deck</h2>
           {decks === undefined || (decks.length > 0 && !playable) ? (
-            <p className="muted">Checking your decks…</p>
+            <p><Waiting text="Checking your decks…" slow="Still checking your decks… Scryfall is slow right now." /></p>
           ) : !decks.length ? (
             <p>You have no decks yet. <a className="link" href="#/decks">Build or import one</a>, then come back.</p>
           ) : (

@@ -8,6 +8,8 @@ import type { DeckCard } from "../../convex/model/deckRules";
 import { errorMessage } from "../app/errors";
 import { closeOnBackdrop } from "../carddetails";
 import { toast } from "../dom";
+import { CardImg, CardWait } from "./CardImg";
+import { CardSkeletons, ScryfallWaiting, Waiting } from "./Spinner";
 import * as scry from "../scryfall";
 import type { DeckToken } from "../tokens";
 import { useDeckTokens } from "../useDeckTokens";
@@ -22,7 +24,7 @@ export function DeckTokens({ deckId, cards }: { deckId?: string; cards: DeckCard
     return loading ? (
       <section className="board deck-tokens">
         <h2>Tokens</h2>
-        <p className="muted small">Finding the tokens this deck makes…</p>
+        <p className="small"><Waiting text="Finding the tokens this deck makes…" slow="Still finding the tokens this deck makes… Scryfall is slow right now." /></p>
       </section>
     ) : null;
   }
@@ -51,7 +53,7 @@ export function DeckTokens({ deckId, cards }: { deckId?: string; cards: DeckCard
           const img = sc && scry.imageUrl(sc, "normal");
           return (
             <button key={t.identity} className="token-pick" onClick={() => setPicking(t)} title={`Made by ${t.sources.map((s) => s.card).join(", ")}`}>
-              {img ? <img src={img} alt={t.name} loading="lazy" /> : <span className="token-pick-name">{t.name}</span>}
+              {img ? <CardImg src={img} name={t.name} alt={t.name} loading="lazy" /> : !sc && loading ? <CardWait name={t.name} /> : <span className="token-pick-name">{t.name}</span>}
               <span className="small">
                 {t.name} {ptOf(t)}
                 {t.chosenId && <span className="muted"> · your pick</span>}
@@ -104,7 +106,12 @@ function TokenPrintings({ token, onPick, onClose }: { token: DeckToken; onPick: 
       <div className="dialog-head">
         <h3>{token.name} token</h3>
       </div>
-      {error ? <p className="form-error">{error}</p> : !prints ? <p className="muted">Loading…</p> : (
+      {error ? <p className="form-error">{error}</p> : !prints ? (
+        <>
+          <p><ScryfallWaiting text="Finding its printings…" still="Still finding its printings." /></p>
+          <div className="results"><CardSkeletons n={8} /></div>
+        </>
+      ) : (
         <div className="results">
           {prints.map((p) => (
             <button
@@ -116,7 +123,7 @@ function TokenPrintings({ token, onPick, onClose }: { token: DeckToken; onPick: 
                 ref.current?.close();
               }}
             >
-              <img src={scry.imageUrl(p, "normal") ?? ""} alt={p.set_name} loading="lazy" />
+              <CardImg src={scry.imageUrl(p, "normal") ?? ""} name={p.set_name} alt={p.set_name} loading="lazy" />
               <span className="small muted">
                 {p.set.toUpperCase()} #{p.collector_number}
                 {p.id === token.defaultId && " · default"}

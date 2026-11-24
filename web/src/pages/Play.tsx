@@ -4,6 +4,7 @@ import { api } from "../../convex/_generated/api";
 import { parseCode } from "../../convex/model/tables";
 import { errorMessage } from "../app/errors";
 import { navigate } from "../app/router";
+import { BusyLabel, Spinner } from "../components/Spinner";
 import { toast } from "../dom";
 import { gameSocketUrl } from "../game/useLiveGame";
 
@@ -51,7 +52,7 @@ export function Play() {
     <>
       <div className="page-head">
         <h1>Play</h1>
-        <p className="muted">Game server: <span className="status" data-state={status}>{label}</span></p>
+        <p className="muted">Game server: <span className="status" data-state={status}>{status !== "open" && <Spinner />} {label}</span></p>
       </div>
       <p className="card table-preview-link">
         <strong>Set up your stops: </strong>try the game table's phase sidebar on a simulated game.{" "}
@@ -101,11 +102,11 @@ function CreateTable({ signedIn }: { signedIn: boolean }) {
           <a className="btn" href={mine.status === "playing" ? `#/game?table=${mine._id}` : `#/tables/${mine._id}`}>
             {mine.status === "playing" ? "Back to the game" : "Back to the table"}
           </a>
-          <button className="btn ghost" onClick={go} disabled={busy}>New table</button>
+          <button className="btn ghost" onClick={go} disabled={busy}><BusyLabel busy={busy} working="Opening…">New table</BusyLabel></button>
         </div>
       ) : (
         <button className="btn" onClick={go} disabled={!signedIn || busy} title={signedIn ? undefined : "Sign in first"}>
-          {signedIn ? "Create a table" : "Sign in first"}
+          {signedIn ? <BusyLabel busy={busy} working="Opening…">Create a table</BusyLabel> : "Sign in first"}
         </button>
       )}
     </div>

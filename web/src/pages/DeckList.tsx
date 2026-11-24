@@ -8,7 +8,7 @@ import { navigate, useRoute } from "../app/router";
 import { bracketName } from "../brackets";
 import { closeOnBackdrop } from "../carddetails";
 import { CardMenu, type MenuItem } from "../components/CardMenu";
-import { Loading } from "../components/Spinner";
+import { BusyLabel, CoverWait, DeckSkeletons } from "../components/Spinner";
 import { toast } from "../dom";
 import { artistOf, cachedById, cardsById } from "../scryfall";
 import { useGameChecks } from "../useGameDecks";
@@ -42,7 +42,8 @@ export function DeckList() {
   // Which decks can start a game: the table's deck picker only offers those, so the rest are marked here.
   const playDecks = useQuery(api.decks.forPlay);
   const checks = useGameChecks(playDecks);
-  const [, setArtLoaded] = useState(0);
+  /** The covers whose cards have been looked up (found or not). */
+  const [artLoaded, setArtLoaded] = useState("");
 
   // Cover art is Scryfall's art crop of the commander. Scryfall requires the artist credit
   // wherever an art crop is shown, so each cover carries an "Art by …" caption.
@@ -50,7 +51,7 @@ export function DeckList() {
   const coverKey = coverIds.join(",");
   useEffect(() => {
     if (!coverIds.length) return;
-    cardsById(coverIds).then(() => setArtLoaded((n) => n + 1)).catch(() => undefined);
+    cardsById(coverIds).catch(() => undefined).finally(() => setArtLoaded(coverKey));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coverKey]);
 
@@ -134,7 +135,7 @@ export function DeckList() {
         {actions}
       </div>
       {decks === undefined || folders === undefined ? (
-        <Loading />
+        <DeckSkeletons n={6} text="Loading your decks…" />
       ) : decks.length === 0 && folders.length === 0 ? (
         <div className="empty card">
           <h3>No decks yet</h3>
@@ -200,6 +201,7 @@ export function DeckList() {
                 onDragEnd={() => setDropTarget(null)}
               >
                 <div className="deck-cover" style={art ? { backgroundImage: `url("${art}")` } : undefined}>
+                  <CoverWait src={art || undefined} pending={!!d.coverScryfallId && !card && artLoaded !== coverKey} />
                   {art && <span className="art-credit">Art by {artistOf(card!) ?? "unknown"} · © Wizards of the Coast</span>}
                 </div>
                 <div className="deck-meta">
@@ -279,7 +281,7 @@ function FolderNameDialog({ id, initial, onDone }: { id?: Id<"deckFolders">; ini
         <p className="form-error">{error}</p>
         <div className="actions new-deck-actions">
           <button type="button" className="btn ghost" onClick={() => ref.current?.close()}>Cancel</button>
-          <button className="btn" disabled={busy || !name.trim()}>{id ? "Rename" : "Create folder"}</button>
+          <button className="btn" disabled={busy || !name.trim()}><BusyLabel busy={busy} working={id ? "Renaming…" : "Creating…"}>{id ? "Rename" : "Create folder"}</BusyLabel></button>
         </div>
       </form>
     </dialog>

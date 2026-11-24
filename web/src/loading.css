@@ -1,0 +1,122 @@
+/* Everything that says "this is loading" (src/components/Spinner.tsx, CardImg.tsx). What's on its
+   way moves; what has stopped, or isn't coming, stands still. */
+
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+/* ---- Spinners ---- */
+.spinner { width: 40px; height: 40px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+.spin { display: inline-block; flex: none; width: 1em; height: 1em; vertical-align: -.14em; border-radius: 50%; border: 2px solid currentColor; border-top-color: transparent; color: var(--accent); animation: spin .8s linear infinite; }
+.btn:not(.ghost) .spin { color: var(--accent-ink); }
+.ar-btn .spin { color: inherit; }
+.live-banner.lost { border-color: var(--danger); background: rgb(239 107 107 / 10%); }
+.live-banner.lost .spin { color: var(--danger); }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Quick loads are over before this shows. */
+.loading, .sk-late { animation: show-late .2s .15s backwards; }
+@keyframes show-late { from { opacity: 0; } }
+.loading { display: grid; justify-items: center; align-content: center; gap: 12px; min-height: 180px; padding: 24px 16px; text-align: center; }
+.loading p { margin: 0; }
+.waiting .spin { margin-right: .25em; }
+
+/* ---- The sweeping light ---- */
+.shimmer { position: relative; overflow: hidden; }
+.shimmer::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(105deg, transparent 20%, rgb(243 199 124 / 22%) 50%, transparent 80%);
+  transform: translateX(-100%);
+  animation: sweep 1.5s ease-in-out infinite;
+}
+@keyframes sweep { to { transform: translateX(100%); } }
+
+.sk-card { aspect-ratio: 488 / 680; width: 100%; border-radius: 4.75% / 3.5%; border: 1px solid var(--line); background: var(--panel-2); }
+.sk-bar { display: block; height: 11px; border-radius: 6px; background: #39415a; }
+.sk-tile { pointer-events: none; }
+.sk-tile .deck-meta { display: grid; gap: 10px; }
+.sk-note { grid-column: 1 / -1; }
+.cover-wait { position: absolute; inset: 0; background: var(--panel-2); }
+
+/* ---- Card pictures ---- */
+.cimg { position: relative; display: block; width: 100%; height: 100%; min-width: 0; }
+.cimg.tiny { display: inline-block; flex: none; width: auto; height: auto; line-height: 0; }
+:is(.stk-item, .stk-detail) .cimg { display: flow-root; width: 100%; height: auto; }
+.cimg.arrived > img { animation: img-in .25s ease-out; }
+@keyframes img-in { from { opacity: 0; } }
+.cimg.blank { aspect-ratio: 488 / 680; }
+.cimg-wait, .cimg-none { position: absolute; inset: 0; border-radius: 4.75% / 3.5%; background: var(--panel-2); color: var(--text); container-type: size; }
+/* Over the <img>, which may show its alt text or a broken-image mark; under badges and buttons on the card. */
+.cimg-wait { border: 1px solid var(--line); padding: 4% 6%; line-height: 1.2; text-align: left; }
+.cimg.tiny .cimg-wait { padding: 0; }
+.cimg-none { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 4% 6%; border: 2px dashed #59627c; background: var(--bg-2); font-size: .8rem; line-height: 1.25; text-align: left; }
+/* Sized to the card, so a name fits a small one on the table. */
+.cimg-name { display: block; max-width: 100%; font-size: clamp(6.5px, 10.5cqw, 13px); font-weight: 600; overflow: hidden; overflow-wrap: break-word; }
+.cimg-why { margin-top: auto; color: var(--muted); font-size: .72rem; }
+.cimg-retry { color: var(--accent-2); font-size: .74rem; cursor: pointer; text-decoration: underline; }
+.cimg-retry:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.cimg-retry-sign { display: none; }
+.cimg.tiny .cimg-none { align-items: center; justify-content: center; padding: 0; border-width: 1px; }
+@container (max-width: 110px) {
+  .cimg-why, .cimg-retry-words { display: none; }
+  .cimg-retry { margin-top: auto; text-decoration: none; font-size: .9rem; }
+  .cimg-retry-sign { display: inline; }
+}
+/* Small pictures need their shape before they have a picture. */
+.ask-option .cimg img, .dw-src, .dw-art { aspect-ratio: 488 / 680; display: block; }
+.picked-commander .cimg img, .commander-result img, .token-pick img { aspect-ratio: 488 / 680; display: block; }
+
+/* Large images: the small one, enlarged and soft, until the sharp one is here. */
+.big-img { position: relative; display: block; width: 100%; aspect-ratio: 488 / 680; border-radius: 4.75% / 3.5%; overflow: hidden; background: var(--panel-2); }
+.big-img > img { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: inherit; }
+.big-img-small { filter: blur(1.5px); }
+.big-img:is(.loading, .failed) .big-img-full { opacity: 0; }
+.big-img.failed .big-img-small, .big-img.here .big-img-small { filter: none; }
+.big-img.here::after { content: none; }
+.big-img.failed::after { content: none; }
+.big-img.loading { min-height: 0; padding: 0; animation: none; }
+.big-img-spin { position: absolute; right: 10px; bottom: 10px; z-index: 1; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: rgb(14 16 22 / 80%); font-size: 18px; animation: show-late .2s .15s backwards; }
+.big-img:not(.loading) .big-img-spin { display: none; }
+
+/* ---- Buttons that are working ---- */
+/* Both labels take up room, so the button doesn't change size. */
+.busy-label { display: inline-grid; align-items: center; justify-items: center; }
+.busy-label > span { grid-area: 1 / 1; }
+.busy-label > .off { visibility: hidden; }
+.btn:disabled:has(.busy-label > .off:first-child) { opacity: .8; cursor: progress; }
+
+/* Game buttons waiting for the server (src/game/PressButton.tsx). */
+.press-label { display: inline-flex; align-items: center; gap: 8px; }
+button.pressed { cursor: progress; opacity: .85; }
+button.held { cursor: not-allowed; opacity: .45; }
+button:is(.pressed, .held):hover { filter: none; }
+
+/* Over the table (or a dialog): something you asked for is on its way. */
+.game-wait { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); z-index: 90; padding: 9px 16px; border-radius: 99px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); box-shadow: var(--shadow); font-size: .9rem; white-space: nowrap; animation: show-late .2s .3s backwards; }
+
+/* ---- Search ---- */
+.suggest input.searching { padding-right: 36px; }
+.suggest-spin { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); line-height: 1; pointer-events: none; background: var(--bg-2); }
+.suggest input.searching::-webkit-search-cancel-button { display: none; }
+.suggest-list li.suggest-sk { cursor: default; background: none; }
+.suggest-list li.suggest-note.failed { display: block; color: var(--danger); }
+.suggest-list.refreshing > li[role="option"]:not(.suggest-all), .commander-results.refreshing > * { opacity: .45; }
+.suggest-list.refreshing::before, .commander-results.refreshing::before { content: ""; position: sticky; top: 0; z-index: 2; display: block; height: 2px; margin: -4px -4px 2px; background: linear-gradient(var(--accent), var(--accent)) no-repeat -35% 0 / 35% 100%; animation: bar 1.1s ease-in-out infinite; }
+.commander-results.refreshing::before { grid-column: 1 / -1; margin: 0; }
+@keyframes bar { to { background-position: 135% 0; } }
+
+/* ---- Joining a game ---- */
+.join-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.join-steps li { display: flex; align-items: center; gap: 10px; }
+.join-steps .later { color: var(--muted); }
+.join-tick, .join-later { flex: none; width: 1em; text-align: center; }
+.join-tick { color: var(--ok); }
+.join-later { height: 1em; border-radius: 50%; border: 2px solid var(--line); }
+
+/* ---- Less motion ---- */
+/* Still plainly different from something that has stopped: a slow turn, a slow glow. */
+@media (prefers-reduced-motion: reduce) {
+  .spinner, .spin { animation-duration: 2.4s; }
+  .shimmer::after { transform: none; background: rgb(243 199 124 / 14%); animation: glow 1.6s ease-in-out infinite alternate; }
+  .suggest-list.refreshing::before, .commander-results.refreshing::before { background: var(--accent); animation: glow 1.6s ease-in-out infinite alternate; }
+  .cimg.arrived > img { animation: none; }
+  @keyframes glow { from { opacity: .25; } }
+}

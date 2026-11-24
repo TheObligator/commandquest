@@ -3,11 +3,12 @@ import { useQuery } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { MAX_QUANTITY, type Board, type DeckCard } from "../../convex/model/deckRules";
-import { errorMessage } from "../app/errors";
 import { showCardDetails } from "../carddetails";
 import { useCardSupport } from "../cardsupport";
+import { CardImg } from "../components/CardImg";
 import { CardMenu } from "../components/CardMenu";
 import { FlipButton, useFlips } from "../components/FlipButton";
+import { BusyLabel, CardSkeletons, ScryfallWaiting, Spinner, Waiting } from "../components/Spinner";
 import { cardLegality, fitsIdentity, isCommanderEligible } from "../formats/conquest";
 import { bestExtraColor, identityQuery, mentionsIdentity, offIdentity } from "../formats/rulebreakers";
 import { commanderCards } from "../edhrec";
@@ -60,6 +61,8 @@ export function SearchBox(props: { onPick: (name: string) => void; onSubmit: (qu
   const [names, setNames] = useState<string[]>([]);
   /** Whether `names` are spelling guesses because nothing matched the text as typed. */
   const [guessed, setGuessed] = useState(false);
+  /** Looking for names; nothing matches, not even loosely; or Scryfall couldn't be asked. */
+  const [state, setState] = useState<"idle" | "searching" | "none" | "failed">("idle");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const seq = useRef(0);
@@ -82,22 +85,31 @@ export function SearchBox(props: { onPick: (name: string) => void; onSubmit: (qu
     // Scryfall syntax ("t:dragon c:r") isn't a name: no suggestions, Enter searches.
     if (value.trim().length < 2 || /[:<>=]/.test(value)) {
       setNames([]);
+      setState("idle");
       return;
     }
+    // Straight away, so it's clear that something's happening; the names of a moment ago stay, dimmed.
+    setState("searching");
+    setOpen(true);
     const identity = props.identity;
     timer.current = window.setTimeout(async () => {
-      let found = identity ? await suggestWithin(value, identity).catch(() => []) : await scry.autocomplete(value).catch(() => []);
-      let guess = false;
-      if (!found.length && mine === seq.current) {
-        // Nothing by that spelling: offer the closest names instead ("did you mean").
-        found = await scry.didYouMean(value).catch(() => []);
-        if (identity && found.length) found = await keepWithin(found, identity).catch(() => []);
-        guess = true;
-      }
-      if (mine === seq.current) {
+      try {
+        let found = identity ? await suggestWithin(value, identity) : await scry.autocomplete(value);
+        let guess = false;
+        if (!found.length && mine === seq.current) {
+          // Nothing by that spelling: offer the closest names instead ("did you mean").
+          found = await scry.didYouMean(value);
+          if (identity && found.length) found = await keepWithin(found, identity);
+          guess = true;
+        }
+        if (mine !== seq.current) return;
         setNames(found.slice(0, 8));
         setGuessed(guess);
-        setOpen(true);
+        setState(found.length ? "idle" : "none");
+      } catch {
+        if (mine !== seq.current) return;
+        setNames([]);
+        setState("failed");
       }
     }, 200);
   }
@@ -107,12 +119,28 @@ export function SearchBox(props: { onPick: (name: string) => void; onSubmit: (qu
     setOpen(false);
     setActive(-1);
     setQ("");
+    stop();
     setNames([]);
     setGuessed(false);
   }
 
+  /** Forget the lookup that's running: its names aren't wanted any more. */
+  function stop() {
+    clearTimeout(timer.current);
+    seq.current++;
+    setState("idle");
+  }
+
+  function submit() {
+    stop();
+    setNames([]);
+    setOpen(false);
+    props.onSubmit(q.trim());
+  }
+
   function onKey(e: React.KeyboardEvent) {
-    const shown = open ? names : [];
+    // Names that are being replaced can't be picked with the keyboard: Enter is for what's typed now.
+    const shown = open && state !== "searching" ? names : [];
     if (e.key === "ArrowDown" && shown.length) {
       e.preventDefault();
       setOpen(true);
@@ -127,13 +155,11 @@ export function SearchBox(props: { onPick: (name: string) => void; onSubmit: (qu
       e.preventDefault();
       clearTimeout(timer.current);
       if (active >= 0 && shown[active]) pick(shown[active]);
-      else if (q.trim()) {
-        setOpen(false);
-        props.onSubmit(q.trim());
-      }
+      else if (q.trim()) submit();
     }
   }
 
+  const listOpen = open && (names.length > 0 || state !== "idle");
   return (
     <div className="suggest" ref={box}>
       <input
@@ -141,19 +167,43 @@ export function SearchBox(props: { onPick: (name: string) => void; onSubmit: (qu
         placeholder='Card name, or Scryfall search like "t:dragon c:r". Enter for all results'
         aria-label="Search cards"
         role="combobox"
-        aria-expanded={open && names.length > 0}
+        aria-expanded={listOpen}
+        aria-busy={state === "searching"}
         aria-controls="suggest-list"
         aria-activedescendant={active >= 0 ? `suggest-${active}` : undefined}
         autoComplete="off"
         value={q}
         autoFocus={props.autoFocus}
         onChange={(e) => onInput(e.target.value)}
-        onFocus={() => names.length && setOpen(true)}
+        className={state === "searching" ? "searching" : undefined}
+        onFocus={() => (names.length || state !== "idle") && setOpen(true)}
         onKeyDown={onKey}
       />
-      {open && names.length > 0 && (
-        <ul className="suggest-list" id="suggest-list" role="listbox">
-          {guessed && (
+      {state === "searching" && <span className="suggest-spin"><Spinner /></span>}
+      {/* Said out loud when it changes, for screen readers. */}
+      <span className="sr-only" role="status">
+        {!open ? "" : state === "searching" ? "Searching" : state === "failed" ? "Couldn't reach Scryfall" : state === "none" ? "No card names match" : names.length ? `${names.length} names` : ""}
+      </span>
+      {listOpen && (
+        <ul className={`suggest-list${state === "searching" && names.length ? " refreshing" : ""}`} id="suggest-list" role="listbox" aria-busy={state === "searching"}>
+          {state === "searching" && !names.length && (
+            <>
+              <li className="suggest-note" role="presentation"><ScryfallWaiting text={`Searching for “${q.trim()}”…`} still="Still searching." /></li>
+              {[46, 62, 38].map((w) => <li key={w} className="suggest-sk" role="presentation"><span className="sk-bar shimmer" style={{ width: `${w}%` }} /></li>)}
+            </>
+          )}
+          {state === "none" && (
+            <li className="suggest-note" role="presentation">
+              No card names match “{q.trim()}”{props.identity ? " among the cards your commander allows" : ""}, not even a close spelling.
+            </li>
+          )}
+          {state === "failed" && (
+            <li className="suggest-note failed" role="presentation">
+              Couldn't reach Scryfall.{" "}
+              <button type="button" className="text-link" onPointerDown={(e) => e.preventDefault()} onClick={() => onInput(q)}>Try again</button>
+            </li>
+          )}
+          {guessed && names.length > 0 && (
             <li className="suggest-note" role="presentation">
               No card names match “{q.trim()}”. Did you mean:
             </li>
@@ -173,8 +223,8 @@ export function SearchBox(props: { onPick: (name: string) => void; onSubmit: (qu
               <span className="suggest-hint">add</span>
             </li>
           ))}
-          <li className="suggest-all" role="option" aria-selected={false} onPointerDown={(e) => e.preventDefault()} onClick={() => (setOpen(false), props.onSubmit(q.trim()))}>
-            See all results for “{q.trim()}” <kbd>Enter</kbd>
+          <li className="suggest-all" role="option" aria-selected={false} onPointerDown={(e) => e.preventDefault()} onClick={submit}>
+            {state === "none" ? "Search Scryfall for" : "See all results for"} “{q.trim()}”{state === "none" ? " anyway" : ""} <kbd>Enter</kbd>
           </li>
         </ul>
       )}
@@ -246,6 +296,7 @@ export function SearchResults(props: {
   const [cards, setCards] = useState<scry.ScryCard[]>([]);
   const [total, setTotal] = useState<number | null>(null);
   const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
   const [next, setNext] = useState<string>();
   const [loadingMore, setLoadingMore] = useState(false);
   const support = useCardSupport();
@@ -350,12 +401,12 @@ export function SearchResults(props: {
     setError("");
     scry.search(fullQuery).then(
       (p) => live && (setCards(p.cards), setTotal(p.total), setNext(p.nextPage)),
-      (e) => live && setError(errorMessage(e)),
+      (e) => live && setError(scry.lookupError(e)),
     );
     return () => {
       live = false;
     };
-  }, [fullQuery, settings === undefined]);
+  }, [fullQuery, settings === undefined, attempt]);
 
   // How many cards the additions hid: the same search without them.
   useEffect(() => {
@@ -383,12 +434,13 @@ export function SearchResults(props: {
   async function more() {
     if (!next) return;
     setLoadingMore(true);
+    setError("");
     try {
       const p = await scry.nextPage(next);
       setCards((c) => [...c, ...p.cards]);
       setNext(p.nextPage);
     } catch (e) {
-      setError(errorMessage(e));
+      setError(scry.lookupError(e));
     } finally {
       setLoadingMore(false);
     }
@@ -418,7 +470,7 @@ export function SearchResults(props: {
     return (
       <div key={c.id} className={`search-card${count ? ` in-deck in-${inDeckParts(inDeck)[0].board}` : ""}${verdict.ok ? "" : " not-legal"}${playable && !playable.works ? (playable.missing ? " not-playable" : " known-issue") : ""}`}>
         <button className="tile-img" title={`${c.name}: card details`} onClick={details}>
-          {img ? <img src={img} alt={c.name} loading="lazy" /> : <span className="noimg">{c.name}</span>}
+          {img ? <CardImg src={img} name={c.name} alt={c.name} loading="lazy" /> : <span className="noimg">{c.name}</span>}
         </button>
         <FlipButton card={c} face={face} onFlip={flips.toggle} />
         {!verdict.ok && <span className="legal-badge" title={`Not legal in Conquest: ${verdict.reason}`}>Not legal</span>}
@@ -513,9 +565,9 @@ export function SearchResults(props: {
       </div>
       <p className="muted small">
         {error ? (
-          <span className="form-error">{error}</span>
+          <span className="form-error">{error} <button className="text-link" onClick={() => (cards.length ? void more() : setAttempt((n) => n + 1))}>Try again</button></span>
         ) : total === null ? (
-          "Searching…"
+          <ScryfallWaiting text={`Searching for “${props.query}”…`} still="Still searching." className="" />
         ) : total ? (
           <span className="search-count">
             <strong>{total.toLocaleString()} card{total === 1 ? "" : "s"}</strong> for “{props.query}”
@@ -544,7 +596,7 @@ export function SearchResults(props: {
           </>
         )}
       </p>
-      {rankOn && rankStatus && <p className="muted small">{rankStatus}</p>}
+      {rankOn && rankStatus && <p className="muted small">{rankStatus.endsWith("…") ? <Waiting text={rankStatus} slow={`${rankStatus} (taking a while)`} /> : rankStatus}</p>}
       {additionsOn && hidden > 0 && (
         <p className="small search-notice">
           Your search additions (<code>{additions}</code>) hid {hidden.toLocaleString()} card{hidden === 1 ? "" : "s"}.{" "}
@@ -564,14 +616,17 @@ export function SearchResults(props: {
           {shown.length > 0 && <h3 className="search-section">More cards</h3>}
         </>
       )}
-      <div className="search-grid">{shown.map((c) => tile(c))}</div>
+      <div className="search-grid">
+        {shown.map((c) => tile(c))}
+        {((total === null && !error) || loadingMore) && <CardSkeletons n={loadingMore ? 6 : 12} />}
+      </div>
       {next && (
         <button className="btn ghost wide" disabled={loadingMore} onClick={() => void more()}>
-          {loadingMore
-            ? "Loading…"
-            : total !== null && total > cards.length
+          <BusyLabel busy={loadingMore} working="Loading…">
+            {total !== null && total > cards.length
               ? `Load ${Math.min(SCRYFALL_PAGE, total - cards.length).toLocaleString()} more (${(total - cards.length).toLocaleString()} left)`
               : "Load more"}
+          </BusyLabel>
         </button>
       )}
     </section>

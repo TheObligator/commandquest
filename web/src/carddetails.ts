@@ -18,13 +18,22 @@ export interface CardDetailAction {
   danger?: boolean;
 }
 
+const spinner = () => h("span", { class: "spin", "aria-hidden": "true" });
+
 export function showCardDetails(card: ScryCard, actions: CardDetailAction[] = []) {
   // A double-faced card shows both faces side by side: front on the left, back on the right.
   const twoFaces = hasBackImage(card);
   const faceImage = (face: number) => {
-    const img = h("img", { class: "detail-img", alt: card.card_faces?.[face]?.name ?? card.name });
+    const img = h("img", { class: "detail-img big-img-full", alt: card.card_faces?.[face]?.name ?? card.name });
+    // The small image (usually loaded already), enlarged under a spinner, until the large one is here.
+    const small = imageUrl(card, "normal", face);
+    const box = h("span", { class: "big-img loading" }, small && h("img", { class: "big-img-small detail-img", src: small, alt: "" }), img, h("span", { class: "big-img-spin" }, spinner()));
+    const done = (state: string) => (box.className = `big-img ${state}`);
+    img.onload = () => done("here");
+    img.onerror = () => done("failed");
     img.src = imageUrl(card, "large", face) ?? "";
-    return img;
+    if (img.complete && img.naturalWidth) done("here");
+    return box;
   };
   const image = twoFaces
     ? h("div", { class: "detail-image faces" },
@@ -74,7 +83,7 @@ export function showCardDetails(card: ScryCard, actions: CardDetailAction[] = []
 /** The card's official rulings, filled in once Scryfall answers. Left out when there are none. */
 function rulingsSection(card: ScryCard): HTMLElement {
   const count = h("span", { class: "muted" });
-  const body = h("div", null, h("p", { class: "muted small" }, "Looking up rulings…"));
+  const body = h("div", null, h("p", { class: "muted small waiting", role: "status" }, spinner(), " Looking up rulings…"));
   const section = h("details", { class: "detail-rulings" }, h("summary", null, h("h3", null, "Rulings ", count)), body);
   rulings(card.name).then(
     (list) => {

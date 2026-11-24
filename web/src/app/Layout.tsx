@@ -1,3 +1,4 @@
+import { Spinner } from "../components/Spinner";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvexAuth, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
@@ -44,7 +45,7 @@ function Account() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const me = useQuery(api.users.me, isAuthenticated ? {} : "skip");
   const { signOut } = useAuthActions();
-  if (isLoading) return <div className="account" />;
+  if (isLoading) return <div className="account sk-late" role="status" aria-label="Signing you in"><Spinner /></div>;
   if (!isAuthenticated) {
     return (
       <div className="account">
@@ -55,7 +56,7 @@ function Account() {
   return (
     <div className="account">
       {me?.image && <img className="avatar" src={me.image} alt="" />}
-      <span className="user">{me?.name ?? ""}</span>
+      <span className="user">{me === undefined ? <Spinner /> : me?.name ?? ""}</span>
       <button className="btn ghost small" onClick={() => void signOut().then(() => navigate("/"))}>Sign out</button>
     </div>
   );

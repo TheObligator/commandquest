@@ -20,7 +20,7 @@ export function JoinTable({ code }: { code: string }) {
     );
   }, [code, join]);
 
-  if (!error) return <Loading />;
+  if (!error) return <Loading text="Joining the table…" />;
   return (
     <div className="card live-start">
       <h2>Couldn't join the table</h2>

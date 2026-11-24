@@ -92,7 +92,6 @@ button.zone-tile:hover .zt-card { outline: 2px solid var(--accent-2); }
 .card-face img { background: var(--panel-2); }
 .card-face.known-facedown { outline: 2px dashed var(--accent); outline-offset: -2px; }
 .card-face.known-facedown img { filter: saturate(.55) brightness(.75); }
-.card-noimg { height: 100%; display: grid; place-items: center; text-align: center; padding: 4px; font-size: .62rem; background: var(--panel-2); border: 1px solid var(--line); border-radius: 5% / 3.6%; }
 /* Scryfall's card back; the brown gradient shows while it loads. */
 .card-back { width: 100%; height: 100%; border-radius: 5% / 3.6%; overflow: hidden; background: radial-gradient(circle at 50% 42%, #4a3315, #1c1309 72%); }
 .card-back img { display: block; width: 100%; height: 100%; object-fit: cover; }

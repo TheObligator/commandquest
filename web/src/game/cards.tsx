@@ -1,8 +1,9 @@
 // Card tiles for the game table: Scryfall images, card backs for hidden cards, styled tiles for
 // tokens, and the hover preview shared across the table.
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, useSyncExternalStore } from "react";
+import { CardImg, CardNone, CardWait } from "../components/CardImg";
 import { ManaCost } from "../components/ManaCost";
-import { cached, cachedTokenArt, imageUrl, resolve, tokenArt } from "../scryfall";
+import { cached, cachedTokenArt, cardLookup, imageUrl, lookupVersion, onLookup, resolve, tokenArt, wantCard, type CardLookup } from "../scryfall";
 import type { CardView } from "./view";
 
 /** Loads Scryfall data for these card names once; re-renders when it arrives. */
@@ -19,6 +20,16 @@ export function useCardData(names: string[]) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
+}
+
+/** How looking up this card on Scryfall is going; starts it if nobody has. */
+export function useCardLookup(name: string | undefined): CardLookup {
+  useSyncExternalStore(onLookup, lookupVersion);
+  const state = name ? cardLookup(name) : "missing";
+  useEffect(() => {
+    if (name && state === "loading") wantCard(name);
+  }, [name, state]);
+  return state;
 }
 
 export function cardImage(name: string | undefined, size: "small" | "normal" | "large" = "normal") {
@@ -54,10 +65,22 @@ export function CardBack({ label }: { label?: string }) {
 export function CardFace({ card, size = "normal", knownFaceDown }: { card: CardView; size?: "small" | "normal"; knownFaceDown?: boolean }) {
   if (card.hidden) return <CardBack />;
   if (card.token) return <TokenFace card={card} />;
+  return <NamedFace card={card} size={size} knownFaceDown={knownFaceDown} />;
+}
+
+function NamedFace({ card, size, knownFaceDown }: { card: CardView; size: "small" | "normal"; knownFaceDown?: boolean }) {
+  const name = card.name ?? "";
+  const lookup = useCardLookup(card.name);
   const src = cardImage(card.name, size);
   return (
     <div className={`card-face${knownFaceDown ? " known-facedown" : ""}`}>
-      {src ? <img src={src} alt={card.name} draggable={false} loading="lazy" /> : <div className="card-noimg">{card.name}</div>}
+      {src ? (
+        <CardImg src={src} name={name} alt={name} draggable={false} loading="lazy" />
+      ) : lookup === "loading" ? (
+        <CardWait name={name} />
+      ) : (
+        <CardNone name={name} onRetry={lookup === "failed" ? () => wantCard(name, true) : undefined} />
+      )}
     </div>
   );
 }
@@ -86,12 +109,12 @@ function TokenFace({ card }: { card: CardView }) {
   if (url) {
     return (
       <div className="card-face">
-        <img src={url} alt={`${card.name} token`} draggable={false} loading="lazy" />
+        <CardImg src={url} name={card.name ?? "Token"} alt={`${card.name} token`} draggable={false} loading="lazy" />
       </div>
     );
   }
   return (
-    <div className="token-tile">
+    <div className={`token-tile${url === undefined ? " shimmer" : ""}`}>
       <span className="token-name">{card.name}</span>
       <span className="token-type">Token {card.types?.join(" ")}</span>
     </div>

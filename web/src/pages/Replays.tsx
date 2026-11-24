@@ -70,7 +70,7 @@ export function Replays() {
         <h1>Replays</h1>
       </div>
       {mine === undefined ? (
-        <Loading />
+        <Loading text="Loading your replays…" />
       ) : (
         <>
           <section className="replay-section">

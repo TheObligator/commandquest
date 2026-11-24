@@ -1,6 +1,7 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import { BusyLabel } from "../components/Spinner";
 import { clearPending, newPending, normalizeCode, pending as savedPending, type Pending } from "../app/handoff";
 import { useEffect, useState } from "react";
 import { errorMessage } from "../app/errors";
@@ -123,7 +124,7 @@ export function SignIn() {
                   maxLength={12}
                 />
               </label>
-              <button className="btn wide" type="submit" disabled={busy || normalizeCode(typed).length !== 8}>{busy ? "Signing in…" : "Sign in"}</button>
+              <button className="btn wide" type="submit" disabled={busy || normalizeCode(typed).length !== 8}><BusyLabel busy={busy} working="Signing in…">Sign in</BusyLabel></button>
             </form>
             <button className="btn ghost small" onClick={() => (clearPending(), setWaiting(null))}>Use a different email</button>
           </div>
@@ -133,7 +134,7 @@ export function SignIn() {
               Email
               <input type="email" name="email" autoComplete="email" required autoFocus value={email} onChange={(e) => setEmail(e.target.value)} />
             </label>
-            <button className="btn wide" type="submit" disabled={busy}>{busy ? "Sending…" : "Email me a sign-in link"}</button>
+            <button className="btn wide" type="submit" disabled={busy}><BusyLabel busy={busy} working="Sending…">Email me a sign-in link</BusyLabel></button>
           </form>
         )}
         <div className="or"><span>or</span></div>

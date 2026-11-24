@@ -3,6 +3,7 @@
 // look at one see its face.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { closeOnBackdrop } from "../carddetails";
+import { CardSkeletons, Waiting } from "../components/Spinner";
 import { cached } from "../scryfall";
 import { CardBadges, CardFace, faceDownNote, useCardData, usePreview } from "./cards";
 import { isMarkClick, useMarks, useMarquee } from "./marks";
@@ -25,6 +26,8 @@ export function ZoneViewer(props: {
   onMenu?: OpenMenu;
   /** `cards` are already top first (a library listing); otherwise the last card is the top. */
   topFirst?: boolean;
+  /** The cards are still on their way from the game server. */
+  loading?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const setPreview = usePreview();
@@ -58,7 +61,7 @@ export function ZoneViewer(props: {
     >
       <button className="dialog-close" aria-label="Close" onClick={() => ref.current?.close()}>×</button>
       <div className="dialog-head">
-        <h3>{props.title} <span className="muted small">{props.cards.length} card{props.cards.length === 1 ? "" : "s"} · top first</span></h3>
+        <h3>{props.title} <span className="muted small">{props.loading ? <Waiting text="Getting the cards…" slow="Still getting the cards… the game server is slow right now." /> : <>{props.cards.length} card{props.cards.length === 1 ? "" : "s"} · top first</>}</span></h3>
       </div>
       {props.cards.length > 1 && (
         <div className="zv-filter">
@@ -75,7 +78,9 @@ export function ZoneViewer(props: {
           </span>
         </div>
       )}
-      {cards.length ? (
+      {props.loading && !props.cards.length ? (
+        <div className="zv-grid"><CardSkeletons n={6} /></div>
+      ) : cards.length ? (
         <div className="zv-grid" onMouseDown={onMouseDown}>
           {marquee}
           {cards.map((c) => {

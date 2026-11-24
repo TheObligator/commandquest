@@ -9,7 +9,8 @@ import { columnSpans, columnsOf, stackColClass } from "../stackLayout";
 import { mergeDuplicates } from "../decklist";
 import { toast } from "../dom";
 import { ManaCost } from "../components/ManaCost";
-import { Loading } from "../components/Spinner";
+import { CardImg } from "../components/CardImg";
+import { BusyLabel, CoverWait, DeckSkeletons, Loading, Waiting } from "../components/Spinner";
 import { cardCount, cardImage, cardKey, deckCards, loadPreconCards, loadPrecons, matches, releaseLabel, type Precon, type PreconCardData } from "../precons";
 import * as scry from "../scryfall";
 import { useCardPreview } from "../useCardPreview";
@@ -54,7 +55,8 @@ export function Precons() {
   const [query, setQuery] = useState("");
   const [viewing, setViewing] = useState<Precon | null>(null);
   const [adding, setAdding] = useState<Set<string>>(new Set());
-  const [, setArtLoaded] = useState(0);
+  /** The covers whose cards have been looked up (found or not). */
+  const [artLoaded, setArtLoaded] = useState("");
   const myDecks = useQuery(api.decks.list);
   const createDeck = useMutation(api.decks.create);
 
@@ -79,7 +81,7 @@ export function Precons() {
   const coverKey = coverCards.map((c) => `${c.name}|${c.set}`).join(",");
   useEffect(() => {
     if (!coverCards.length) return;
-    scry.resolve(coverCards).then(() => setArtLoaded((n) => n + 1)).catch(() => undefined);
+    scry.resolve(coverCards).catch(() => undefined).finally(() => setArtLoaded(coverKey));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coverKey]);
 
@@ -105,7 +107,7 @@ export function Precons() {
     if (own) return <a className="btn ghost small" href={`#/decks/${own}`}>In your decks · Open</a>;
     return (
       <button className="btn small" disabled={adding.has(p.id) || myDecks === undefined} onClick={() => void add(p)}>
-        {adding.has(p.id) ? "Adding…" : "Add to my decks"}
+        <BusyLabel busy={adding.has(p.id)} working="Adding…">Add to my decks</BusyLabel>
       </button>
     );
   };
@@ -131,7 +133,7 @@ export function Precons() {
       {error ? (
         <p className="form-error">{error}</p>
       ) : !precons ? (
-        <Loading />
+        <DeckSkeletons n={9} text="Loading the precons…" />
       ) : !shown.length ? (
         <div className="empty card"><h3>No precons match “{query}”</h3></div>
       ) : (
@@ -143,6 +145,7 @@ export function Precons() {
             return (
               <div key={p.id} className="deck-tile precon-tile" onPointerEnter={() => void loadPreconCards(p).catch(() => undefined)}>
                 <button className="deck-cover precon-cover" style={art ? { backgroundImage: `url("${art}")` } : undefined} onClick={() => setViewing(p)} aria-label={`View the ${p.name} deck`}>
+                  <CoverWait src={art || undefined} pending={!!cmdr && !card && artLoaded !== coverKey} />
                   {art ? <span className="art-credit">Art by {scry.artistOf(card!) ?? "unknown"} · © Wizards of the Coast</span> : <span className="precon-set">{p.set.toUpperCase()}</span>}
                 </button>
                 <div className="deck-meta">
@@ -279,7 +282,7 @@ function PreconList({ precon, addButton, onClose }: { precon: Precon; addButton:
               return (
                 <div key={c.name} className="flip-host">
                   <button className="stack-card" title={s ? undefined : c.name} disabled={!s} onClick={() => void details(c)} aria-label={`${c.quantity} × ${c.name}: card details`} {...preview.handlers(s, face)}>
-                    {img ? <img src={img} alt="" loading="lazy" /> : <span className="noimg">{c.name}</span>}
+                    {img ? <CardImg src={img} name={c.name} alt="" loading="lazy" /> : <span className="noimg">{c.name}</span>}
                     {img && <span className="tile-name" aria-hidden="true">{c.name}</span>}
                     {c.quantity > 1 && <span className="stack-qty">×{c.quantity}</span>}
                   </button>
@@ -344,7 +347,7 @@ function PreconList({ precon, addButton, onClose }: { precon: Precon; addButton:
       <div className="precon-list" onScroll={preview.hide}>
         {precon.description && <p className="muted">{precon.description}</p>}
         {resolved === undefined ? (
-          <Loading />
+          <Loading text="Loading the cards…" slow="Still loading the cards… Scryfall is slow right now." />
         ) : (
           <>
             {resolved === false && <p className="muted small">Couldn't reach Scryfall, so only card names are shown.</p>}
@@ -353,6 +356,7 @@ function PreconList({ precon, addButton, onClose }: { precon: Precon; addButton:
           </>
         )}
       </div>
+      {opening && <div className="game-wait"><Waiting text="Loading the card…" className="" /></div>}
       {preview.element}
     </dialog>
   );

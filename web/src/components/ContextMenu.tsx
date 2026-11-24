@@ -2,6 +2,7 @@
 // instead of a button. Sections can arrive later (e.g. a card's abilities from the game server):
 // `loading` shows a placeholder line until then. Closes on outside click, Escape, scroll or resize.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Waiting } from "./Spinner";
 import { AmountRow, type MenuItem, type MenuSection } from "./CardMenu";
 
 export interface ContextMenuState {
@@ -85,7 +86,7 @@ export function ContextMenu({ menu, onClose }: { menu: ContextMenuState; onClose
           </div>
         ) : null,
       )}
-      {menu.loading && <div className="cm-note">Checking what this card can do…</div>}
+      {menu.loading && <div className="cm-note"><Waiting text="Checking what this card can do…" slow="Still checking… the game server is slow right now." /></div>}
       {menu.note && <div className="cm-note">{menu.note}</div>}
     </div>
   );

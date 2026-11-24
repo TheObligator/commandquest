@@ -5,7 +5,7 @@
 //    per second; everything else 10 per second. Every request goes through one queue that spaces
 //    their starts by the right gap. Images and symbols come from *.scryfall.io, which has no rate limit, so
 //    they never go through the API.
-//  - On HTTP 429 we pause all requests for 30 seconds, as Scryfall requires.
+//  - On HTTP 429 we pause all requests for 30 seconds, as Scryfall requires, then try that one again.
 //  - The browser's own User-Agent is left intact and an Accept header is sent.
 //  - Card data is cached in localStorage for 7 days (Scryfall asks for at least 24h).
 
@@ -115,18 +115,32 @@ function queued<T>(path: string, fn: () => Promise<T>): Promise<T> {
 }
 
 class ScryfallError extends Error {
-  constructor(public status: number, message: string) {
+  status: number;
+  constructor(status: number, message: string) {
     super(message);
+    this.status = status;
   }
 }
 
-async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
+/** How long Scryfall has us waiting before the next request (after a 429), in ms; 0 when it doesn't. */
+export const pauseLeft = () => Math.max(0, pausedUntil - Date.now());
+
+/** A user-facing message for a failed request: Scryfall's own words, or that it couldn't be reached at all. */
+export function lookupError(e: unknown): string {
+  return e instanceof ScryfallError ? e.message : "Couldn't reach Scryfall.";
+}
+
+const MAX_429_RETRIES = 2;
+
+async function getJson<T>(url: string, init?: RequestInit, retries = MAX_429_RETRIES): Promise<T> {
   const path = new URL(url).pathname;
   return queued(path, async () => {
     const res = await fetch(url, { ...init, headers: { Accept: "application/json", ...(init?.headers ?? {}) } });
     if (res.status === 429) {
       pausedUntil = Date.now() + BACKOFF_MS;
-      throw new ScryfallError(429, "Scryfall says we're sending too many requests. Pausing card lookups for 30 seconds.");
+      // Back in the queue, behind the pause (the page says how long: src/components/Spinner.tsx).
+      if (retries > 0) return getJson<T>(url, init, retries - 1);
+      throw new ScryfallError(429, "Scryfall says we're sending too many requests. Try again in a minute.");
     }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new ScryfallError(res.status, (data as { details?: string }).details ?? `Scryfall error ${res.status}`);
@@ -348,11 +362,18 @@ export function autocomplete(q: string): Promise<string[]> {
  * name match first, then autocomplete on shortened forms of the text, ranked by spelling distance.
  */
 export async function didYouMean(q: string): Promise<string[]> {
+  let trouble: unknown;
+  const none = (e: unknown) => {
+    if (!(e instanceof ScryfallError && e.status === 404)) trouble = e; // 404: nothing that close
+    return [] as string[];
+  };
   const fuzzy = getJson<ScryCard>(`${API}/cards/named?${new URLSearchParams({ fuzzy: q })}`)
     .then((c) => [remember(c).name])
-    .catch(() => [] as string[]);
-  const loose = probes(q).map((p) => autocomplete(p).catch(() => [] as string[]));
+    .catch(none);
+  const loose = probes(q).map((p) => autocomplete(p).catch(none));
   const [best, ...rest] = await Promise.all([fuzzy, ...loose]);
+  // Found nothing because it couldn't ask, rather than because there's nothing.
+  if (trouble && !best.length && !rest.flat().length) throw trouble;
   // Scryfall's own best guess leads even when it's spelled further off than our threshold allows.
   return [...new Set([...best, ...rank(q, rest.flat())])].slice(0, 5);
 }
@@ -505,6 +526,63 @@ export async function resolve(cards: DeckCard[]): Promise<string[]> {
 }
 
 const inFlight = new Map<string, Promise<string[]>>();
+
+// ---- Cards shown by name ---------------------------------------------------------
+// The game table shows a card's image by its name. `wantCard` looks up any name nobody has asked
+// about yet (a tick's worth together), and `cardLookup` says how that's going, so a card that's on
+// its way looks different from one that isn't coming.
+
+/** `missing`: Scryfall doesn't have it. `failed`: Scryfall couldn't be asked. */
+export type CardLookup = "loading" | "found" | "missing" | "failed";
+
+const noCard = new Map<string, "missing" | "failed">();
+const watchers = new Set<() => void>();
+let lookups = 0;
+let wanted = new Set<string>();
+const AUTO_RETRY_MS = 15_000;
+const MAX_AUTO_RETRIES = 4;
+let autoRetries = 0;
+
+export const onLookup = (fn: () => void) => {
+  watchers.add(fn);
+  return () => void watchers.delete(fn);
+};
+/** Changes whenever a lookup by name finishes. */
+export const lookupVersion = () => lookups;
+
+export function cardLookup(name: string): CardLookup {
+  if (cached({ name, quantity: 1, board: "main" })) return "found";
+  return noCard.get(name.toLowerCase()) ?? "loading";
+}
+
+/** Looks this card up unless that's been done (or, with `again`, even if it failed before). */
+export function wantCard(name: string, again = false) {
+  const key = name.toLowerCase();
+  if (again && noCard.delete(key)) changed();
+  if (cardLookup(name) !== "loading" || wanted.has(name)) return;
+  wanted.add(name);
+  if (wanted.size > 1) return;
+  setTimeout(() => {
+    const names = [...wanted];
+    wanted = new Set();
+    const done = (state: "missing" | "failed") => {
+      const without = names.filter((n) => !cached({ name: n, quantity: 1, board: "main" }));
+      for (const n of without) noCard.set(n.toLowerCase(), state);
+      changed();
+      // Couldn't ask: a few more tries by themselves. (The card also offers one.)
+      if (state === "failed" && without.length && autoRetries < MAX_AUTO_RETRIES) {
+        autoRetries++;
+        setTimeout(() => without.forEach((n) => noCard.get(n.toLowerCase()) === "failed" && wantCard(n, true)), AUTO_RETRY_MS);
+      } else if (state === "missing") autoRetries = 0;
+    };
+    resolve(names.map((n) => ({ name: n, quantity: 1, board: "main" as const }))).then(() => done("missing"), () => done("failed"));
+  });
+}
+
+function changed() {
+  lookups++;
+  for (const fn of [...watchers]) fn();
+}
 
 async function lookUp(list: DeckCard[]): Promise<string[]> {
   const missing: string[] = [];

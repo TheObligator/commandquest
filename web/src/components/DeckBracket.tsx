@@ -8,6 +8,7 @@ import { BRACKETS, GLANCE, REASON_TAGS, bracketFloor, bracketName, glance, total
 import { knownTags, lookUpTags, pendingQueries } from "../cardtags";
 import { errorMessage } from "../app/errors";
 import { CardMenu } from "./CardMenu";
+import { Spinner, Waiting } from "./Spinner";
 import * as scry from "../scryfall";
 import { useCardPreview } from "../useCardPreview";
 
@@ -114,7 +115,7 @@ export function DeckBracket(props: {
       )}
       <div className="glance-head">
         <span className="muted small">
-          Main deck and commander{progress ? ` · checking Scryfall Tagger ${progress.done}/${progress.total}…` : ""}
+          Main deck and commander{progress && <> · <Waiting className="" text={`Checking Scryfall Tagger ${progress.done}/${progress.total}…`} /></>}
           {lookupError && <span className="form-error"> · Couldn't check tags: {lookupError}</span>}
         </span>
       </div>
@@ -130,7 +131,7 @@ export function DeckBracket(props: {
               aria-expanded={open === c.id}
               onClick={() => setOpen(open === c.id ? null : c.id)}
             >
-              <span className="glance-n">{pending && !lookupError ? "…" : n}</span>
+              <span className="glance-n">{pending && !lookupError ? <Spinner /> : n}</span>
               <span className="glance-label">{c.label}</span>
             </button>
           );

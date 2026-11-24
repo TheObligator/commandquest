@@ -6,7 +6,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { manaCost, rulesText } from "../dom";
 import { cached, imageUrl, rulings, type CardFace, type Ruling } from "../scryfall";
-import { CardBack, tokenImage, type Preview } from "./cards";
+import { NoPicture } from "../components/CardImg";
+import { Spinner, Waiting } from "../components/Spinner";
+import { CardBack, cardImage, tokenImage, useCardLookup, type Preview } from "./cards";
 import type { CardAbility } from "./abilities";
 import { AbilityMark } from "./AbilityMenu";
 import type { CardDetails } from "./useLiveGame";
@@ -44,6 +46,28 @@ export function usePreloadZoom(cards: CardView[]) {
       new Image().src = src;
     }
   }, [key]);
+}
+
+/** The small image the table already has, shown enlarged until the large one is here. */
+function smallImage(card: CardView): string | undefined {
+  return card.hidden ? undefined : card.token ? tokenImage(card) : cardImage(card.name, "normal");
+}
+
+/** The large image, over the small one (enlarged, with a spinner) until it arrives. */
+function BigImage({ src, small, alt }: { src: string; small?: string; alt: string }) {
+  const [state, setState] = useState<"loading" | "here" | "failed">("loading");
+  const ref = useRef<HTMLImageElement>(null);
+  useLayoutEffect(() => {
+    setState(ref.current?.complete && ref.current.naturalWidth > 0 ? "here" : "loading");
+  }, [src]);
+  return (
+    <span className={`big-img ${state}${small ? "" : " shimmer"}`}>
+      {state !== "here" && small && <img className="big-img-small" src={small} alt="" />}
+      <img ref={ref} className="big-img-full" src={src} alt={alt} onLoad={() => setState("here")} onError={() => setState("failed")} />
+      {state === "loading" && <span className="big-img-spin"><Spinner /></span>}
+      {state === "failed" && !small && <NoPicture name={alt} />}
+    </span>
+  );
 }
 
 export function HoverZoom({ preview }: { preview: Preview | null }) {
@@ -104,10 +128,11 @@ export function HoverZoom({ preview }: { preview: Preview | null }) {
       {card.hidden ? (
         <CardBack />
       ) : src ? (
-        <img src={src} alt="" />
+        <BigImage src={src} small={smallImage(card)} alt="" />
       ) : (
         <div className="hz-tile">
           <strong>{card.name}</strong>
+          <ImageWait card={card} />
           <span>{card.token ? "Token " : ""}{card.types?.join(" ")}</span>
           {card.power !== undefined && <b>{card.power}/{card.toughness}</b>}
         </div>
@@ -115,6 +140,12 @@ export function HoverZoom({ preview }: { preview: Preview | null }) {
       {shown.note && <p className="hz-note">{shown.note}</p>}
     </div>
   );
+}
+
+/** On the tile that stands in for a card's image: whether the image is on its way. */
+function ImageWait({ card }: { card: CardView }) {
+  const lookup = useCardLookup(card.token || card.hidden ? undefined : card.name);
+  return lookup === "loading" ? <Waiting text="Looking it up…" className="muted small" /> : null;
 }
 
 /** Rules text with mana symbols, from the DOM helpers the deck editor uses. */
@@ -192,6 +223,7 @@ export function CardInspect({ card, loadDetails, ownerName, onClose }: {
     };
   }, [card.name, card.token, card.hidden]);
 
+  const lookup = useCardLookup(card.token || card.hidden ? undefined : card.name);
   const sc = card.name && !card.token ? cached({ name: card.name, quantity: 1, board: "main" }) : undefined;
   const faces: CardFace[] = sc ? (sc.card_faces?.length ? sc.card_faces : [sc as CardFace]) : [];
   const src = bigImage(card);
@@ -218,7 +250,7 @@ export function CardInspect({ card, loadDetails, ownerName, onClose }: {
     >
       <button className="dialog-close" aria-label="Close" onClick={() => ref.current?.close()}>×</button>
       <div className="ci-grid">
-        <div className="ci-image">{src ? <img src={src} alt={card.name} /> : card.hidden ? <CardBack /> : <div className="hz-tile"><strong>{card.name}</strong></div>}</div>
+        <div className="ci-image">{src ? <BigImage src={src} small={smallImage(card)} alt={card.name ?? ""} /> : card.hidden ? <CardBack /> : <div className="hz-tile"><strong>{card.name}</strong><ImageWait card={card} /></div>}</div>
         <div className="ci-text">
           <div className="ci-head">
             <h2>{card.hidden ? "Face-down card" : card.name}</h2>
@@ -235,6 +267,8 @@ export function CardInspect({ card, loadDetails, ownerName, onClose }: {
                 <Rules text={f.oracle_text} />
               </section>
             ))
+          ) : (loadDetails && !details) || (!card.token && !card.hidden && lookup === "loading") ? (
+            <p><Waiting text="Looking up its text…" /></p>
           ) : (
             <p className="muted">{card.token ? "A token: it has what the card that made it gave it." : "No rules text found."}</p>
           )}
@@ -264,7 +298,7 @@ export function CardInspect({ card, loadDetails, ownerName, onClose }: {
                 <h3>Rulings{Array.isArray(rules) && ` (${rules.length})`}</h3>
               </summary>
               {rules === null ? (
-                <p className="muted">Looking up rulings…</p>
+                <p><Waiting text="Looking up rulings…" slow="Still looking up rulings… Scryfall is slow right now." /></p>
               ) : rules === "error" ? (
                 <p className="muted">Couldn't load rulings from Scryfall.</p>
               ) : rules.length === 0 ? (

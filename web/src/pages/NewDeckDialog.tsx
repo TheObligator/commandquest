@@ -10,6 +10,8 @@ import { errorMessage } from "../app/errors";
 import { navigate } from "../app/router";
 import { closeOnBackdrop } from "../carddetails";
 import { useCardSupport } from "../cardsupport";
+import { CardImg } from "../components/CardImg";
+import { BusyLabel, CardSkeletons, ScryfallWaiting } from "../components/Spinner";
 import { FlipButton, useFlips } from "../components/FlipButton";
 import { FORMATS, hasCommander } from "../deckFormats";
 import * as scry from "../scryfall";
@@ -94,7 +96,7 @@ export function NewDeckDialog({ folderId, onClose }: { folderId?: Id<"deckFolder
           <label>
             Folder
             <select value={folder} onChange={(e) => setFolder(e.target.value)} disabled={folders === undefined}>
-              <option value="">No folder</option>
+              <option value="">{folders === undefined ? "Loading folders…" : "No folder"}</option>
               {(folders ?? []).map((f) => <option key={f._id} value={f._id}>{f.name}</option>)}
               <option value={NEW_FOLDER}>+ New folder…</option>
             </select>
@@ -110,7 +112,7 @@ export function NewDeckDialog({ folderId, onClose }: { folderId?: Id<"deckFolder
         <p className="form-error">{error}</p>
         <div className="actions new-deck-actions">
           <button type="button" className="btn ghost" onClick={() => ref.current?.close()}>Cancel</button>
-          <button className="btn" disabled={busy}>{busy ? "Creating…" : "Create deck"}</button>
+          <button className="btn" disabled={busy}><BusyLabel busy={busy} working="Creating…">Create deck</BusyLabel></button>
         </div>
       </form>
     </dialog>
@@ -122,6 +124,8 @@ function CommanderPicker({ format, picked, onPick }: { format: string; picked: s
   const [q, setQ] = useState("");
   const [results, setResults] = useState<scry.ScryCard[] | null>(null);
   const [error, setError] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const support = useCardSupport();
   const flips = useFlips();
   const seq = useRef(0);
@@ -129,15 +133,17 @@ function CommanderPicker({ format, picked, onPick }: { format: string; picked: s
   useEffect(() => {
     const text = q.trim();
     const mine = ++seq.current;
+    setError("");
+    setSearching(text.length >= 2);
     if (text.length < 2) return setResults(null);
     const timer = window.setTimeout(() => {
       scry.search(format === "conquest" ? `${text} t:legendary` : `${text} is:commander`).then(
-        (p) => mine === seq.current && (setResults(p.cards.filter((c) => canCommand(c, format)).slice(0, MAX_RESULTS)), setError("")),
-        (e) => mine === seq.current && setError(errorMessage(e)),
+        (p) => mine === seq.current && (setResults(p.cards.filter((c) => canCommand(c, format)).slice(0, MAX_RESULTS)), setSearching(false)),
+        (e) => mine === seq.current && (setError(scry.lookupError(e)), setSearching(false)),
       );
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [q, format]);
+  }, [q, format, attempt]);
 
   if (picked) {
     const st = support?.status(picked);
@@ -145,7 +151,7 @@ function CommanderPicker({ format, picked, onPick }: { format: string; picked: s
       <div className="field">
         <span className="field-label">Commander</span>
         <div className="picked-commander">
-          {scry.imageUrl(picked, "small") && <img src={scry.imageUrl(picked, "small")} alt="" />}
+          {scry.imageUrl(picked, "small") && <CardImg tiny src={scry.imageUrl(picked, "small")!} name={picked.name} alt="" />}
           <div>
             <strong>{picked.name}</strong>
             <p className="muted small">{picked.type_line}</p>
@@ -164,18 +170,23 @@ function CommanderPicker({ format, picked, onPick }: { format: string; picked: s
         <input type="search" value={q} placeholder="Search for a legendary creature…" onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && e.preventDefault()} />
       </label>
       {error ? (
-        <p className="form-error">{error}</p>
+        <p className="form-error">{error} <button type="button" className="text-link" onClick={() => setAttempt((n) => n + 1)}>Try again</button></p>
+      ) : searching && !results?.length ? (
+        <>
+          <p className="small"><ScryfallWaiting text={`Searching for “${q.trim()}”…`} still="Still searching." /></p>
+          <div className="commander-results sk-late"><CardSkeletons n={4} /></div>
+        </>
       ) : results === null ? null : !results.length ? (
         <p className="muted small">No commanders match “{q.trim()}”.</p>
       ) : (
-        <div className="commander-results">
+        <div className={`commander-results${searching ? " refreshing" : ""}`} aria-busy={searching}>
           {results.map((c) => {
             const st = support?.status(c);
             const face = flips.face(c);
             return (
               <div key={c.id} className="flip-host">
                 <button type="button" className="commander-result" title={st && !st.works ? `${c.name}: ${st.reason}` : `Make ${c.name} the commander`} onClick={() => onPick(c)}>
-                  {scry.imageUrl(c, "normal", face) ? <img src={scry.imageUrl(c, "normal", face)} alt={c.name} loading="lazy" /> : <span className="noimg">{c.name}</span>}
+                  {scry.imageUrl(c, "normal", face) ? <CardImg src={scry.imageUrl(c, "normal", face)!} name={c.name} alt={c.name} loading="lazy" /> : <span className="noimg">{c.name}</span>}
                   {st && !st.works && <span className="small form-error">{st.missing ? "Not playable yet" : "Known issue"}</span>}
                 </button>
                 <FlipButton card={c} face={face} onFlip={flips.toggle} />

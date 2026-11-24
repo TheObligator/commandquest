@@ -4,6 +4,7 @@ import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { errorMessage } from "../app/errors";
+import { BusyLabel, Waiting } from "../components/Spinner";
 import { toast } from "../dom";
 import { bind, changedKeys, DEFAULT_HOTKEYS, HOTKEY_ACTIONS, keyLabel, keyName, MODIFIER_KEYS, RESERVED_KEYS, type HotkeyAction, type Hotkeys } from "../game/hotkeys";
 import { setHotkeys, useHotkeyMap } from "../game/useHotkeys";
@@ -126,7 +127,14 @@ function UsernameSection() {
   const [saving, setSaving] = useState(false);
   const value = draft ?? me?.username ?? "";
 
-  if (isLoading) return null;
+  if (isLoading || (isAuthenticated && me === undefined)) {
+    return (
+      <section className="card settings-section" id="username">
+        <h2>Username</h2>
+        <p><Waiting text="Loading your account…" /></p>
+      </section>
+    );
+  }
   if (!isAuthenticated) {
     return (
       <section className="card settings-section" id="username">
@@ -177,7 +185,7 @@ function UsernameSection() {
           }}
         />
         <button className="btn small" type="submit" disabled={saving || unchanged || !value.trim()}>
-          {me?.hasUsername ? "Change" : "Save"}
+          <BusyLabel busy={saving} working="Saving…">{me?.hasUsername ? "Change" : "Save"}</BusyLabel>
         </button>
       </form>
       <p className="form-error small" id="username-error" role="alert">{error}</p>
@@ -217,7 +225,8 @@ function SearchAdditionsSection() {
           <input
             type="text"
             aria-label="Search additions"
-            placeholder="e.g. game:paper order:cmc"
+            placeholder={settings === undefined ? "Loading…" : "e.g. game:paper order:cmc"}
+            disabled={settings === undefined}
             maxLength={MAX_ADDITIONS}
             value={value}
             onChange={(e) => setText(e.target.value)}

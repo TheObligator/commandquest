@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./app/App";
 import { openedLink } from "./app/handoff";
 import "./style.css";
+import "./loading.css";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL);
 

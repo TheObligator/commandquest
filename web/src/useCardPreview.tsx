@@ -1,6 +1,7 @@
 // Hover preview: a card image beside the hovered card or row, for lists of card names and stacked cards.
 // Off on touch screens (no hover); tapping opens the card details instead.
 import { useState } from "react";
+import { CardImg } from "./components/CardImg";
 import * as scry from "./scryfall";
 
 /** Space between the two faces of a double-faced card. */
@@ -47,7 +48,7 @@ export function useCardPreview() {
   /** Render inside any open modal <dialog>, or the dialog's top layer hides it. */
   const element = preview && (
     <div className={`preview${preview.urls.length > 1 ? " two-faces" : ""}`} style={{ transform: `translate(${preview.x}px, ${preview.y}px)` }}>
-      {preview.urls.map((u) => <img key={u} src={u} alt="" />)}
+      {preview.urls.map((u) => <CardImg key={u} src={u} name="" alt="" />)}
     </div>
   );
   return { handlers, element, hide: () => setPreview(null) };

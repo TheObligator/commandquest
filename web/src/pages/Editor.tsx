@@ -25,7 +25,8 @@ import { ManaCurve } from "../components/ManaCurve";
 import { columnsOf, packStacks, stackColClass } from "../stackLayout";
 import { GROUPINGS, deckTags, groupCards, saveGroupBy, savedGroupBy, type CardGroup, type GroupBy } from "../deckGroups";
 import { ManaCost } from "../components/ManaCost";
-import { Loading } from "../components/Spinner";
+import { CardImg, CardWait } from "../components/CardImg";
+import { BusyLabel, CardSkeletons, Loading, ScryfallWaiting, Spinner } from "../components/Spinner";
 import { CONQUEST } from "../formats/conquest";
 import { checkDeck, identityTest } from "../deckcheck";
 import { canPair, partnerQuery, partnerSlotLabel } from "../formats/partners";
@@ -69,7 +70,7 @@ function editorPath(id: Id<"decks"> | undefined, search: string | null) {
 /** Loads the deck (if editing one), then hands it to the editor once. */
 export function Editor({ id }: { id?: string }) {
   const saved = useQuery(api.decks.get, id ? { id } : "skip");
-  if (id && saved === undefined) return <Loading />;
+  if (id && saved === undefined) return <Loading text="Opening the deck…" />;
   if (id && saved === null) {
     return (
       <>
@@ -90,6 +91,8 @@ function DeckEditor({ initial }: { initial: Draft }) {
   const [saveError, setSaveError] = useState("");
   const [savedOnce, setSavedOnce] = useState(!!initial.id);
   const [missing, setMissing] = useState<string[]>([]);
+  /** The last lookup didn't get through: cards without data aren't on their way. */
+  const [lookupFailed, setLookupFailed] = useState(false);
   // A deck whose cards aren't cached waits on Scryfall (a second or more): show a loading screen
   // until they're in rather than a list that fills in piece by piece.
   const [loadingCards, setLoadingCards] = useState(() => initial.cards.some((c) => !scry.cachedExact(c) && !scry.cached(c)));
@@ -148,10 +151,12 @@ function DeckEditor({ initial }: { initial: Draft }) {
     try {
       notFound = await scry.resolve(cards);
     } catch (e) {
-      toast(`Couldn't load card data from Scryfall: ${errorMessage(e)}`, "error");
+      toast(`Couldn't load card data from Scryfall: ${scry.lookupError(e)}`, "error");
+      setLookupFailed(true);
       return;
     }
     setMissing(notFound);
+    setLookupFailed(false);
     setCardData((n) => n + 1);
     // Use Forge's names ("Delver of Secrets", not "Delver of Secrets // Insectile Aberration")
     // and fill in printings for cards that don't have one (or have a token's).
@@ -554,7 +559,7 @@ function DeckEditor({ initial }: { initial: Draft }) {
         <a href="#/decks" className="back link">← Your decks</a>
         <div className="spinner" aria-hidden="true" />
         <h2>{deck.name}</h2>
-        <p className="muted">Loading {count} cards from Scryfall…</p>
+        <p><ScryfallWaiting text={`Loading ${count} cards from Scryfall…`} still={`Still loading ${count} cards.`} /></p>
       </div>
     );
   }
@@ -563,6 +568,7 @@ function DeckEditor({ initial }: { initial: Draft }) {
     <DeckView
       deck={deck}
       missing={missing}
+      lookupFailed={lookupFailed}
       count={count}
       onQty={setQty}
       onMove={moveCard}
@@ -589,7 +595,7 @@ function DeckEditor({ initial }: { initial: Draft }) {
         <FolderSelect deckId={deck.id} />
         <span className="count-badge" data-ok={String(badgeOk)}>{badge}</span>
         <div className="spacer" />
-        <span className={`save-state small ${saveError ? "error" : "muted"}`} role="status">{saveState}</span>
+        <span className={`save-state small ${saveError ? "error" : "muted"}`} role="status">{saving && <Spinner />} {saveState}</span>
         <details className="menu">
           <summary className="btn ghost">Export</summary>
           <div className="menu-list" onClick={(e) => (e.currentTarget.parentElement as HTMLDetailsElement).removeAttribute("open")}>
@@ -598,7 +604,7 @@ function DeckEditor({ initial }: { initial: Draft }) {
           </div>
         </details>
         <details className="menu">
-          <summary className="btn ghost" title="Change the printing of every card in the deck">{repicking ? "Printings…" : "Printings"}</summary>
+          <summary className="btn ghost" title="Change the printing of every card in the deck"><BusyLabel busy={repicking} working="Finding…">Printings</BusyLabel></summary>
           <div className="menu-list" onClick={(e) => (e.currentTarget.parentElement as HTMLDetailsElement).removeAttribute("open")}>
             {[pref, ...PRINTING_PREFS.map((x) => x.id).filter((x) => x !== pref)].map((x) => (
               <button key={x} disabled={repicking || !deck.cards.length} title={PRINTING_PREFS.find((y) => y.id === x)!.hint} onClick={() => void setAllPrintings(x)}>
@@ -684,7 +690,8 @@ function ImportPane(props: {
   const [replace, setReplace] = useState(props.startReplacing);
   const [url, setUrl] = useState("");
   const [text, setText] = useState("");
-  const [busy, setBusy] = useState(false);
+  /** Which import is running. */
+  const [busy, setBusy] = useState<"link" | "text" | "file" | null>(null);
 
   async function fromParsed(parsed: ReturnType<typeof parseDecklist>, fallbackName?: string) {
     if (!parsed.cards.length) {
@@ -697,7 +704,7 @@ function ImportPane(props: {
 
   async function fromLink() {
     if (!url.trim()) return;
-    setBusy(true);
+    setBusy("link");
     try {
       const d = await props.importFromUrl(url.trim());
       await props.onImport(d.cards, replace, d.name, d.format, d.tokens);
@@ -706,14 +713,29 @@ function ImportPane(props: {
     } catch (e) {
       toast(errorMessage(e), "error");
     } finally {
-      setBusy(false);
+      setBusy(null);
+    }
+  }
+
+  async function fromText() {
+    setBusy("text");
+    try {
+      await fromParsed(parseDecklist(text));
+      setText("");
+    } finally {
+      setBusy(null);
     }
   }
 
   async function fromFile(f: File | undefined) {
     if (!f) return;
     if (f.size > 1_000_000) return toast("That file is too big for a decklist.", "error");
-    await fromParsed(parseDecklist(await f.text()), f.name.replace(/\.[^.]+$/, ""));
+    setBusy("file");
+    try {
+      await fromParsed(parseDecklist(await f.text()), f.name.replace(/\.[^.]+$/, ""));
+    } finally {
+      setBusy(null);
+    }
   }
 
   return (
@@ -726,14 +748,14 @@ function ImportPane(props: {
         <p className="muted small">Public Moxfield or Archidekt decks.</p>
         <div className="search-row">
           <input type="url" placeholder="https://moxfield.com/decks/…" aria-label="Deck link" value={url} autoFocus={props.autoFocus} onChange={(e) => setUrl(e.target.value)} />
-          <button className="btn" disabled={busy} onClick={() => void fromLink()}>{busy ? "Importing…" : "Import link"}</button>
+          <button className="btn" disabled={!!busy} onClick={() => void fromLink()}><BusyLabel busy={busy === "link"} working="Importing…">Import link</BusyLabel></button>
         </div>
       </section>
       <section className="import-block">
         <h3>Paste a list</h3>
         <p className="muted small">Moxfield, Archidekt, Arena or MTGO text exports. One card per line.</p>
         <textarea rows={8} aria-label="Decklist text" placeholder={"Commander\n1 Atraxa, Praetors' Voice\n\nDeck\n1 Sol Ring\n1 Arcane Signet\n…"} value={text} onChange={(e) => setText(e.target.value)} />
-        <button className="btn" onClick={() => void fromParsed(parseDecklist(text)).then(() => setText(""))}>Import text</button>
+        <button className="btn" disabled={!!busy} onClick={() => void fromText()}><BusyLabel busy={busy === "text"} working="Importing…">Import text</BusyLabel></button>
       </section>
       <section className="import-block">
         <h3>Upload a file</h3>
@@ -818,6 +840,7 @@ function useCardDrops(onDrop: (d: DroppedCard, board: Board) => void): Board | n
 function DeckView(props: {
   deck: Draft;
   missing: string[];
+  lookupFailed: boolean;
   count: (b?: Board) => number;
   onQty: (c: DeckCard, q: number) => void;
   onMove: (c: DeckCard, b: Board) => void;
@@ -831,7 +854,7 @@ function DeckView(props: {
   onBracket: (b: number | undefined) => void;
   onBracketTags: (tags: string[]) => void;
 }) {
-  const { deck, missing, count } = props;
+  const { deck, missing, lookupFailed, count } = props;
   /** "GC" on Game Changers in Commander decks (Commander Brackets). */
   const gameChanger = (s: scry.ScryCard | undefined, className: string) =>
     deck.format === "commander" && s?.game_changer ? <span className={className} title="Game Changer: Exhibition and Core decks allow none, Upgraded up to 3">GC</span> : null;
@@ -992,7 +1015,7 @@ function DeckView(props: {
         {notWorking(c, s, "nw-badge")}
         {gameChanger(s, "gc-badge")}
         {c.tags?.length ? <span className="row-tags" title={`Tags: ${c.tags.join(", ")}`}>{c.tags.join(" · ")}</span> : null}
-        {s ? <ManaCost cost={s.mana_cost ?? s.card_faces?.map((f) => f.mana_cost).filter(Boolean).join(" // ")} /> : <span className="muted small">{missing.includes(c.name) ? "not found" : ""}</span>}
+        {s ? <ManaCost cost={s.mana_cost ?? s.card_faces?.map((f) => f.mana_cost).filter(Boolean).join(" // ")} /> : <span className="muted small">{missing.includes(c.name) ? "not found" : lookupFailed ? "" : <span title="Looking it up"><Spinner /></span>}</span>}
         {cardMenu(c, s)}
       </li>
     );
@@ -1013,7 +1036,7 @@ function DeckView(props: {
     return (
       <div key={key(c, i)} className={`card-tile${s ? "" : " unresolved"}${brokenClass(c, s)}`} {...preview.handlers(s, face)} onContextMenu={onContextMenu(c)} {...dragOut(c)}>
         <button className="tile-img" title={s ? undefined : c.name} aria-label={`${c.quantity} × ${c.name}: card details`} disabled={!s} onClick={() => s && openDetails(c, s)}>
-          {img ? <img src={img} alt={c.name} loading="lazy" draggable={false} /> : <span className="noimg">{c.name}{missing.includes(c.name) ? " (not found)" : ""}</span>}
+          {img ? <CardImg src={img} name={c.name} alt={c.name} loading="lazy" draggable={false} /> : s || missing.includes(c.name) || lookupFailed ? <span className="noimg">{c.name}{missing.includes(c.name) ? " (not found)" : ""}</span> : <CardWait name={c.name} />}
         </button>
         {/* The name as invisible text over the printed one, so the browser's find (Ctrl+F) finds and highlights cards. */}
         {img && <span className="tile-name" aria-hidden="true">{c.name}</span>}
@@ -1369,6 +1392,16 @@ function Stats({ deck, count, onExtraColor }: { deck: Draft; count: (b?: Board) 
   );
 }
 
+/** A picker's grid of cards, while Scryfall is asked for them. */
+function CardsLoading({ text, still }: { text: string; still: string }) {
+  return (
+    <>
+      <p><ScryfallWaiting text={text} still={still} /></p>
+      <div className="results"><CardSkeletons n={8} /></div>
+    </>
+  );
+}
+
 function Printings({ card, onPick, onClose }: { card: DeckCard; onPick: (p: scry.ScryCard) => void; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [prints, setPrints] = useState<scry.ScryCard[] | null>(null);
@@ -1384,7 +1417,9 @@ function Printings({ card, onPick, onClose }: { card: DeckCard; onPick: (p: scry
       <div className="dialog-head">
         <h3>Printings of {card.name}</h3>
       </div>
-      {error ? <p className="form-error">{error}</p> : !prints ? <p className="muted">Loading…</p> : (
+      {error ? <p className="form-error">{error}</p> : !prints ? (
+        <CardsLoading text="Finding its printings…" still="Still finding its printings." />
+      ) : (
         <div className="results">
           {prints.map((p) => (
             <div key={p.id} className="flip-host">
@@ -1396,7 +1431,7 @@ function Printings({ card, onPick, onClose }: { card: DeckCard; onPick: (p: scry
                   ref.current?.close();
                 }}
               >
-                <img src={scry.imageUrl(p, "normal", flips.face(p)) ?? ""} alt={p.set_name} loading="lazy" />
+                <CardImg src={scry.imageUrl(p, "normal", flips.face(p)) ?? ""} name={p.set_name} alt={p.set_name} loading="lazy" />
                 <span className="small muted">{p.set.toUpperCase()} #{p.collector_number}</span>
                 {scry.artistOf(p) && <span className="small muted">{scry.artistOf(p)}</span>}
               </button>
@@ -1583,7 +1618,7 @@ function PartnerPicker({ commander, label, onPick, onClose }: { commander: scry.
         <h3>Add {label}</h3>
         <p className="muted small">Cards that can be your second commander beside {commander.name}.</p>
       </div>
-      {error ? <p className="form-error">{error}</p> : !cards ? <p className="muted">Loading…</p> : !cards.length ? <p className="muted">Scryfall has no cards that pair with {commander.name}.</p> : (
+      {error ? <p className="form-error">{error}</p> : !cards ? <CardsLoading text="Finding cards that pair with it…" still="Still finding cards." /> : !cards.length ? <p className="muted">Scryfall has no cards that pair with {commander.name}.</p> : (
         <div className="results">
           {cards.map((c) => {
             const st = support?.status(c);
@@ -1598,7 +1633,7 @@ function PartnerPicker({ commander, label, onPick, onClose }: { commander: scry.
                     ref.current?.close();
                   }}
                 >
-                  {scry.imageUrl(c, "normal", face) ? <img src={scry.imageUrl(c, "normal", face)} alt={c.name} loading="lazy" /> : <span className="noimg">{c.name}</span>}
+                  {scry.imageUrl(c, "normal", face) ? <CardImg src={scry.imageUrl(c, "normal", face)!} name={c.name} alt={c.name} loading="lazy" /> : <span className="noimg">{c.name}</span>}
                   <span className="small">{c.name}</span>
                   {st && !st.works && <span className="small form-error">{st.missing ? "Not playable yet" : "Known issue"}</span>}
                 </button>
@@ -1608,7 +1643,7 @@ function PartnerPicker({ commander, label, onPick, onClose }: { commander: scry.
           })}
           {next && (
             <button className="btn ghost wide partner-more" disabled={loadingMore} onClick={() => void more()}>
-              {loadingMore ? "Loading…" : "Load more"}
+              <BusyLabel busy={loadingMore} working="Loading…">Load more</BusyLabel>
             </button>
           )}
         </div>

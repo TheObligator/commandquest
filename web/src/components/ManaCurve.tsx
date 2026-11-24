@@ -1,3 +1,4 @@
+import { CardImg } from "./CardImg";
 import { useState } from "react";
 import * as scry from "../scryfall";
 import { TYPE_ORDER } from "../deckGroups";
@@ -58,7 +59,7 @@ export function ManaCurve({ cards }: { cards: Entry[] }) {
         <div className="curve-tip-art">
           {es.slice(0, PICTURES).map((e) => {
             const img = scry.imageUrl(e.card, "normal");
-            return img && <img key={e.name} src={img} alt="" />;
+            return img && <CardImg key={e.name} src={img} name={e.name} alt="" />;
           })}
         </div>
         <ul className="curve-tip-cards">
