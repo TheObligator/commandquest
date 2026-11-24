@@ -233,10 +233,7 @@ export function SearchBox(props: { onPick: (name: string) => void; onSubmit: (qu
       {listOpen && (
         <ul className={`suggest-list${state === "searching" && names.length ? " refreshing" : ""}`} id="suggest-list" role="listbox" aria-busy={state === "searching"}>
           {state === "searching" && !names.length && (
-            <>
-              <li className="suggest-note" role="presentation"><ScryfallWaiting text={`Searching for “${q.trim()}”…`} still="Still searching." /></li>
-              {[46, 62, 38].map((w) => <li key={w} className="suggest-sk" role="presentation"><span className="sk-bar shimmer" style={{ width: `${w}%` }} /></li>)}
-            </>
+            <li className="suggest-note" role="presentation"><ScryfallWaiting text={`Searching for “${q.trim()}”…`} still="Still searching." /></li>
           )}
           {state === "none" && (
             <li className="suggest-note" role="presentation">
@@ -664,8 +661,9 @@ export function SearchResults(props: {
       )}
       <div className="search-grid">
         {shown.map((c) => tile(c))}
-        {((total === null && !error) || loadingMore) && <CardSkeletons n={loadingMore ? 6 : 12} />}
+        {loadingMore && <CardSkeletons n={Math.min(6, (total ?? 0) - cards.length)} />}
       </div>
+      {total === null && !error && <div className="loading" aria-hidden="true"><div className="spinner" /></div>}
       {next && (
         <button className="btn ghost wide" disabled={loadingMore} onClick={() => void more()}>
           <BusyLabel busy={loadingMore} working="Loading…">

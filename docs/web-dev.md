@@ -120,7 +120,9 @@ coming. What's loading moves; what has stopped stands still and says why, with a
 Use the shared pieces (`web/src/loading.css`) rather than plain "Loading…" text:
 
 - A card's picture: `CardImg` (`web/src/components/CardImg.tsx`), or `CardWait` / `CardNone` while
-  its data is looked up or when there's none. Grids that are loading: `CardSkeletons`, `DeckSkeletons`.
+  its data is looked up or when there's none. Grids that are loading: `CardSkeletons`, `DeckSkeletons`,
+  only for as many as are surely coming, so nothing seems to vanish when they arrive. With no way to know how
+  many, show a spinner, or what's known already (`KnownPrintings`).
 - A page: `Loading`. One line: `Waiting`, or `ScryfallWaiting` when it's Scryfall (it says when
   Scryfall is slow, and counts down a 429's pause). A button that's working: `BusyLabel`. All in
   `web/src/components/Spinner.tsx`.

@@ -77,14 +77,19 @@ export function BusyLabel({ busy, working, children }: { busy: boolean; working:
 
 // ---- Placeholders ------------------------------------------------------------------------------
 
-/** Card-shaped placeholders, to fill a grid of cards while they load. */
+/**
+ * Card-shaped placeholders, to fill a grid of cards while they load. Only for cards that are surely
+ * coming, never more than there will be: a list that shrinks when it loads looks like cards went
+ * missing. When there's no telling how many, show the spinner (Loading) or the cards we have already.
+ */
 export function CardSkeletons({ n }: { n: number }) {
   return <>{Array.from({ length: n }, (_, i) => <div key={i} className="sk-card shimmer" aria-hidden="true" />)}</>;
 }
 
-/** Deck tiles that are loading (the deck list, precons). */
+/** Deck tiles that are loading (the deck list, precons): as many as there were last time, at most. */
 export function DeckSkeletons({ n, text }: { n: number; text: string }) {
   const slow = useSlow();
+  if (!n) return <Loading text={text} />;
   return (
     <div className="deck-grid sk-late" role="status">
       <span className={slow ? "sk-note muted" : "sr-only"}>{slow ? <Waiting text="Still loading… this is taking longer than usual." /> : text}</span>

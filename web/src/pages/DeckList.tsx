@@ -30,6 +30,17 @@ export function ago(ms: number) {
   return new Date(ms).toLocaleDateString();
 }
 
+/** How many decks this list had last time (so its placeholders don't promise more), or sets it. */
+const COUNT_KEY = "cq.deckCount.";
+function savedCount(key: string, set?: number): number {
+  try {
+    if (set !== undefined) localStorage.setItem(key, String(set));
+    return Math.min(60, Number(localStorage.getItem(key)) || 0);
+  } catch {
+    return 0; // no storage: the spinner instead
+  }
+}
+
 export function DeckList() {
   const { query } = useRoute();
   const decks = useQuery(api.decks.list);
@@ -63,6 +74,11 @@ export function DeckList() {
   const visible = (decks ?? []).filter((d) => shown === "all" || (shown === "none" ? !d.folderId : d.folderId === shown));
   const countIn = (id: Id<"deckFolders">) => (decks ?? []).filter((d) => d.folderId === id).length;
   const unfiled = (decks ?? []).filter((d) => !d.folderId).length;
+
+  const countKey = COUNT_KEY + (param ?? "all");
+  useEffect(() => {
+    if (decks && folders) savedCount(countKey, visible.length);
+  }, [decks, folders, countKey, visible.length]);
 
   async function move(deckId: Id<"decks">, to: Id<"deckFolders"> | null) {
     const d = decks?.find((x) => x._id === deckId);
@@ -135,7 +151,7 @@ export function DeckList() {
         {actions}
       </div>
       {decks === undefined || folders === undefined ? (
-        <DeckSkeletons n={6} text="Loading your decks…" />
+        <DeckSkeletons n={savedCount(countKey)} text="Loading your decks…" />
       ) : decks.length === 0 && folders.length === 0 ? (
         <div className="empty card">
           <h3>No decks yet</h3>

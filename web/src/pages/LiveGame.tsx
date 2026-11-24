@@ -1222,7 +1222,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
       gameMenu={gameMenu}
       peek={searchOf && game.searchList?.owner === searchOf
         ? { title: `${searchPlayer?.name ?? "Their"}'s library (they let you search it; right-click a card to exile it)`, cards: game.searchList.cards, onClose: () => game.endSearch(searchOf) }
-        : peek ? { title: peek.top > 0 ? `Top ${peek.top === 1 ? "card" : `${peek.top} cards`} of your library` : "Your library (only you see this)", cards: peekCards, loading: game.libraryList?.top !== peek.top, onClose: closePeek } : null}
+        : peek ? { title: peek.top > 0 ? `Top ${peek.top === 1 ? "card" : `${peek.top} cards`} of your library` : "Your library (only you see this)", cards: peekCards, loading: game.libraryList?.top !== peek.top, expect: peek.top > 0 ? Math.min(peek.top, myLibrary) : myLibrary, onClose: closePeek } : null}
       stackItemMenu={(s) => [
         {
           items: s.yieldKey

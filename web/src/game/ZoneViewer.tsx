@@ -28,6 +28,8 @@ export function ZoneViewer(props: {
   topFirst?: boolean;
   /** The cards are still on their way from the game server. */
   loading?: boolean;
+  /** How many cards are coming, while they load. */
+  expect?: number;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const setPreview = usePreview();
@@ -79,7 +81,7 @@ export function ZoneViewer(props: {
         </div>
       )}
       {props.loading && !props.cards.length ? (
-        <div className="zv-grid"><CardSkeletons n={6} /></div>
+        <div className="zv-grid"><CardSkeletons n={Math.min(12, props.expect ?? 0)} /></div>
       ) : cards.length ? (
         <div className="zv-grid" onMouseDown={onMouseDown}>
           {marquee}

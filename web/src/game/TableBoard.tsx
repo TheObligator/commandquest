@@ -173,7 +173,7 @@ export function TableBoard(props: {
   /** Live games: a stack item's auto-yield settings (its "⋯" and right-click). */
   stackItemMenu?: (s: StackItemView) => MenuSection[];
   /** Live games: cards the page shows you in a viewer (your library while you search it). */
-  peek?: { title: string; cards: CardView[]; loading?: boolean; onClose: () => void } | null;
+  peek?: { title: string; cards: CardView[]; loading?: boolean; expect?: number; onClose: () => void } | null;
   /** The game's own menu (layout, full screen, concede…): on the board's and the background's
    *  right-click menus, and the ☰ button. Live games, where the page has no toolbar. */
   gameMenu?: MenuSection[];
@@ -456,6 +456,7 @@ export function TableBoard(props: {
           title={props.peek.title}
           cards={props.peek.cards}
           loading={props.peek.loading}
+          expect={props.peek.expect}
           topFirst
           viewer={me}
           nameOf={nameOf}

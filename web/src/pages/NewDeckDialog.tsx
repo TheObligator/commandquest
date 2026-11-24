@@ -11,7 +11,7 @@ import { navigate } from "../app/router";
 import { closeOnBackdrop } from "../carddetails";
 import { useCardSupport } from "../cardsupport";
 import { CardImg } from "../components/CardImg";
-import { BusyLabel, CardSkeletons, ScryfallWaiting } from "../components/Spinner";
+import { BusyLabel, ScryfallWaiting } from "../components/Spinner";
 import { FlipButton, useFlips } from "../components/FlipButton";
 import { FORMATS, hasCommander } from "../deckFormats";
 import * as scry from "../scryfall";
@@ -172,10 +172,7 @@ function CommanderPicker({ format, picked, onPick }: { format: string; picked: s
       {error ? (
         <p className="form-error">{error} <button type="button" className="text-link" onClick={() => setAttempt((n) => n + 1)}>Try again</button></p>
       ) : searching && !results?.length ? (
-        <>
-          <p className="small"><ScryfallWaiting text={`Searching for “${q.trim()}”…`} still="Still searching." /></p>
-          <div className="commander-results sk-late"><CardSkeletons n={4} /></div>
-        </>
+        <p className="small"><ScryfallWaiting text={`Searching for “${q.trim()}”…`} still="Still searching." /></p>
       ) : results === null ? null : !results.length ? (
         <p className="muted small">No commanders match “{q.trim()}”.</p>
       ) : (

@@ -26,7 +26,8 @@ import { columnsOf, packStacks, stackColClass } from "../stackLayout";
 import { GROUPINGS, deckTags, groupCards, saveGroupBy, savedGroupBy, type CardGroup, type GroupBy } from "../deckGroups";
 import { ManaCost } from "../components/ManaCost";
 import { CardImg, CardWait } from "../components/CardImg";
-import { BusyLabel, CardSkeletons, Loading, ScryfallWaiting, Spinner } from "../components/Spinner";
+import { KnownPrintings } from "../components/KnownPrintings";
+import { BusyLabel, Loading, ScryfallWaiting, Spinner } from "../components/Spinner";
 import { CONQUEST } from "../formats/conquest";
 import { checkDeck, identityTest } from "../deckcheck";
 import { canPair, partnerQuery, partnerSlotLabel } from "../formats/partners";
@@ -1392,16 +1393,6 @@ function Stats({ deck, count, onExtraColor }: { deck: Draft; count: (b?: Board) 
   );
 }
 
-/** A picker's grid of cards, while Scryfall is asked for them. */
-function CardsLoading({ text, still }: { text: string; still: string }) {
-  return (
-    <>
-      <p><ScryfallWaiting text={text} still={still} /></p>
-      <div className="results"><CardSkeletons n={8} /></div>
-    </>
-  );
-}
-
 function Printings({ card, onPick, onClose }: { card: DeckCard; onPick: (p: scry.ScryCard) => void; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [prints, setPrints] = useState<scry.ScryCard[] | null>(null);
@@ -1416,9 +1407,11 @@ function Printings({ card, onPick, onClose }: { card: DeckCard; onPick: (p: scry
       <button className="dialog-close" aria-label="Close" onClick={() => ref.current?.close()}>×</button>
       <div className="dialog-head">
         <h3>Printings of {card.name}</h3>
+        {/* Up here, so the window doesn't get smaller when the list arrives. */}
+        {!prints && !error && <span className="small"><ScryfallWaiting text="Finding its printings…" still="Still finding its printings." /></span>}
       </div>
       {error ? <p className="form-error">{error}</p> : !prints ? (
-        <CardsLoading text="Finding its printings…" still="Still finding its printings." />
+        <div className="results"><KnownPrintings cards={[scry.cachedExact(card) ?? scry.cached(card)]} selected={card.scryfallId} /></div>
       ) : (
         <div className="results">
           {prints.map((p) => (
@@ -1618,7 +1611,7 @@ function PartnerPicker({ commander, label, onPick, onClose }: { commander: scry.
         <h3>Add {label}</h3>
         <p className="muted small">Cards that can be your second commander beside {commander.name}.</p>
       </div>
-      {error ? <p className="form-error">{error}</p> : !cards ? <CardsLoading text="Finding cards that pair with it…" still="Still finding cards." /> : !cards.length ? <p className="muted">Scryfall has no cards that pair with {commander.name}.</p> : (
+      {error ? <p className="form-error">{error}</p> : !cards ? <Loading text="Finding cards that pair with it…" slow="Still finding cards. Scryfall is slow right now." /> : !cards.length ? <p className="muted">Scryfall has no cards that pair with {commander.name}.</p> : (
         <div className="results">
           {cards.map((c) => {
             const st = support?.status(c);

@@ -443,7 +443,7 @@ dialog.new-deck h3 { margin: 0; padding-right: 36px; }
 .preview.two-faces { display: flex; gap: 8px; width: auto; }
 
 dialog.printings { width: min(1100px, calc(100vw - 32px)); max-height: 88vh; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow); overflow: hidden; position: fixed; }
-dialog.printings .dialog-head { padding-right: 44px; min-height: 30px; }
+dialog.printings .dialog-head { padding-right: 44px; min-height: 30px; gap: 4px 16px; }
 dialog.printings[open] { display: flex; flex-direction: column; }
 dialog.printings .results { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; overflow-y: auto; min-height: 0; flex: 1; padding: 4px 6px 4px 2px; overscroll-behavior: contain; }
 dialog::backdrop { background: rgb(0 0 0 / 60%); }

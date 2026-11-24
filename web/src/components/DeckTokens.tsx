@@ -9,7 +9,8 @@ import { errorMessage } from "../app/errors";
 import { closeOnBackdrop } from "../carddetails";
 import { toast } from "../dom";
 import { CardImg, CardWait } from "./CardImg";
-import { CardSkeletons, ScryfallWaiting, Waiting } from "./Spinner";
+import { KnownPrintings } from "./KnownPrintings";
+import { ScryfallWaiting, Waiting } from "./Spinner";
 import * as scry from "../scryfall";
 import type { DeckToken } from "../tokens";
 import { useDeckTokens } from "../useDeckTokens";
@@ -79,6 +80,11 @@ function ptOf(t: DeckToken) {
   return pt && pt !== "-" ? pt : "";
 }
 
+/** The printings the deck's own cards make. Several often make the same one (Lathril's elves): listed once. */
+function ownPrintings(token: DeckToken): scry.ScryCard[] {
+  return [...new Set(token.sources.map((s) => s.tokenId))].map((id) => scry.cachedById(id)).filter((c): c is scry.ScryCard => !!c);
+}
+
 /** Printings of one token: the deck's own sources first, then every other printing on Scryfall. */
 function TokenPrintings({ token, onPick, onClose }: { token: DeckToken; onPick: (id: string) => void; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -92,8 +98,7 @@ function TokenPrintings({ token, onPick, onClose }: { token: DeckToken; onPick: 
     scry
       .search(q, "prints")
       .then((page) => {
-        // Several of the deck's cards often make the same printing (Lathril's elves): list it once.
-        const own = [...new Set(token.sources.map((s) => s.tokenId))].map((id) => scry.cachedById(id)).filter((c): c is scry.ScryCard => !!c);
+        const own = ownPrintings(token);
         const seen = new Set(own.map((c) => c.id));
         setPrints([...own, ...page.cards.filter((c) => !seen.has(c.id))]);
       })
@@ -105,12 +110,11 @@ function TokenPrintings({ token, onPick, onClose }: { token: DeckToken; onPick: 
       <button className="dialog-close" aria-label="Close" onClick={() => ref.current?.close()}>×</button>
       <div className="dialog-head">
         <h3>{token.name} token</h3>
+        {/* Up here, so the window doesn't get smaller when the list arrives. */}
+        {!prints && !error && <span className="small"><ScryfallWaiting text="Finding its printings…" still="Still finding its printings." /></span>}
       </div>
       {error ? <p className="form-error">{error}</p> : !prints ? (
-        <>
-          <p><ScryfallWaiting text="Finding its printings…" still="Still finding its printings." /></p>
-          <div className="results"><CardSkeletons n={8} /></div>
-        </>
+        <div className="results"><KnownPrintings cards={ownPrintings(token)} selected={token.id} /></div>
       ) : (
         <div className="results">
           {prints.map((p) => (
