@@ -68,6 +68,23 @@ opening a deck doesn't wait on Scryfall. Only cards it hasn't seen before go to 
 are quick; the first full run takes about four minutes. After merging upstream Forge, run it and
 commit the results (the nightly Forge sync does this); `npm test` fails locally while they're out of date.
 
+### The card search dropdown
+
+Suggestions come from a list of every card name, searched in the browser, so typing makes no requests
+and misspellings are found as you type. `scripts/cardnames.ts` builds the list
+(`web/public/card-names.json`, not committed) from Scryfall's daily bulk data: names in EDHREC
+popularity order, plus what the color identity rules need (including Conquest's hybrid rule and
+Rulebreakers, so those rules run on the list unchanged). `vite.config.ts` runs it before every build,
+and when the dev server starts if the file is over a day old. If Scryfall can't be reached, the build
+only warns. `node scripts/cardnames.ts` refreshes it by hand.
+
+`src/cardsearch.ts` is the matching, `src/cardsearch.worker.ts` runs it in a Web Worker, and
+`src/localsearch.ts` is how the search box asks it. Scryfall is still asked when the list isn't loaded
+and when nothing in it has the text as typed (a card newer than the last deploy). Pressing Enter, and
+Scryfall syntax, search Scryfall as before. A Rulebreaker that asks about something the list doesn't
+have (it keeps front-face types, power of 4 or more, mana value of 7 or more) needs it added in
+`buildCardNames` and `cardAt`.
+
 ### Cards that don't work in games
 
 The deck editor, its search results and the game start screen mark cards that won't work in a game

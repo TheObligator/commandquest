@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { MAX_QUANTITY, type Board, type DeckCard } from "../../convex/model/deckRules";
 import { showCardDetails } from "../carddetails";
+import { plainFits, type IdentityRules } from "../cardsearch";
 import { useCardSupport } from "../cardsupport";
 import { CardImg } from "../components/CardImg";
 import { CardMenu } from "../components/CardMenu";
@@ -13,6 +14,7 @@ import { cardLegality, fitsIdentity, isCommanderEligible } from "../formats/conq
 import { bestExtraColor, identityQuery, mentionsIdentity, offIdentity } from "../formats/rulebreakers";
 import { commanderCards } from "../edhrec";
 import { compileQuery } from "../game/scryquery";
+import { localNames, startLocalSearch } from "../localsearch";
 import * as scry from "../scryfall";
 import { displayTerms, forEdhrecCards, hasOrder, joinQuery, locallyReadable, nameTerms, restrictToNames, stripDisplay } from "../searchquery";
 import { BOARDS, boardLabel, inDeckParts } from "./boards";
@@ -38,21 +40,28 @@ export const canCommand = (c: scry.ScryCard, format: string) =>
 export function identityFilter(format: string, deck: DeckCard[], commanders: scry.ScryCard[], extraColorPick?: string) {
   const conquest = format === "conquest";
   if (!((format === "commander" || conquest) && commanders.length)) return null;
-  const fits = conquest ? fitsIdentity : (card: { color_identity: string[] }, id: Set<string>) => card.color_identity.every((x) => id.has(x));
+  const fits = conquest ? fitsIdentity : plainFits;
   const extraColor =
     extraColorPick ??
     bestExtraColor(deck.flatMap((d) => { const card = d.board === "main" ? scry.cached(d) : undefined; return card ? [{ card, quantity: d.quantity }] : []; }), commanders, fits);
   /** The ids of `cards` the deck can't play after all (only Conquest's hybrid cards get this far). */
   const offIds = (cards: scry.ScryCard[]) =>
     conquest ? new Set(offIdentity(cards.map((c) => ({ name: c.id, card: c })), commanders, fitsIdentity, extraColor).map((e) => e.name)) : new Set<string>();
+  /** The same limits for the local name search, which only needs the commanders' names and colors. */
+  const rules: IdentityRules = {
+    commanders: commanders.map((c) => ({ name: c.name, layout: c.layout, type_line: c.type_line, color_identity: c.color_identity, legalities: {} })),
+    conquest,
+    extraColor,
+  };
   // Scryfall lets art cards (no colors, not playable) into searches with an identity filter.
-  return { clause: `${identityQuery(commanders, extraColor, conquest)} -layout:art_series`, fits, extraColor, offIds };
+  return { clause: `${identityQuery(commanders, extraColor, conquest)} -layout:art_series`, fits, extraColor, offIds, rules };
 }
 
 // ---- Name box with suggestions -----------------------------------------------------------
 
 /**
- * Typing shows up to 8 matching card names. Clicking one (or ↓/↑ then Enter) adds that card.
+ * Typing shows up to 8 matching card names at once, found in the browser (localsearch.ts); Scryfall is
+ * asked when the local list isn't loaded, or doesn't have the name as typed (a card newer than it). Clicking one (or ↓/↑ then Enter) adds that card.
  * Enter on the typed text opens the full results page. With `identity` (a commander deck), only
  * names of cards the commanders allow are suggested.
  */
@@ -74,6 +83,7 @@ export function SearchBox(props: { onPick: (name: string) => void; onSubmit: (qu
       if (!box.current?.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener("pointerdown", onDown);
+    startLocalSearch();
     return () => document.removeEventListener("pointerdown", onDown);
   }, []);
 
@@ -88,30 +98,66 @@ export function SearchBox(props: { onPick: (name: string) => void; onSubmit: (qu
       setState("idle");
       return;
     }
-    // Straight away, so it's clear that something's happening; the names of a moment ago stay, dimmed.
-    setState("searching");
-    setOpen(true);
     const identity = props.identity;
+    const local = localNames(value, identity?.rules);
+    if (!local) {
+      askScryfall(value, mine);
+      return;
+    }
+    local.then(
+      (r) => {
+        if (mine !== seq.current) return;
+        if (r.kind === "none" && !r.known) {
+          askScryfall(value, mine, "newer");
+          return;
+        }
+        setNames(r.names);
+        setGuessed(r.kind === "guess");
+        setState(r.names.length ? "idle" : "none");
+        setOpen(true);
+        // Guesses, so perhaps it's a card newer than our list: see if Scryfall has the name as typed.
+        if (r.kind === "guess" && !r.known) askScryfall(value, mine, "quietly");
+      },
+      () => mine === seq.current && askScryfall(value, mine),
+    );
+  }
+
+  /**
+   * Look the text up on Scryfall once typing pauses. `newer`: our own list has nothing like it, so only
+   * names with the text as typed are news. `quietly`: likewise, while our list's guesses are showing.
+   */
+  function askScryfall(value: string, mine: number, why?: "newer" | "quietly") {
+    const identity = props.identity;
+    if (why !== "quietly") {
+      // Straight away, so it's clear that something's happening; the names of a moment ago stay, dimmed.
+      setState("searching");
+      setOpen(true);
+    }
     timer.current = window.setTimeout(async () => {
       try {
         let found = identity ? await suggestWithin(value, identity) : await scry.autocomplete(value);
         let guess = false;
-        if (!found.length && mine === seq.current) {
+        if (!found.length && !why && mine === seq.current) {
           // Nothing by that spelling: offer the closest names instead ("did you mean").
           found = await scry.didYouMean(value);
           if (identity && found.length) found = await keepWithin(found, identity);
           guess = true;
         }
         if (mine !== seq.current) return;
+        if (why === "quietly") {
+          // Only ever added to the end: a name mustn't move as it's being clicked.
+          if (found.length) setNames((shown) => [...new Set([...shown, ...found])].slice(0, 8));
+          return;
+        }
         setNames(found.slice(0, 8));
         setGuessed(guess);
         setState(found.length ? "idle" : "none");
       } catch {
-        if (mine !== seq.current) return;
+        if (mine !== seq.current || why === "quietly") return;
         setNames([]);
         setState("failed");
       }
-    }, 200);
+    }, why === "quietly" ? 600 : 200);
   }
 
   function pick(name: string) {
@@ -205,7 +251,7 @@ export function SearchBox(props: { onPick: (name: string) => void; onSubmit: (qu
           )}
           {guessed && names.length > 0 && (
             <li className="suggest-note" role="presentation">
-              No card names match “{q.trim()}”. Did you mean:
+              No card names match “{q.trim()}”{props.identity ? " among the cards your commander allows" : ""}. Did you mean:
             </li>
           )}
           {names.map((n, i) => (

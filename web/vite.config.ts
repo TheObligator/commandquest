@@ -1,5 +1,6 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
+import { updateCardNames } from "./scripts/cardnames";
 
 // Each build gets an id, compiled into the bundle and written to /version.json, so an open tab can
 // tell when the site has been redeployed (src/app/UpdateNotice.tsx).
@@ -15,12 +16,27 @@ function versionFile(): Plugin {
   };
 }
 
+/** The card names for the editor's search: there before a build, and fetched as the dev server starts. */
+function cardNames(): Plugin {
+  let dev = false;
+  return {
+    name: "card-names",
+    configResolved(config) {
+      dev = config.command === "serve";
+    },
+    async buildStart() {
+      const updated = updateCardNames();
+      if (!dev) await updated;
+    },
+  };
+}
+
 // In dev, Vite proxies API and WebSocket traffic to the Java server so the
 // browser only ever talks to one origin (no CORS setup needed).
 const server = process.env.FORGE_SERVER ?? "http://localhost:8080";
 
 export default defineConfig({
-  plugins: [react(), versionFile()],
+  plugins: [react(), versionFile(), cardNames()],
   define: { __BUILD_ID__: JSON.stringify(buildId) },
   server: {
     // IPv4 loopback explicitly: Node resolves "localhost" to ::1 on macOS, but

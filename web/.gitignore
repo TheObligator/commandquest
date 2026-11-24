@@ -6,3 +6,5 @@ dist/
 # also when it's a link to another checkout's node_modules
 /node_modules
 *.tsbuildinfo
+# built from Scryfall bulk data by scripts/cardnames.ts
+/public/card-names.json
