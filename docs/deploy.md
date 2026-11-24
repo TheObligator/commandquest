@@ -81,6 +81,15 @@ required reviewer, so nothing reaches the public site without a click.
 CI tests the Java game server but doesn't deploy it: it runs on the Mac (docs/game-host.md), which
 deploys a new `web` itself when no game is running (`game-service.sh auto-on`).
 
+## Nightly card names
+
+`.github/workflows/card-names.yml` runs at 08:23 UTC, and by hand from `Actions → Card names → Run
+workflow`. It downloads the deck editor's card-name list from Scryfall (three tries), tests it, and saves
+it in the build cache that deploys fall back on when Scryfall is down (docs/web-dev.md). Once a week it
+also commits the list to `web` as `web/data/card-names.json` and starts the Web workflow; by hand, tick
+the box to commit it now. If the download fails, the run fails and nothing changes. The sites
+themselves get a new list when they're next deployed. GitHub often starts scheduled runs hours late.
+
 ## Nightly Forge sync
 
 `.github/workflows/forge-sync.yml` runs at 10:00 UTC (2 am Pacific), and by hand from

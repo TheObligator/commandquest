@@ -6,7 +6,8 @@
 // used: the last one downloaded (CI keeps it in a build cache) or the committed copy,
 // data/card-names.json. With neither, the search box asks Scryfall as you type.
 //
-// `npm run cardnames` downloads a new list and updates the committed copy.
+// `npm run cardnames` downloads a new list and updates the committed copy. With `--copy-weekly` the copy
+// is left alone for a week (.github/workflows/card-names.yml runs that nightly).
 import { copyFileSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +18,8 @@ const OUT_FILE = join(WEB, "public", "card-names.json");
 export const COPY_FILE = join(WEB, "data", "card-names.json");
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const TIMEOUT_MS = 120_000;
+/** Just under a week, so a nightly run that starts a little early still counts the seventh night. */
+const COPY_AGE_MS = 6.5 * 24 * 60 * 60 * 1000;
 /** Fewer cards than this means the data was cut short. */
 const MIN_CARDS = 30_000;
 const HEADERS = { "User-Agent": "CommandQuest/1.0", Accept: "application/json" };
@@ -90,8 +93,16 @@ export async function updateCardNames({ out = OUT_FILE, copy = COPY_FILE } = {})
   }
 }
 
+/** Download a new list, and update the committed copy from it (with `weekly`, only if that's a week old). */
+export async function refresh({ out = OUT_FILE, copy = COPY_FILE, weekly = false } = {}): Promise<void> {
+  await download(out);
+  const copied = builtAt(copy);
+  if (weekly && copied !== undefined && Date.now() - copied < COPY_AGE_MS) return;
+  mkdirSync(dirname(copy), { recursive: true });
+  copyFileSync(out, copy);
+  console.log("Updated the committed copy.");
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  await download(OUT_FILE);
-  mkdirSync(dirname(COPY_FILE), { recursive: true });
-  copyFileSync(OUT_FILE, COPY_FILE);
+  await refresh({ weekly: process.argv.includes("--copy-weekly") });
 }

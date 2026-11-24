@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
 import { gzipSync } from "node:zlib";
-import { builtAt, COPY_FILE, updateCardNames } from "../scripts/cardnames.ts";
+import { builtAt, COPY_FILE, refresh, updateCardNames } from "../scripts/cardnames.ts";
 import { CARD_NAMES_VERSION } from "../src/cardsearch.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -19,7 +19,7 @@ function list(file: string, days: number, name: string, version = CARD_NAMES_VER
   const names = [name, ...Array.from({ length: 30_000 }, (_, i) => `Card ${i}`)];
   writeFileSync(file, JSON.stringify({ version, built: new Date(Date.now() - days * DAY).toISOString(), names }));
 }
-const firstName = () => (JSON.parse(readFileSync(files.out, "utf8")) as { names: string[] }).names[0];
+const firstName = (file = files.out) => (JSON.parse(readFileSync(file, "utf8")) as { names: string[] }).names[0];
 
 function scryfall(status: number, cards = 30_000) {
   globalThis.fetch = async (url) => {
@@ -100,4 +100,32 @@ test("a list in another version's format is never used", async () => {
   list(files.out, 0.1, "Old format", CARD_NAMES_VERSION - 1);
   await updateCardNames(files);
   assert.ok(!existsSync(files.out));
+});
+
+test("the nightly refresh downloads each time, but updates the committed copy weekly", async () => {
+  scryfall(200);
+  list(files.out, 0.1, "Last");
+  list(files.copy, 3, "Copy");
+  await refresh({ ...files, weekly: true });
+  assert.equal(firstName(), "Downloaded");
+  assert.equal(firstName(files.copy), "Copy");
+  list(files.copy, 7, "Copy");
+  await refresh({ ...files, weekly: true });
+  assert.equal(firstName(files.copy), "Downloaded");
+});
+
+test("refreshing by hand updates the copy whatever its age", async () => {
+  scryfall(200);
+  list(files.copy, 0.1, "Copy");
+  await refresh(files);
+  assert.equal(firstName(files.copy), "Downloaded");
+});
+
+test("a failed refresh changes nothing and says so", async () => {
+  scryfall(503);
+  list(files.out, 2, "Last");
+  list(files.copy, 30, "Copy");
+  await assert.rejects(refresh({ ...files, weekly: true }));
+  assert.equal(firstName(), "Last");
+  assert.equal(firstName(files.copy), "Copy");
 });

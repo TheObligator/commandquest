@@ -1,0 +1,98 @@
+# Nightly: download the card-name list for the deck editor's search (web/scripts/cardnames.ts), so a
+# deploy while Scryfall is down has a list from the night before.
+#
+#   download from Scryfall -> check it -> save it in the build cache the Web workflow reads
+#   -> once a week, commit it as web/data/card-names.json, the backup for when there's no cache
+#
+# The copy isn't committed nightly: it's 1 MB, its order shifts daily, and each commit to `web` deploys
+# staging and the game server. A failed download or check fails the run and changes nothing.
+name: Card names
+
+on:
+  schedule:
+    - cron: "23 8 * * *"
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Commit the copy even if it's less than a week old
+        type: boolean
+        default: false
+
+permissions:
+  contents: write # push the copy to web
+  actions: write # start the Web workflow: a push made with GITHUB_TOKEN doesn't trigger it
+
+# Shared with the Forge sync, whose push is refused if `web` moves while it's testing.
+concurrency:
+  group: forge-sync
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "24"
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # The script and its tests need no packages, so there's no npm install.
+      - uses: actions/checkout@v5
+        with:
+          ref: web
+          sparse-checkout: web
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Download the list
+        id: list
+        working-directory: web
+        env:
+          WEEKLY: ${{ inputs.commit && '--copy' || '--copy-weekly' }}
+        run: |
+          for try in 1 2 3; do
+            if node scripts/cardnames.ts "$WEEKLY"; then break; fi
+            [ "$try" != 3 ] || { echo "::error::Couldn't download the card names"; exit 1; }
+            sleep 300
+          done
+          node --test tests/cardnames.test.ts tests/cardsearch.test.ts
+          if git diff --quiet -- data; then commit=false; else commit=true; fi
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
+      # The same path and key as the Web workflow, which restores the newest.
+      - name: Save the list for deploys
+        uses: actions/cache/save@v5
+        with:
+          path: web/public/card-names.json
+          key: card-names-${{ hashFiles('web/public/card-names.json') }}
+
+      # Never forced. If `web` moved meanwhile, commit again on top of it.
+      - name: Commit the copy
+        if: steps.list.outputs.commit == 'true'
+        env:
+          TOKEN: ${{ github.token }}
+          REPO: https://github.com/${{ github.repository }}.git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          auth=$(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)
+          for try in 1 2 3; do
+            git fetch --depth=1 "$REPO" web
+            git reset --mixed FETCH_HEAD
+            git add web/data/card-names.json
+            git commit -m "Card names: weekly copy of the search list" -- web/data/card-names.json
+            if git -c core.hooksPath=/dev/null -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
+                 push "$REPO" HEAD:refs/heads/web; then
+              git log -1 --format='Pushed %h: %s'
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Couldn't push the copy to web"; exit 1
+
+      - name: Test and deploy staging
+        if: steps.list.outputs.commit == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run web.yml --repo "${{ github.repository }}" --ref web
