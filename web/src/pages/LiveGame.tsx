@@ -3,13 +3,16 @@
 // multiplayer table's game (#/game?table=<id>, docs/tables.md): joins it with the deck picked at the
 // table. The table is the same board as the preview; the server sends this player's view and
 // Forge's prompts (docs/game-protocol.md).
-import { useConvexAuth, useQuery } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { navigate, useRoute } from "../app/router";
+import { errorMessage } from "../app/errors";
 import { useCardSupport } from "../cardsupport";
 import { useGameChecks } from "../useGameDecks";
 import { toast } from "../dom";
+import { AbilityPanel, AbilityProvider, abilityItems, type AbilityControls } from "../game/AbilityMenu";
+import "../game/abilityMarks.css";
 import { useCardData } from "../game/cards";
 import { LiveRail } from "../game/LiveRail";
 import { REWIND_LEVELS } from "../game/RewindPanel";
@@ -132,6 +135,8 @@ export function LiveGame() {
   const deckPayload = (): DeckPayload | null => {
     if (!deck) return null;
     return {
+      id: deck._id,
+      abilities: deck.abilities?.map(({ text, autoYield, decision }) => ({ text, autoYield, decision })),
       name: deck.name,
       cards: deck.cards.map((c) => {
         const missing = support?.notInForge(c.name);
@@ -411,6 +416,18 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
     return [...all].sort();
   }, [view, game.libraryList]);
   useCardData(names);
+  // Ability settings: changed on the game server, and saved with the deck (when it's one of yours).
+  const deck = useQuery(api.decks.get, view.deckId ? { id: view.deckId } : "skip");
+  const setAbility = useMutation(api.decks.setAbility);
+  const abilityControls: AbilityControls = {
+    settings: view.abilities,
+    saved: deck ? (deck.abilities ?? []) : undefined,
+    change: game.setYield,
+    save: (card, text, setting) => {
+      if (!deck) return;
+      setAbility({ id: deck._id, card, text, ...setting }).catch((e) => toast(errorMessage(e), "error"));
+    },
+  };
   // Every card on the table, ready to zoom before you hover it (hidden ones have no image).
   const visible = useMemo(() => {
     const all: CardView[] = [];
@@ -962,7 +979,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
         sections: card.zone === "battlefield" ? [combatSection([card]), manualSection(card)] : card.zone === "exile" && card.owner === me ? [manualSection(card)] : [],
       };
     }
-    return game.actions(card.id).then(({ actions, reason }) => ({
+    return game.actions(card.id).then(({ actions, reason, triggers }) => ({
       sections: [
         {
           title: actions.length ? "Abilities" : undefined,
@@ -975,6 +992,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
             },
           })),
         },
+        { title: "Triggered abilities", items: abilityItems(triggers ?? [], card.name ?? "") },
         combatSection([card]),
         manualSection(card),
       ],
@@ -1042,7 +1060,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
   const colorOf = (id: string) => seatOf(id)?.color ?? "#888";
 
   return (
-    <>
+    <AbilityProvider value={abilityControls}>
     {manaChoice && (
       <ManaChoice
         choice={manaChoice}
@@ -1173,28 +1191,20 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
       peek={searchOf && game.searchList?.owner === searchOf
         ? { title: `${searchPlayer?.name ?? "Their"}'s library (they let you search it; right-click a card to exile it)`, cards: game.searchList.cards, onClose: () => game.endSearch(searchOf) }
         : peek ? { title: peek.top > 0 ? `Top ${peek.top === 1 ? "card" : `${peek.top} cards`} of your library` : "Your library (only you see this)", cards: peekCards, onClose: closePeek } : null}
-      stackItemMenu={(s) => {
-        const tick = (on: boolean | undefined, label: string) => `${on ? "✓ " : ""}${label}`;
-        const key = s.yieldKey;
-        return [
-          {
-            items: key
-              ? [
-                  { label: tick(s.autoYield, "Auto-yield"), onSelect: () => game.setYield(key, { autoYield: !s.autoYield }) },
-                  ...(s.optional
-                    ? [
-                        { label: tick(s.decision === "ACCEPT", "Always Yes"), onSelect: () => game.setYield(key, { decision: s.decision === "ACCEPT" ? "ASK" : "ACCEPT" }) },
-                        { label: tick(s.decision === "DECLINE", "Always No"), onSelect: () => game.setYield(key, { decision: s.decision === "DECLINE" ? "ASK" : "DECLINE" }) },
-                      ]
-                    : []),
-                ]
-              : [],
-          },
-          { items: [{ label: tick(view.autoYieldsOff, "Disable auto-yields"), onSelect: () => game.setYieldsOff(!view.autoYieldsOff) }] },
-        ];
-      }}
+      stackItemMenu={(s) => [
+        {
+          items: s.yieldKey
+            ? [{
+                label: "Settings",
+                onSelect: () => {},
+                panel: <AbilityPanel ability={{ key: s.yieldKey, text: s.text ?? "", mayAsk: s.optional, mine: s.mine }} card={s.card?.name ?? s.name} />,
+              }]
+            : [],
+        },
+        { items: [{ label: `${view.autoYieldsOff ? "✓ " : ""}Disable auto-yields`, onSelect: () => game.setYieldsOff(!view.autoYieldsOff) }] },
+      ]}
     />
-    </>
+    </AbilityProvider>
   );
 }
 

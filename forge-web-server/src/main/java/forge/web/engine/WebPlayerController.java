@@ -2,22 +2,29 @@ package forge.web.engine;
 
 import forge.LobbyPlayer;
 import forge.game.Game;
+import forge.game.GameEntity;
 import forge.game.GameType;
+import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.card.CardCollection;
 import forge.game.card.CardCollectionView;
 import forge.game.phase.PhaseType;
+import forge.game.player.DelayedReveal;
 import forge.game.player.Player;
+import forge.game.player.PlayerActionConfirmMode;
 import forge.game.player.PlayerView;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 import forge.gamemodes.match.input.InputConfirm;
 import forge.gamemodes.match.input.InputSelectEntitiesFromList;
+import forge.player.AutoYieldStore.TriggerDecision;
 import forge.player.PlayerControllerHuman;
 import forge.util.collect.FCollection;
+import forge.util.collect.FCollectionView;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import forge.game.card.CardView;
 import forge.util.Localizer;
 import forge.util.MessageUtil;
@@ -44,6 +51,8 @@ public class WebPlayerController extends PlayerControllerHuman {
 
     /** This player's browser; null when there's none (questions then go Forge's way). */
     private final BrowserSeat seat;
+    /** This player's auto-yield and always yes / no settings, per ability. */
+    private final AbilitySettings abilities;
     /** The card {@link UpkeepStop} found when this player last got priority, or null. */
     private volatile Card upkeepCard;
     /** Turn on which the player was last told about an automatic upkeep stop. */
@@ -52,6 +61,82 @@ public class WebPlayerController extends PlayerControllerHuman {
     public WebPlayerController(Game game, Player p, LobbyPlayer lp, BrowserSeat seat) {
         super(game, p, lp);
         this.seat = seat;
+        this.abilities = seat == null ? new AbilitySettings() : seat.abilities();
+    }
+
+    // ---- Auto-yield and always yes / no: ours, with a scope per ability, instead of Forge's ----
+
+    @Override
+    public boolean shouldAutoYield(String key) {
+        return !getYieldController().getDisableAutoYields() && abilities.autoYield(key);
+    }
+
+    @Override
+    public void setShouldAutoYield(String key, boolean autoYield, boolean isAbilityScope) {
+        abilities.setAutoYield(key, autoYield);
+        super.setShouldAutoYield(key, autoYield, isAbilityScope); // passes priority now if it's on top of the stack
+    }
+
+    @Override
+    public TriggerDecision getTriggerDecision(String key) {
+        return getYieldController().getDisableAutoTriggers() ? TriggerDecision.ASK : abilities.decision(key);
+    }
+
+    @Override
+    public void setTriggerDecision(String key, TriggerDecision decision, boolean isAbilityScope) {
+        abilities.setDecision(key, decision);
+        super.setTriggerDecision(key, decision, isAbilityScope); // answers it now if Forge is asking
+    }
+
+    /** For every copy of the ability, or only this card's. */
+    public void setEveryCopy(String key, boolean every) {
+        abilities.setEveryCopy(key, every);
+    }
+
+    /** What the player always answers to the "you may" of the triggered ability this effect is part of. */
+    private TriggerDecision decisionFor(SpellAbility sa) {
+        String key = sa != null && AbilitySettings.optional(sa) ? AbilitySettings.key(sa) : null;
+        return key == null ? TriggerDecision.ASK : getTriggerDecision(key);
+    }
+
+    /**
+     * "You may" asked by an effect as it resolves ("You may cast the copies"): always yes / no answers it.
+     * Not the other things Forge confirms, like "cancel the search?" or "cancel choosing?", where yes means
+     * stopping, or questions with their own two answers.
+     */
+    @Override
+    public boolean confirmAction(SpellAbility sa, PlayerActionConfirmMode mode, String message,
+                                 List<String> options, Card cardToShow, Map<String, Object> params) {
+        boolean youMay = (mode == null || mode == PlayerActionConfirmMode.Random || mode == PlayerActionConfirmMode.ChangeZoneGeneral)
+                && (options == null || options.isEmpty())
+                && (message == null || !message.startsWith(CANCEL_SEARCH));
+        if (youMay) {
+            TriggerDecision d = decisionFor(sa);
+            if (d != TriggerDecision.ASK) {
+                return d == TriggerDecision.ACCEPT;
+            }
+        }
+        return super.confirmAction(sa, mode, message, options, cardToShow, params);
+    }
+
+    /** Forge's "Cancel search? Up to N more cards can be selected.", up to the number. */
+    private static final String CANCEL_SEARCH = cancelSearch();
+
+    private static String cancelSearch() {
+        String s = Localizer.getInstance().getMessage("lblCancelSearchUpToSelectNumCards", "#");
+        int at = s.indexOf('#');
+        return at > 0 ? s.substring(0, at) : s;
+    }
+
+    /** Always no also skips picking which card to cast ("You may cast the copies"); always yes still lets you pick. */
+    @Override
+    public <T extends GameEntity> T chooseSingleEntityForEffect(FCollectionView<T> optionList, DelayedReveal delayedReveal,
+            SpellAbility sa, String title, boolean isOptional, Player targetedPlayer, Map<String, Object> params) {
+        if (isOptional && delayedReveal == null && sa != null && sa.getApi() == ApiType.Play
+                && decisionFor(sa) == TriggerDecision.DECLINE) {
+            return null;
+        }
+        return super.chooseSingleEntityForEffect(optionList, delayedReveal, sa, title, isOptional, targetedPlayer, params);
     }
 
     /**

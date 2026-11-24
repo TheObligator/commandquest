@@ -7,6 +7,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { manaCost, rulesText } from "../dom";
 import { cached, imageUrl, rulings, type CardFace, type Ruling } from "../scryfall";
 import { CardBack, tokenImage, type Preview } from "./cards";
+import type { CardAbility } from "./abilities";
+import { AbilityMark } from "./AbilityMenu";
 import type { CardDetails } from "./useLiveGame";
 import type { CardView } from "./view";
 
@@ -123,6 +125,22 @@ function Rules({ text }: { text?: string }) {
   }, [text]);
   return <div ref={ref} />;
 }
+/** Forge's text, with a marker after each ability you have a setting for. */
+function ForgeText({ text, abilities }: { text: string; abilities: CardAbility[] }) {
+  if (!abilities.length) return <Rules text={text} />;
+  const lines = text.split("\n");
+  const lineOf = (a: CardAbility) => lines.findIndex((l) => l.includes(a.text.split("\n")[0].trim()));
+  return (
+    <>
+      {lines.map((l, i) => (
+        <div key={i} className="ab-line">
+          <Rules text={l} />
+          {abilities.filter((a) => lineOf(a) === i).map((a) => <AbilityMark key={a.key} abilityKey={a.key} />)}
+        </div>
+      ))}
+    </>
+  );
+}
 function Cost({ cost }: { cost?: string }) {
   const ref = useRef<HTMLSpanElement>(null);
   useEffect(() => {
@@ -208,7 +226,7 @@ export function CardInspect({ card, loadDetails, ownerName, onClose }: {
           </div>
           <p className="ci-type">{printed?.type_line ?? sc?.type_line ?? `${card.token ? "Token " : ""}${card.types?.join(" ") ?? ""}`}</p>
           {forgeText ? (
-            <div className="ci-forge"><Rules text={forgeText} /></div>
+            <div className="ci-forge"><ForgeText text={forgeText} abilities={details?.triggers ?? []} /></div>
           ) : faces.length ? (
             faces.map((f, i) => (
               <section key={i} className="ci-face">

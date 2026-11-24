@@ -1,6 +1,7 @@
 // A live game on the game server (docs/game-protocol.md): connect, sign in with the Convex token,
 // start a game, then mirror the server's view and send this player's actions. The game outlives
 // the socket for a few minutes: after a reload or a dropped connection, signing in again resumes it.
+import type { CardAbility, Decision } from "./abilities";
 import { useAuthToken } from "@convex-dev/auth/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { setGameInProgress } from "../app/busy";
@@ -124,6 +125,8 @@ export interface CardActions {
   actions: CardAction[];
   /** Why nothing can be done with it right now, when that's the case. */
   reason?: string;
+  /** Its triggered abilities, for their settings. */
+  triggers?: CardAbility[];
 }
 
 /** Forge's own text for a card (rules text plus what's changed in this game), from `details`. */
@@ -132,6 +135,8 @@ export interface CardDetails {
   sick?: boolean;
   owner?: string;
   commanderCasts?: number;
+  /** Its triggered abilities, for their markers. */
+  triggers?: CardAbility[];
 }
 
 /** Manual overrides from a card's menu (the server checks they're your cards). */
@@ -196,7 +201,11 @@ export interface TableWaiting {
 }
 
 export interface DeckPayload {
+  /** The saved deck's id, so the game can save ability settings with it (also after a reload). */
+  id?: string;
   name: string;
+  /** Ability settings saved with the deck. */
+  abilities?: { text: string; autoYield?: boolean; decision?: "ACCEPT" | "DECLINE" }[];
   /** `set` / `collectorNumber`: the printing you picked (Scryfall codes), so Forge uses it too. */
   cards: { name: string; quantity: number; board: string; set?: string; collectorNumber?: string; standIn?: StandIn }[];
   /** The deck's token art: token identity (src/tokens.ts) -> Scryfall id. */
@@ -369,7 +378,7 @@ export function useLiveGame() {
           case "actions": {
             const waiters = actionWaiters.current.get(m.id) ?? [];
             actionWaiters.current.delete(m.id);
-            for (const w of waiters) w({ actions: m.actions ?? [], reason: m.reason });
+            for (const w of waiters) w({ actions: m.actions ?? [], reason: m.reason, triggers: m.triggers });
             break;
           }
           case "manaOptions":
@@ -378,7 +387,7 @@ export function useLiveGame() {
           case "details": {
             const waiters = detailWaiters.current.get(m.id) ?? [];
             detailWaiters.current.delete(m.id);
-            for (const w of waiters) w({ text: m.text, sick: m.sick, owner: m.owner, commanderCasts: m.commanderCasts });
+            for (const w of waiters) w({ text: m.text, sick: m.sick, owner: m.owner, commanderCasts: m.commanderCasts, triggers: m.triggers });
             break;
           }
           case "error":
@@ -535,8 +544,8 @@ export function useLiveGame() {
         }, 5000);
       });
     },
-    /** Auto-yield to an ability on the stack (by its `yieldKey`), and for an optional trigger, always yes / no / ask. */
-    setYield(key: string, change: { autoYield?: boolean; decision?: "ASK" | "ACCEPT" | "DECLINE" }) {
+    /** Auto-yield to an ability (by its key), and for a "you may", always yes / no / ask; for every copy, or this card's only. */
+    setYield(key: string, change: { autoYield?: boolean; decision?: Decision; everyCopy?: boolean }) {
       send({ t: "yield", key, ...change });
     },
     /** Forge's text for a card, for its details view. */

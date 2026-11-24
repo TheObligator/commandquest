@@ -6,6 +6,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { MenuSection } from "../components/CardMenu";
 import { cached, imageUrl } from "../scryfall";
 import { tokenImage, usePreview } from "./cards";
+import { AbilityMarks } from "./AbilityMenu";
 import { stackText } from "./stackText";
 import type { GameView, StackItemView } from "./view";
 
@@ -164,9 +165,7 @@ export function StackWindow(props: {
                 <div className="stk-kind">
                   {s.kind}
                   <span> · {s.controller === view.viewer ? "you" : nameOf(s.controller)}</span>
-                  {(s.autoYield || (s.decision && s.decision !== "ASK")) && (
-                    <b className="stk-flag">{s.autoYield ? "auto-yield" : s.decision === "ACCEPT" ? "always yes" : "always no"}</b>
-                  )}
+                  <AbilityMarks setting={s} />
                 </div>
                 {s.text && !whole && <p className="stk-text">{stackText(s.text, s.card?.name ?? s.name).text}</p>}
                 <footer className="stk-foot">
@@ -252,7 +251,7 @@ function StackDetail(props: { item: StackItemView; number: number; x: number; y:
             {sections.map((s, i) => (
               <div key={i} className="card-menu-section">
                 {s.title && <div className="card-menu-title">{s.title}</div>}
-                {s.items.map((it) => (
+                {s.items.map((it) => it.panel ? <div key={it.label}>{it.panel}</div> : (
                   <button key={it.label} role="menuitem" disabled={it.disabled} onClick={() => it.onSelect()}>
                     {it.label}
                   </button>

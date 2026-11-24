@@ -17,6 +17,7 @@ import { DeckBar, DeckTypeCounts } from "../components/DeckBar";
 import { DeckBracket } from "../components/DeckBracket";
 import { deckAverages, playableLandBack } from "../deckstats";
 import { FORMATS } from "../deckFormats";
+import { DeckAbilities } from "../components/DeckAbilities";
 import { DeckTokens } from "../components/DeckTokens";
 import { FlipButton, useFlips } from "../components/FlipButton";
 import { CardViewToggle, useCardView, useStackColumns } from "../cardView";
@@ -1242,6 +1243,7 @@ function DeckView(props: {
         identity={deck.format === "commander" || deck.format === "conquest" ? [...new Set(deck.cards.filter((c) => c.board === "commander").flatMap((c) => scry.cached(c)?.color_identity ?? []))] : undefined}
       />
       <DeckTokens deckId={deck.id} cards={deck.cards} />
+      <DeckAbilities deckId={deck.id} />
       {preview.element}
       {contextMenu && <ContextMenu menu={contextMenu} onClose={closeMenu} />}
       {tagging && (() => {

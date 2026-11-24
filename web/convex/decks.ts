@@ -3,6 +3,7 @@ import { ConvexError, v } from "convex/values";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { DeckError, MAX_DECKS_PER_USER, summarize, validateDeck, type DeckInput } from "./model/deckRules";
+import { withSaved } from "../src/game/abilities";
 import { deckCard } from "./schema";
 
 // Every function is scoped to the signed-in user: nobody can read or change another user's decks.
@@ -160,5 +161,28 @@ export const setTokenArt = mutation({
     if (scryfallId !== null) picks.push({ identity, scryfallId });
     if (picks.length > MAX_TOKEN_PICKS) throw new ConvexError("Too many token picks for one deck.");
     await ctx.db.patch(id, { tokenArt: picks });
+  },
+});
+
+const MAX_SAVED_ABILITIES = 200;
+
+/** Save an ability's setting with a deck, for every copy of it (nothing set takes it out). */
+export const setAbility = mutation({
+  args: {
+    id: v.id("decks"),
+    card: v.string(),
+    text: v.string(),
+    autoYield: v.boolean(),
+    decision: v.union(v.literal("ASK"), v.literal("ACCEPT"), v.literal("DECLINE")),
+  },
+  handler: async (ctx, { id, card, text, autoYield, decision }) => {
+    const userId = await requireUser(ctx);
+    const deck = await ctx.db.get(id);
+    if (!deck || deck.userId !== userId) throw new ConvexError("Deck not found.");
+    if (!text.trim() || text.length > 1000 || card.length > 200) throw new ConvexError("Not an ability.");
+    const next = withSaved(deck.abilities ?? [], card, text, { autoYield, decision });
+    if (next.length > MAX_SAVED_ABILITIES) throw new ConvexError(`You can save up to ${MAX_SAVED_ABILITIES} abilities with a deck.`);
+    // Not an edit to the deck, so `updatedAt` (the deck list's order) stays put.
+    await ctx.db.patch(id, { abilities: next.length ? next : undefined });
   },
 });

@@ -19,6 +19,7 @@ import forge.player.PlayerControllerHuman;
 import forge.gamemodes.match.YieldUpdate;
 import forge.gui.FThreads;
 import forge.interfaces.IGameController;
+import forge.web.engine.AbilitySettings;
 import forge.web.engine.AutoPass;
 import forge.web.engine.BrowserSeat;
 import forge.web.engine.Decks;
@@ -156,7 +157,7 @@ public final class GameHub {
         }
     }
 
-    private record Joined(Conn conn, Deck deck, Map<String, String> tokens) {}
+    private record Joined(Conn conn, Deck deck, Map<String, String> tokens, String deckId, JsonNode abilities) {}
 
     private static final java.util.regex.Pattern GAME_KEY = java.util.regex.Pattern.compile("^[0-9a-f]{32}$");
 
@@ -287,7 +288,7 @@ public final class GameHub {
                 }
             }
             case "stops" -> stops(c, m.path("stops"));
-            case "yield" -> yieldTo(c, m.path("key").asText(""), m.path("autoYield"), m.path("decision").asText(null));
+            case "yield" -> yieldTo(c, m.path("key").asText(""), m.path("autoYield"), m.path("decision").asText(null), m.path("everyCopy"));
             case "manual" -> manual(c, m);
             case "payFree" -> payFree(c);
             case "manaOptions" -> manaOptions(c, m.path("ids"));
@@ -394,6 +395,7 @@ public final class GameHub {
                     }
                 });
                 seat.setFreePlay(freePlay);
+                seat.setDeck(m.path("deck").path("id").asText(null), m.path("deck").path("abilities"));
                 h.seat = seat;
                 seats.add(new GameSession.Seat(name, mine, seat, tokenArt(m.path("deck").path("tokens"))));
                 List<Deck> ai = Decks.randomPrecons(opponents);
@@ -460,7 +462,7 @@ public final class GameHub {
                         send(c, gone);
                         return;
                     }
-                    g.joined.put(c.user, new Joined(c, deck, tokens));
+                    g.joined.put(c.user, new Joined(c, deck, tokens, m.path("deck").path("id").asText(null), m.path("deck").path("abilities")));
                     everyone = g.joined.size() >= g.roster.players().size();
                 }
                 if (everyone) {
@@ -560,6 +562,7 @@ public final class GameHub {
                     }
                 });
                 seat.setFreePlay(g.roster.freePlay());
+                seat.setDeck(j.deckId(), j.abilities());
                 h.seat = seat;
                 seats.add(new GameSession.Seat(name, j.deck(), seat, j.tokens()));
                 users.put(name, user);
@@ -744,20 +747,32 @@ public final class GameHub {
             if (playable.isEmpty()) {
                 o.put("reason", noTargets ? "Nothing it can target right now." : Explain.whyNot(g, me, card, priorityInput(ctl)));
             }
+            if (canSee(card, seat.player())) {
+                o.set("triggers", AbilitySettings.list(card, me, json));
+            }
         }
         send(c, o);
     }
 
+    private static boolean canSee(Card card, PlayerView me) {
+        forge.game.card.CardView cv = card.getView();
+        return cv.canBeShownTo(me) && (!cv.isFaceDown() || cv.canFaceDownBeShownTo(me));
+    }
+
     /**
      * Auto-yield to an ability (Forge's yield key: this ability of this card), and for an optional
-     * trigger, always answer yes (ACCEPT), no (DECLINE) or ask (ASK).
+     * trigger, always answer yes (ACCEPT), no (DECLINE) or ask (ASK). {@code everyCopy}: for every copy of
+     * the ability (the default), or only this card's.
      */
-    private void yieldTo(Conn c, String key, JsonNode autoYield, String decision) {
-        if (key.isEmpty() || key.length() > 500) {
+    private void yieldTo(Conn c, String key, JsonNode autoYield, String decision, JsonNode everyCopy) {
+        if (key.isEmpty() || key.length() > 1000) {
             return;
         }
         act(c, ctl -> {
             boolean scope = ctl.getYieldController().isAbilityScope();
+            if (everyCopy.isBoolean() && ctl instanceof WebPlayerController w) {
+                w.setEveryCopy(key, everyCopy.asBoolean());
+            }
             if (autoYield.isBoolean()) {
                 ctl.setShouldAutoYield(key, autoYield.asBoolean(), scope);
             }
@@ -999,7 +1014,11 @@ public final class GameHub {
             if (card != null && seat != null && seat.player() != null) {
                 forge.game.card.CardView cv = card.getView();
                 PlayerView me = seat.player();
-                boolean seen = cv.canBeShownTo(me) && (!cv.isFaceDown() || cv.canFaceDownBeShownTo(me));
+                boolean seen = canSee(card, me);
+                Player who = g.getPlayer(me.getId());
+                if (seen && who != null) {
+                    o.set("triggers", AbilitySettings.list(card, who, json));
+                }
                 o.put("text", forge.gui.card.CardDetailUtil.composeCardText(cv.getCurrentState(), g.getView(), seen));
                 o.put("sick", card.isInPlay() && card.isSick());
                 o.put("owner", card.getOwner().getName());

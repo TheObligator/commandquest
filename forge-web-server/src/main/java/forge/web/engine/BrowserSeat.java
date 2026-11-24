@@ -77,6 +77,10 @@ public final class BrowserSeat implements IRemote {
     private volatile boolean closed;
     /** Free play (chosen when the game starts): manual overrides and paying mana costs with nothing. */
     private volatile boolean freePlay = true;
+    /** Your auto-yield and always yes / no settings. */
+    private final AbilitySettings abilities = new AbilitySettings();
+    /** The browser's id for the deck you're playing (it saves ability settings with it), or null. */
+    private volatile String deckId;
     /** An ability picked from the browser's card menu: answers Forge's "which ability?" for that click. */
     private volatile Preferred preferred;
 
@@ -101,6 +105,16 @@ public final class BrowserSeat implements IRemote {
 
     public PlayerView player() {
         return me;
+    }
+
+    AbilitySettings abilities() {
+        return abilities;
+    }
+
+    /** The deck you're playing: the browser's id for it, and the ability settings saved with it. */
+    public void setDeck(String id, com.fasterxml.jackson.databind.JsonNode savedAbilities) {
+        deckId = id != null && !id.isBlank() && id.length() <= 64 ? id : null;
+        abilities.seed(savedAbilities);
     }
 
     /** Rewinding in this seat's game (null while it's off). */
@@ -396,12 +410,17 @@ public final class BrowserSeat implements IRemote {
     /**
      * Adds your yield settings to each ability on the stack: {@code yieldKey} (Forge's key for
      * "this ability of this card"), {@code autoYield}, and for your optional ("may") triggers
-     * {@code optional} and {@code decision} (ASK, ACCEPT or DECLINE).
+     * {@code optional} and {@code decision} (ASK, ACCEPT or DECLINE). Also all your settings
+     * ({@code abilities}) and your deck ({@code deckId}).
      */
     private void yields(GameView gv, ObjectNode view) {
         IGameController ctl = gui == null ? null : gui.getGameController(me);
         if (ctl == null) {
             return;
+        }
+        view.set("abilities", abilities.json(json));
+        if (deckId != null) {
+            view.put("deckId", deckId);
         }
         view.put("autoYieldsOff", ctl.getYieldController().getDisableAutoYields());
         // An auto-pass (until end of turn, or until a step) is still going; Forge ends it when it gets there or something needs you.
@@ -412,6 +431,11 @@ public final class BrowserSeat implements IRemote {
         }
         Map<Integer, StackItemView> byId = new java.util.HashMap<>();
         gv.getStack().forEach(s -> byId.put(s.getId(), s));
+        Map<Integer, forge.game.spellability.SpellAbility> onStack = new java.util.HashMap<>();
+        Game live = game.get();
+        if (live != null) {
+            live.getStack().forEach(si -> onStack.put(si.getId(), si.getSpellAbility()));
+        }
         for (JsonNode n : view.path("stack")) {
             StackItemView s = byId.get(n.path("id").asInt());
             if (s == null || !s.isAbility() || s.getKey() == null || s.getKey().isEmpty()) {
@@ -420,7 +444,14 @@ public final class BrowserSeat implements IRemote {
             ObjectNode o = (ObjectNode) n;
             o.put("yieldKey", s.getKey());
             o.put("autoYield", ctl.shouldAutoYield(s.getKey()));
-            if (s.isOptionalTrigger() && me.equals(s.getActivatingPlayer())) {
+            if (!me.equals(s.getActivatingPlayer())) {
+                continue;
+            }
+            forge.game.spellability.SpellAbility sa = onStack.get(s.getId());
+            if (sa != null && sa.getTrigger() != null && me.getId() == sa.getHostCard().getOwner().getId() && !sa.getHostCard().isToken()) {
+                o.put("mine", true);
+            }
+            if (s.isOptionalTrigger() || (sa != null && sa.getTrigger() != null && AbilitySettings.mayAsk(sa.getTrigger()))) {
                 o.put("optional", true);
                 o.put("decision", String.valueOf(ctl.getTriggerDecision(s.getKey())));
             }

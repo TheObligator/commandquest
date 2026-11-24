@@ -106,23 +106,34 @@ function Row({ item, onClose }: { item: MenuItem; onClose: () => void }) {
       setPos(null);
       return;
     }
-    const row = ref.current?.getBoundingClientRect();
-    const p = panel.current?.getBoundingClientRect();
-    if (!row || !p) return;
-    // Touching the row (no gap), so moving the pointer across doesn't leave the row and close it.
-    const left = row.right - 2 + p.width <= innerWidth - 8 ? row.right - 2 : Math.max(8, row.left + 2 - p.width);
-    setPos({ left, top: clamp(row.top - 5, 8, innerHeight - p.height - 8) });
+    const rowEl = ref.current;
+    const panelEl = panel.current;
+    if (!rowEl || !panelEl) return;
+    const place = () => {
+      const row = rowEl.getBoundingClientRect();
+      const p = panelEl.getBoundingClientRect();
+      // Touching the row (no gap), so moving the pointer across doesn't leave the row and close it.
+      const left = row.right - 2 + p.width <= innerWidth - 8 ? row.right - 2 : Math.max(8, row.left + 2 - p.width);
+      const top = clamp(row.top - 5, 8, innerHeight - p.height - 8);
+      setPos((was) => (was && was.left === left && was.top === top ? was : { left, top }));
+    };
+    place();
+    // The menu can widen while this is open (a row's badge changes).
+    const ro = new ResizeObserver(place);
+    ro.observe(rowEl);
+    return () => ro.disconnect();
   }, [open]);
   if (item.amount) return <AmountRow item={item} amount={item.amount} onDone={onClose} />;
-  if (item.submenu) {
+  if (item.submenu || item.panel) {
     return (
       <div ref={ref} className="cm-sub" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
         <button role="menuitem" aria-haspopup="menu" aria-expanded={open} disabled={item.disabled} onClick={() => setOpen((o) => !o)}>
-          {item.label} <span className="cm-arrow" aria-hidden>▸</span>
+          {item.label} <span className="cm-end">{item.badge}<span className="cm-arrow" aria-hidden>▸</span></span>
         </button>
         {open && (
-          <div ref={panel} className="card-menu cm-subpanel" style={pos ?? { top: -9999, left: -9999 }} role="menu" aria-label={item.label}>
-            {item.submenu.map((sub, k) => (
+          <div ref={panel} className={`card-menu cm-subpanel${item.panel ? " has-panel" : ""}`} style={pos ?? { top: -9999, left: -9999 }} role="menu" aria-label={item.label}>
+            {item.panel}
+            {item.submenu?.map((sub, k) => (
               <Row key={`${k}-${sub.label}`} item={sub} onClose={onClose} />
             ))}
           </div>

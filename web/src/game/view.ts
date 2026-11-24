@@ -6,6 +6,7 @@
 // card shows only that it is there (plus public facts like tapped or counters) unless the
 // player is allowed to look at it (Forge: CardView.canBeShownTo).
 
+import type { AbilitySettings, Decision } from "./abilities";
 import type { StepId } from "./phases";
 
 export type ZoneId = "library" | "hand" | "stack" | "battlefield" | "graveyard" | "exile" | "command";
@@ -140,11 +141,17 @@ export interface StackItemView extends StackItem {
   autoYield?: boolean;
   /** Your optional ("you may") trigger: whether Forge asks, or always says yes or no. */
   optional?: boolean;
-  decision?: "ASK" | "ACCEPT" | "DECLINE";
+  decision?: Decision;
+  /** From a card you own: its setting can be saved with your deck. */
+  mine?: boolean;
 }
 
 export interface GameView {
   viewer: string;
+  /** Live games: your auto-yield and always yes / no settings. */
+  abilities?: AbilitySettings;
+  /** Live games: the saved deck you're playing (its Convex id). */
+  deckId?: string;
   /** Live games: you've turned off all your auto-yields. */
   autoYieldsOff?: boolean;
   /**

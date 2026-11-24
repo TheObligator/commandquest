@@ -14,6 +14,10 @@ export interface MenuItem {
   steppers?: { label: string; title: string; onSelect: () => void }[];
   /** Right-click menus: a menu that opens beside this item (e.g. "Reveal to ▸"). */
   submenu?: MenuItem[];
+  /** Right-click menus: something of its own that opens beside this item, instead of a submenu. */
+  panel?: React.ReactNode;
+  /** Right-click menus: shown at the end of the row (e.g. what's set). */
+  badge?: React.ReactNode;
   /**
    * A number box after the label (e.g. "Add [4] copies"): Enter or the button calls `onAmount`.
    * `onSelect` isn't used for these.

@@ -41,6 +41,17 @@ export default defineSchema({
     bracket: v.optional(v.number()),
     bracketTags: v.optional(v.array(v.string())),
     tokenArt: v.optional(v.array(v.object({ identity: v.string(), scryfallId: v.string() }))),
+    /** Auto-yield and always yes / no settings saved with the deck from games, by ability text (src/game/abilities.ts). */
+    abilities: v.optional(
+      v.array(
+        v.object({
+          card: v.string(),
+          text: v.string(),
+          autoYield: v.optional(v.boolean()),
+          decision: v.optional(v.union(v.literal("ACCEPT"), v.literal("DECLINE"))),
+        }),
+      ),
+    ),
     /** The folder the player filed this deck in (convex/folders.ts); absent = not in a folder. */
     folderId: v.optional(v.id("deckFolders")),
     updatedAt: v.number(),

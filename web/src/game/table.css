@@ -322,7 +322,7 @@ dialog.zone-viewer { width: min(980px, calc(100vw - 32px)); max-height: 86vh; ba
 .stk-art.none { height: 6px; background: #221e17; }
 .stk-kind { padding: 6px 8px 2px; font-size: .64rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #6aa2ff; }
 .stk-kind span { color: #8a826e; letter-spacing: .04em; text-transform: none; font-weight: 500; }
-.stk-flag { margin-left: 6px; padding: 0 5px; border-radius: 99px; background: #2b3b24; color: #9fd78a; font-size: .6rem; letter-spacing: .04em; text-transform: none; }
+.stk-kind .ab-marks { margin-left: 6px; }
 .stk-text { margin: 2px 8px 6px; font-size: .8rem; line-height: 1.35; color: #ece6d8; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .stk-foot { display: flex; align-items: center; gap: 6px; padding: 4px 4px 4px 8px; border-top: 1px solid #2c2719; }
 .stk-targets { flex: 1; min-width: 0; font: .7rem ui-monospace, Menlo, monospace; color: #a39a85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -627,3 +627,19 @@ dialog.decision-window.wide { width: min(860px, calc(100vw - 32px)); }
 .tb-icon { color: var(--accent-2, #ffd27a); font-size: 1.1rem; }
 .tb-text { flex: 1; min-width: 0; display: grid; }
 .tb-text span { color: var(--muted); font-size: .78rem; }
+
+/* Ability settings (AbilityMenu): a panel beside an ability's menu row, or in an opened stack item. */
+.cm-sub > button .cm-end { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.cm-sub > button { gap: 10px; }
+.card-menu.cm-subpanel.has-panel { width: 330px; max-width: calc(100vw - 16px); }
+.ab-check small { white-space: nowrap; }
+.ab-text { margin: 0; padding: 6px 10px 8px; font-size: .78rem; line-height: 1.4; color: var(--muted); white-space: pre-line; max-height: 9em; overflow-y: auto; }
+.ab-group { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 4px; }
+.card-menu button.ab-check { display: flex; align-items: center; gap: 9px; }
+.ab-check > span { flex: 1; }
+.ab-check small { flex: none; font-size: .7rem; color: var(--muted); }
+.ab-check i { flex: none; width: 13px; height: 13px; border: 1px solid var(--muted); border-radius: 3px; }
+.ab-check i.radio { border-radius: 50%; }
+.ab-check i.on { background: #7fd1ff; border-color: #7fd1ff; }
+.ab-check:disabled i { opacity: .5; }
+.ci-forge .ab-line .ab-marks { margin: -6px 0 10px; display: flex; }
