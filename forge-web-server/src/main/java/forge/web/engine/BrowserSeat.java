@@ -1151,6 +1151,11 @@ public final class BrowserSeat implements IRemote {
         pending.values().forEach(p -> p.answer().complete(p.ev() == null ? null : defaultAnswer(p.ev())));
     }
 
+    /** The game waits on this player's answer to a question. */
+    boolean asking() {
+        return !pending.isEmpty();
+    }
+
     /** The browser left: release every waiting question so the game thread never hangs. */
     public void close() {
         closed = true;

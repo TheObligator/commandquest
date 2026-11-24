@@ -8,6 +8,7 @@ import forge.game.GameStage;
 import forge.game.GameType;
 import forge.game.GameView;
 import forge.game.event.GameEvent;
+import forge.game.event.GameEventPlayerPriority;
 import forge.game.player.Player;
 import forge.game.player.PlayerView;
 import forge.game.player.RegisteredPlayer;
@@ -154,6 +155,9 @@ public final class GameSession {
             @Subscribe
             @com.google.common.eventbus.AllowConcurrentEvents
             public void on(GameEvent ev) {
+                if (ev instanceof GameEventPlayerPriority) {
+                    takeConcessions(g); // before Rewind, which subscribes later, sees this event
+                }
                 endIfNoHumansLeft(g);
                 if (isOver(g)) {
                     fireOver();
@@ -182,10 +186,31 @@ public final class GameSession {
      * Has this game ended? Forge's own {@code isGameOver()} takes the game's lock, which Forge holds
      * while it ends a game and fires the events for that. Anything that runs because of an event
      * (sending a seat the state, for one) holds that event's lock, so asking Forge there can deadlock
-     * with a player conceding on the forge-ui thread, and every other game on the server uses that thread.
+     * with a game ended from another thread (an abort, say), and every other game may need that thread.
      */
     static boolean isOver(Game g) {
         return g.getAge() == GameStage.GameOver;
+    }
+
+    /** Takes everyone who has conceded out of the game (game thread, someone is about to get priority). */
+    private static void takeConcessions(Game g) {
+        List<WebPlayerController> people = new ArrayList<>();
+        boolean any = false;
+        for (Player p : g.getRegisteredPlayers()) {
+            WebPlayerController c = p.getLobbyPlayer() instanceof WebLobbyPlayer w ? w.controller() : null;
+            if (c == null || c.getGame() != g) {
+                continue;
+            }
+            people.add(c);
+            if (c.concessionDue()) {
+                p.concede();
+                any = true;
+            }
+        }
+        if (any) {
+            g.getAction().checkGameOverCondition();
+            people.forEach(WebPlayerController::askAgain);
+        }
     }
 
     /**

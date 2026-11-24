@@ -288,6 +288,17 @@ public final class Rewind {
         }
         Request go;
         synchronized (this) {
+            int lost = (int) game.getRegisteredPlayers().stream().filter(Player::hasLost).count();
+            if (lost != lostPlayers) {
+                // A player left the game: Forge has told everyone and cleaned up after them. No going back past that.
+                lostPlayers = lost;
+                points.clear();
+                recorder.detach();
+                if (pending != null) {
+                    say("Rewind cancelled: a player left the game.");
+                    pending = null;
+                }
+            }
             go = pending != null && pending.approved ? pending : null;
         }
         if (go != null) {
@@ -306,17 +317,6 @@ public final class Rewind {
             }
             if (!dirty && last != null && last.sameStep(ph.getTurn(), ph.getPhase())) {
                 return;   // only priority moved on: rewinding to the newest point gives the same game
-            }
-            int lost = (int) game.getRegisteredPlayers().stream().filter(Player::hasLost).count();
-            if (lost != lostPlayers) {
-                // A player left the game: Forge has told everyone and cleaned up after them. No going back past that.
-                lostPlayers = lost;
-                points.clear();
-                recorder.detach();
-                if (pending != null) {
-                    say("Rewind cancelled: a player left the game.");
-                    pending = null;
-                }
             }
             try {
                 GameMemento m = recorder.capture(game);

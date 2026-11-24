@@ -10,6 +10,7 @@ public class WebLobbyPlayer extends LobbyPlayerHuman {
 
     /** This player's browser, or null. */
     private final BrowserSeat seat;
+    private volatile WebPlayerController controller;
 
     public WebLobbyPlayer(String name, BrowserSeat seat) {
         super(name);
@@ -19,7 +20,13 @@ public class WebLobbyPlayer extends LobbyPlayerHuman {
     @Override
     public Player createIngamePlayer(Game game, int id) {
         Player player = new Player(GuiDisplayUtil.personalizeHuman(getName()), game, id);
-        player.setFirstController(new WebPlayerController(game, player, this, seat));
+        controller = new WebPlayerController(game, player, this, seat);
+        player.setFirstController(controller);
         return player;
+    }
+
+    /** This player's own controller, even while someone else controls their turn; null before the game. */
+    WebPlayerController controller() {
+        return controller;
     }
 }

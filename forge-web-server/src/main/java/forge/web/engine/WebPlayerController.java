@@ -15,8 +15,12 @@ import forge.game.player.PlayerActionConfirmMode;
 import forge.game.player.PlayerView;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
+import forge.gamemodes.match.input.Input;
 import forge.gamemodes.match.input.InputConfirm;
+import forge.gamemodes.match.input.InputPassPriority;
 import forge.gamemodes.match.input.InputSelectEntitiesFromList;
+import forge.gamemodes.match.input.InputSyncronizedBase;
+import forge.gui.FThreads;
 import forge.player.AutoYieldStore.TriggerDecision;
 import forge.player.PlayerControllerHuman;
 import forge.util.collect.FCollection;
@@ -28,8 +32,10 @@ import java.util.Map;
 import forge.game.card.CardView;
 import forge.util.Localizer;
 import forge.util.MessageUtil;
+import forge.util.ThreadUtil;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.tinylog.Logger;
 
 /**
  * A browser player's controller: Forge's human controller with the mulligan done as Commander
@@ -45,6 +51,7 @@ import org.apache.commons.lang3.tuple.ImmutablePair;
  *       on an OK (with "End Turn" beside it) or a list to dismiss.</li>
  *   <li><b>Scry and surveil in one window</b> with the cards, for any number of cards. Forge asks
  *       about a single card by name, and about several in two steps.</li>
+ *   <li><b>Conceding waits for a safe moment</b> ({@link #concede}).</li>
  * </ul>
  */
 public class WebPlayerController extends PlayerControllerHuman {
@@ -165,9 +172,111 @@ public class WebPlayerController extends PlayerControllerHuman {
         return true;
     }
 
+    // ---- Conceding: on the game's own thread, at a safe moment ----
+
+    /** How often a concession that hasn't happened yet frees whatever the game waits on this player for. */
+    private static final int SETTLE_MS = 250;
+    /** The player is told why they're still in the game after this many of those. */
+    private static final int SETTLE_NOTICE = 6;
+    /** With nobody to wait for and no priority in this many of those (30 s), the game's thread is stuck or gone. */
+    private static final int SETTLE_STUCK = 120;
+    /** Out of the game, anything it still asks is freed for this many of those. */
+    private static final int SETTLE_AFTER = 40;
+
+    private volatile boolean conceding;
+    /** Someone just left as this player was about to get priority: have Forge check the game over first. */
+    private boolean askAgain;
+
+    /**
+     * Concedes at the next moment someone is about to get priority ({@link GameSession} takes it there, on the game
+     * thread). Forge would take the player out of the game right here, on the forge-ui thread, while the game thread
+     * may be halfway through something with their cards: it crashed, or looped forever looking for the next player.
+     * Until then, everything the game asks this player is answered for them.
+     */
+    @Override
+    public void concede() {
+        if (player == null || conceding || player.hasLost() || GameSession.isOver(getGame())) {
+            return;
+        }
+        conceding = true;
+        settle(0, 0, 0);
+    }
+
+    /** The player has asked to leave and is still in the game. */
+    boolean concessionDue() {
+        return conceding && !player.hasLost();
+    }
+
+    /** See {@link #askAgain}. Game thread. */
+    void askAgain() {
+        askAgain = true;
+    }
+
+    private void settle(int tick, int idle, int after) {
+        Game g = getGame();
+        if (GameSession.isOver(g)) {
+            return;
+        }
+        answerForThem();
+        if (player.hasLost()) {
+            after++;
+        } else {
+            // Nobody else's decision is cut short: only a priority prompt, which is asked again straight away.
+            String waitingOn = null;
+            for (Player p : g.getRegisteredPlayers()) {
+                if (p == player || !(p.getController() instanceof PlayerControllerHuman other)) {
+                    continue;
+                }
+                Input input = other.getInputQueue().getInput();
+                if (input instanceof InputPassPriority prompt) {
+                    prompt.restartPrompt();
+                } else if (input != null || (other instanceof WebPlayerController w && w.seat != null && w.seat.asking())) {
+                    waitingOn = p.getName();
+                }
+            }
+            idle = waitingOn == null ? idle + 1 : 0;
+            if (idle >= SETTLE_STUCK) {
+                Logger.warn("{} conceded and the game hasn't moved for {} s: taking them out of it now", player.getName(), SETTLE_STUCK * SETTLE_MS / 1000);
+                super.concede();
+                return;
+            }
+            if (tick == SETTLE_NOTICE && seat != null) {
+                seat.notice("Conceding: you're out as soon as " + (waitingOn == null ? "the game finishes what it's doing." : waitingOn + " has chosen."));
+            }
+        }
+        if (after >= SETTLE_AFTER) {
+            return;
+        }
+        int nextIdle = idle;
+        int nextAfter = after;
+        ThreadUtil.delay(SETTLE_MS, () -> {
+            if (seat != null) {
+                seat.answerOpenWithDefaults(); // here too: the forge-ui thread may itself be waiting on one
+            }
+            FThreads.invokeInEdtLater(() -> settle(tick + 1, nextIdle, nextAfter));
+        });
+    }
+
+    /** Frees whatever the game waits on this player for. */
+    private void answerForThem() {
+        if (seat != null) {
+            seat.answerOpenWithDefaults();
+        }
+        Input input = getInputQueue().getInput();
+        if (input instanceof InputPassPriority prompt) {
+            prompt.restartPrompt();
+        } else if (input instanceof InputSyncronizedBase waiting) {
+            waiting.stop();
+        }
+    }
+
     /** Runs on the game thread each time this player gets priority, before Forge decides whether to skip. */
     @Override
     public List<SpellAbility> chooseSpellAbilityToPlay() {
+        if (askAgain || player.hasLost()) {
+            askAgain = false;
+            return List.of(); // not a pass: Forge checks the game over and comes back
+        }
         if (passingUntilMyTurn()) {
             getGui().awaitNextInput();
             return null; // pass
@@ -211,10 +320,10 @@ public class WebPlayerController extends PlayerControllerHuman {
             return player;
         }
         String why = isFirstGame ? "You won the die roll." : "You lost the last game, so you choose who starts.";
-        while (true) {
+        while (!conceding) {
             InputConfirm first = new InputConfirm(this, "Do you want to play first?\n" + why, "Yes", "No", true);
             first.showAndWait();
-            if (first.getResult()) {
+            if (conceding || first.getResult()) {
                 return player;
             }
             if (others.size() == 1) {
@@ -230,6 +339,7 @@ public class WebPlayerController extends PlayerControllerHuman {
                 return chosen;
             }
         }
+        return player; // they concede once the game gets going
     }
 
     /** How many cards keeping this hand costs, given Forge's count. */
@@ -249,7 +359,10 @@ public class WebPlayerController extends PlayerControllerHuman {
 
     @Override
     public boolean mulliganKeepHand(Player mulliganingPlayer, int cardsToReturn) {
-        boolean keep = super.mulliganKeepHand(mulliganingPlayer, cardsToReturn);
+        boolean keep = !conceding && super.mulliganKeepHand(mulliganingPlayer, cardsToReturn);
+        if (conceding) {
+            return true; // they concede once the game gets going
+        }
         if (keep) {
             CardCollectionView hand = player.getCardsIn(ZoneType.Hand);
             int n = Math.min(cardsToBottom(getGame(), cardsToReturn), hand.size());

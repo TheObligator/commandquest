@@ -120,7 +120,7 @@ other game you're in.
 | `answer` `{id, choice, text?}` | Answer `ask` `id`: `choice` is a list of option indexes (empty for none/cancel), `text` for a `text` question. |
 | `stops` `{stops: {"<player id>": ["UPKEEP", …]}}` | The steps on each player's turn where you want priority (Forge `PhaseType` names). Every other step is skipped. Sent at the start and on every change. |
 | `autopass` `{mode}` | `END_OF_TURN`, `BEFORE_MY_TURN` (until the end step of the player before you), `UNTIL_MY_TURN` (until your next turn starts), `UNTIL_MY_TURN_ALL` (the same, but it keeps passing when someone uses the stack, like MTGO's F6), `ACTION_OR_END_STEP` (until this turn's end step), or `null` to cancel. Forge still stops when something needs you. |
-| `concede` | Concede. |
+| `concede` | Concede: you're out the next time someone is about to get priority (`WebPlayerController.concede`). Until then your own decisions are answered for you; another player's is waited for, and a `notice` says so. |
 | `rewind` `{action, point?, kind?}` | Rewinding ([rewind.md](rewind.md)): `ask` to go back to `point` of `kind` (one of the view's `rewind.options`; `kind` defaults to `timeline`), `yes` / `no` to answer someone else's request, `cancel` to take yours back, `change` `{cards}` to put your creatures (all in it, or all out of it) in or out of this combat's attack or blocks (a rewind to redeclare, with the rest as declared). If it can't be done, the answer is a `notice`. |
 
 ## Hidden information

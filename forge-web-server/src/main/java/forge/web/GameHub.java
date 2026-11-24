@@ -1408,25 +1408,7 @@ public final class GameHub {
                     seat.close();
                 }
             }
-            releaseInput(ctl, s, 20);
         });
-    }
-
-    /**
-     * Forge frees a waiting player's input only when the whole game ends, so a player who conceded
-     * while the game waited on them (their priority, a mulligan...) would hold up everyone else.
-     * Stop whatever it waits on them for; check again for a while, in case one more comes.
-     */
-    private void releaseInput(IGameController ctl, GameSession s, int checks) {
-        if (!(ctl instanceof PlayerControllerHuman human) || s.isOver()) {
-            return;
-        }
-        if (human.getInputQueue().getInput() instanceof forge.gamemodes.match.input.InputSyncronizedBase waiting) {
-            waiting.stop();
-        }
-        if (checks > 1) {
-            timers.schedule(() -> FThreads.invokeInEdtLater(() -> releaseInput(ctl, s, checks - 1)), 500, TimeUnit.MILLISECONDS);
-        }
     }
 
     /** Tells Convex a table's game is over, once: the table goes back to its lobby. */
