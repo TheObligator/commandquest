@@ -17,6 +17,37 @@
     <meta property="og:image:height" content="640" />
     <meta property="og:image:alt" content="CommandQuest: Four-player Commander in your browser" />
     <meta name="twitter:card" content="summary_large_image" />
+    <script>
+      // A page from before the last deploy (a browser cache, or a load during a deploy) names bundle
+      // files that are gone, which would leave it blank. Reload once to get the current page. If that
+      // just happened, say so instead of looping. src/app/CrashScreen.tsx shares the sessionStorage key.
+      (function () {
+        var handled = false;
+        function offerRefresh() {
+          var app = document.getElementById("app");
+          if (!app || app.firstChild) return;
+          app.innerHTML = '<div role="alert" style="padding:20vh 24px;text-align:center;font:16px/1.5 system-ui,sans-serif">' +
+            '<p>CommandQuest couldn\'t load.</p><button type="button" style="font:inherit;padding:6px 16px">Refresh</button></div>';
+          app.querySelector("button").onclick = function () { location.reload(); };
+        }
+        window.addEventListener("error", function (e) {
+          var t = e.target;
+          var url = t && (t.tagName === "SCRIPT" ? t.src : t.tagName === "LINK" && t.rel === "stylesheet" ? t.href : "");
+          if (handled || !url || url.indexOf(location.origin + "/assets/") !== 0) return;
+          handled = true;
+          try {
+            var last = Number(sessionStorage.getItem("cq-auto-reload"));
+            if (!(Date.now() - last < 30000)) {
+              sessionStorage.setItem("cq-auto-reload", String(Date.now()));
+              location.reload();
+              return;
+            }
+          } catch (err) { /* No storage, so no way to tell if it just reloaded: ask instead. */ }
+          if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", offerRefresh);
+          else offerRefresh();
+        }, true);
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>

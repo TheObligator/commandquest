@@ -1,0 +1,5 @@
+# Cloudflare static-assets headers. A restored browser tab reuses its cached copy of the page without
+# asking the server, and a page from before the last deploy names bundle files that no longer exist
+# (a blank page until refreshed). Not storing the page makes a restored tab fetch the current one.
+/
+  Cache-Control: no-store
