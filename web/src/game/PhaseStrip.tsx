@@ -8,6 +8,13 @@ import { Fragment } from "react";
 import { STEPS, removesVitalStop, toggleForAll, toggleStop, type StepId, type TableStops } from "./phases";
 import { confirmVitalStop } from "./useLandCheck";
 
+export interface StepPick {
+  title: string;
+  allowed: (step: StepId, whose: string) => boolean;
+  onPick: (step: StepId, whose: string) => void;
+  onCancel: () => void;
+}
+
 export interface Seat {
   id: string;
   name: string;
@@ -39,14 +46,17 @@ export function PhaseStrip(props: {
   priority: boolean;
   perOpponent: boolean;
   onPerOpponent: (on: boolean) => void;
+  /** Picking a step on the strip for something else: clicks choose it (`whose`: "ME", "OPP" or a player's id) instead of setting stops. */
+  pick?: StepPick;
 }) {
+  const { pick } = props;
   const { me, opponents, stops, onChange, activePlayer, step: current, turn, priority, perOpponent } = props;
   const oppIds = opponents.map((o) => o.id);
   const active = activePlayer === me.id ? me : opponents.find((o) => o.id === activePlayer);
   const myTurn = activePlayer === me.id;
 
   return (
-    <aside className="phase-strip" style={{ "--active": active?.color } as React.CSSProperties} aria-label="Phases and stops">
+    <aside className={`phase-strip${pick ? " picking" : ""}`} style={{ "--active": active?.color } as React.CSSProperties} aria-label="Phases and stops">
       <div className="ps-turn">
         <strong>{myTurn ? "Your turn" : `${active?.name ?? "Opp"}'s turn`}</strong>
         <span>T{turn}</span>
@@ -55,6 +65,12 @@ export function PhaseStrip(props: {
         <i /> {priority ? "Priority" : "Waiting"}
       </div>
 
+      {pick && (
+        <div className="ps-pick" role="status">
+          {pick.title}
+          <button className="btn small ghost" onClick={pick.onCancel}>Cancel</button>
+        </div>
+      )}
       <div className="ps-steps">
         {STEPS.map((step, i) => {
           const divider = i > 0 && STEPS[i - 1].phase !== step.phase ? DIVIDERS[step.phase] : undefined;
@@ -73,8 +89,10 @@ export function PhaseStrip(props: {
                     <button
                       className="ps-me"
                       aria-pressed={meOn}
-                      title={`${meOn ? "Don't stop" : "Stop"} at ${step.label} on your turn`}
+                      disabled={pick && !pick.allowed(step.id, "ME")}
+                      title={pick ? `${step.label} on your turn` : `${meOn ? "Don't stop" : "Stop"} at ${step.label} on your turn`}
                       onClick={() => {
+                        if (pick) return pick.onPick(step.id, "ME");
                         // Your own main phases: ask first. Every other stop just toggles.
                         if (removesVitalStop(stops, me.id, me.id, step.id) && !confirmVitalStop(step.label)) return;
                         toggleStop(stops, me.id, step.id);
@@ -91,8 +109,10 @@ export function PhaseStrip(props: {
                               className={`ps-opp${activePlayer === o.id ? " active" : ""}`}
                               style={{ "--seat": o.color } as React.CSSProperties}
                               aria-pressed={on}
-                              title={`${on ? "Don't stop" : "Stop"} at ${step.label} on ${o.name}'s turn`}
+                              disabled={pick && !pick.allowed(step.id, o.id)}
+                              title={pick ? `${step.label} on ${o.name}'s turn` : `${on ? "Don't stop" : "Stop"} at ${step.label} on ${o.name}'s turn`}
                               onClick={() => {
+                                if (pick) return pick.onPick(step.id, o.id);
                                 toggleStop(stops, o.id, step.id);
                                 onChange(stops);
                               }}
@@ -104,9 +124,10 @@ export function PhaseStrip(props: {
                           className="ps-opp all"
                           aria-pressed={oppOn.length === oppIds.length && oppIds.length > 0}
                           data-mixed={oppOn.length > 0 && oppOn.length < oppIds.length}
-                          title={`Stop at ${step.label} on every opponent's turn${oppOn.length && oppOn.length < oppIds.length ? ` (now on for ${oppOn.length} of ${oppIds.length})` : ""}`}
-                          disabled={!oppIds.length}
+                          title={pick ? `${step.label} on an opponent's turn` : `Stop at ${step.label} on every opponent's turn${oppOn.length && oppOn.length < oppIds.length ? ` (now on for ${oppOn.length} of ${oppIds.length})` : ""}`}
+                          disabled={!oppIds.length || (pick && !pick.allowed(step.id, "OPP"))}
                           onClick={() => {
+                            if (pick) return pick.onPick(step.id, "OPP");
                             toggleForAll(stops, oppIds, step.id);
                             onChange(stops);
                           }}

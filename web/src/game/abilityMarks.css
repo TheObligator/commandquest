@@ -8,3 +8,4 @@
 .deck-abilities ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-width: 720px; }
 .deck-abilities li { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
 .deck-abilities li > div { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.ab-mark.later { background: #6a4d1c; color: #ffe9c4; }

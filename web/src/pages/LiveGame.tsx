@@ -15,6 +15,8 @@ import { AbilityPanel, AbilityProvider, abilityItems, type AbilityControls } fro
 import "../game/abilityMarks.css";
 import { BusyLabel, Spinner, Waiting } from "../components/Spinner";
 import { useCardData } from "../game/cards";
+import { LaterProvider, laterItems, type LaterControls } from "../game/LaterMenu";
+import { canPickStep, type LaterSpec } from "../game/later";
 import { LiveRail } from "../game/LiveRail";
 import { REWIND_LEVELS } from "../game/RewindPanel";
 import { LAYOUTS, LayoutPicker, TableBoard, useStored, useTableStops, type LayoutId, type MenuPart, type MenuTarget } from "../game/TableBoard";
@@ -138,6 +140,7 @@ export function LiveGame() {
     return {
       id: deck._id,
       abilities: deck.abilities?.map(({ text, autoYield, decision }) => ({ text, autoYield, decision })),
+      later: deck.later,
       name: deck.name,
       cards: deck.cards.map((c) => {
         const missing = support?.notInForge(c.name);
@@ -447,6 +450,33 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
       if (!deck) return;
       setAbility({ id: deck._id, card, text, ...setting }).catch((e) => toast(errorMessage(e), "error"));
     },
+  };
+  // Abilities put off to a step (docs/use-later.md).
+  const saveLater = useMutation(api.decks.setLater);
+  const [stepPick, setStepPick] = useState<{ card: string; sorcery: boolean; done: (s: LaterSpec) => void } | null>(null);
+  useEffect(() => {
+    if (!stepPick) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setStepPick(null);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [stepPick]);
+  const laterControls: LaterControls = {
+    entries: view.later,
+    saved: deck ? (deck.later ?? []) : undefined,
+    set: game.setLater,
+    cancel: game.cancelLater,
+    leave: game.leaveLater,
+    use: (id, label) => {
+      castFrom.current ??= view.stack.length;
+      game.useAbility(id, { ability: -1, label, enabled: true });
+    },
+    pick: (card, sorcery, done) => setStepPick({ card, sorcery, done }),
+    save: (card, text, spec) => {
+      if (!deck) return;
+      const s = spec && { when: spec.when, phase: spec.phase, whose: spec.whose, ask: spec.ask };
+      saveLater({ id: deck._id, card, text, spec: s }).catch((e) => toast(errorMessage(e), "error"));
+    },
+    nameOf: (id) => view.players.find((p) => p.id === id)?.name ?? "A player",
   };
   // Every card on the table, ready to zoom before you hover it (hidden ones have no image).
   const visible = useMemo(() => {
@@ -1017,6 +1047,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
             },
           })),
         },
+        { title: "Use later", items: laterItems(actions, card.id, card.name ?? "") },
         { title: "Triggered abilities", items: abilityItems(triggers ?? [], card.name ?? "") },
         combatSection([card]),
         manualSection(card),
@@ -1088,6 +1119,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
 
   return (
     <AbilityProvider value={abilityControls}>
+    <LaterProvider value={laterControls}>
     {manaChoice && (
       <ManaChoice
         choice={manaChoice}
@@ -1185,6 +1217,15 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
       layout={layout}
       stops={st}
       priority={!!game.prompt?.ok.enabled || !!game.ask}
+      pickStep={stepPick ? {
+        title: `When to use ${stepPick.card}?`,
+        allowed: (step, whose) => canPickStep(step, whose, stepPick.sorcery),
+        onPick: (phase, whose) => {
+          stepPick.done({ when: "STEP", phase, whose });
+          setStepPick(null);
+        },
+        onCancel: () => setStepPick(null),
+      } : undefined}
       rail={(preview) => <LiveRail game={{ ...game, ok, cancel, setAutoPass, clickCard: click }} nameOf={nameOf} colorOf={colorOf} preview={preview} boardAsk={board && game.ask ? { onOk: boardPicked.length >= game.ask.min && boardPicked.length <= game.ask.max ? answerBoard : null } : undefined} pickAsk={!!askCards || windowAsk} onShowPick={pickKey && pickHidden === pickKey ? () => setPickHidden("") : undefined} />}
       hand={{
         onPlay: click,
@@ -1236,6 +1277,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
         { items: [{ label: `${view.autoYieldsOff ? "✓ " : ""}Disable auto-yields`, onSelect: () => game.setYieldsOff(!view.autoYieldsOff) }] },
       ]}
     />
+    </LaterProvider>
     </AbilityProvider>
   );
 }

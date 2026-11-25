@@ -6,6 +6,7 @@ import { useAuthToken } from "@convex-dev/auth/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { setGameInProgress } from "../app/busy";
 import { Sending, type Sent } from "./sending";
+import type { LaterSpec, SavedLater } from "./later";
 import type { AutoPassMode, StepId } from "./phases";
 import type { CardView, GameView, RewindLevel } from "./view";
 
@@ -100,6 +101,8 @@ export interface CardAction {
   ability: number;
   label: string;
   enabled: boolean;
+  /** It can be put off to a step (docs/use-later.md); "sorcery": only to your own main phases. */
+  later?: "any" | "sorcery";
 }
 /** One way to tap a card for mana (ManaTaps.java): its own ability, or another card's "tap an untapped …" one (`via`). */
 export interface ManaPick {
@@ -208,6 +211,8 @@ export interface DeckPayload {
   /** Ability settings saved with the deck. */
   abilities?: { text: string; autoYield?: boolean; decision?: "ACCEPT" | "DECLINE" }[];
   /** `set` / `collectorNumber`: the printing you picked (Scryfall codes), so Forge uses it too. */
+  /** Abilities saved with the deck to be used later. */
+  later?: SavedLater[];
   cards: { name: string; quantity: number; board: string; set?: string; collectorNumber?: string; standIn?: StandIn }[];
   /** The deck's token art: token identity (src/tokens.ts) -> Scryfall id. */
   tokens?: Record<string, string>;
@@ -578,6 +583,10 @@ export function useLiveGame() {
     setYield(key: string, change: { autoYield?: boolean; decision?: Decision; everyCopy?: boolean }) {
       send({ t: "yield", key, ...change });
     },
+    /** Put an ability off to a step (docs/use-later.md). */
+    setLater: (id: number, label: string, spec: LaterSpec) => send({ t: "later", action: "set", id, label, ...spec }),
+    cancelLater: (id: number) => send({ t: "later", action: "cancel", id }),
+    leaveLater: (id: number) => send({ t: "later", action: "leave", id }),
     /** Forge's text for a card, for its details view. */
     details(id: number): Promise<CardDetails> {
       return new Promise((resolve) => {

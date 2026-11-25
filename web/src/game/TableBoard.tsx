@@ -17,7 +17,7 @@ import { MarkContext, type Marks } from "./marks";
 import { StackArrows, StackWindow } from "./StackWindow";
 import type { CardDetails } from "./useLiveGame";
 import { CardInspect, HoverZoom } from "./CardZoom";
-import { PhaseStrip, type Seat } from "./PhaseStrip";
+import { PhaseStrip, type Seat, type StepPick } from "./PhaseStrip";
 import { DEFAULT_PRESET, presetFromStops, stopsFromPreset, type StopPreset, type TableStops } from "./phases";
 import { SeatBoard, type ZoneName } from "./SeatBoard";
 import { prune, type Arrangement, type CardView, type GameView, type StackItemView } from "./view";
@@ -131,6 +131,8 @@ export type OpenMenu = (e: React.MouseEvent, target: MenuTarget) => void;
 export function TableBoard(props: {
   view: GameView;
   layout: LayoutId;
+  /** Picking a step on the phase strip (Use later). */
+  pickStep?: StepPick;
   /** The left rail; it shows the hovered card. */
   rail: (preview: Preview | null) => ReactNode;
   stops: TableStopsState;
@@ -428,6 +430,7 @@ export function TableBoard(props: {
             priority={props.priority}
             perOpponent={st.perOpponent}
             onPerOpponent={st.setPerOpponent}
+            pick={props.pickStep}
           />
           <div className="strip-actions">
             <button className="btn small" onClick={() => void st.save()} title="Use these stops in every new game (per seat, in turn order after you)">Save stops</button>

@@ -84,7 +84,7 @@ export function AbilityPanel({ ability, card, showText }: { ability: CardAbility
   );
 }
 
-function Check(props: { kind: "menuitemcheckbox" | "menuitemradio"; on: boolean; disabled?: boolean; hint?: string; onClick: () => void; children: ReactNode }) {
+export function Check(props: { kind: "menuitemcheckbox" | "menuitemradio"; on: boolean; disabled?: boolean; hint?: string; onClick: () => void; children: ReactNode }) {
   return (
     <button role={props.kind} aria-checked={props.on} disabled={props.disabled} className="ab-check" onClick={props.onClick}>
       <i className={`${props.kind === "menuitemradio" ? "radio" : "box"}${props.on ? " on" : ""}`} aria-hidden />

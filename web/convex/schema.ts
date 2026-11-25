@@ -15,6 +15,14 @@ export const deckCard = v.object({
   category: v.optional(v.string()),
 });
 
+/** When an ability put off in a game is used (src/game/later.ts). */
+export const laterSpec = {
+  when: v.union(v.literal("BEFORE_MY_TURN"), v.literal("MY_UPKEEP"), v.literal("NEXT_END"), v.literal("STEP")),
+  phase: v.optional(v.string()),
+  whose: v.optional(v.string()),
+  ask: v.optional(v.boolean()),
+};
+
 export default defineSchema({
   // users, sessions, accounts, … from Convex Auth
   ...authTables,
@@ -53,6 +61,8 @@ export default defineSchema({
         }),
       ),
     ),
+    /** Abilities saved with the deck to be used later (src/game/later.ts), for every copy of the card. */
+    later: v.optional(v.array(v.object({ card: v.string(), text: v.string(), ...laterSpec }))),
     /** How the editor groups this deck (src/deckGroups.ts); absent = by type. */
     groupBy: v.optional(v.string()),
     /** The folder the player filed this deck in (convex/folders.ts); absent = not in a folder. */

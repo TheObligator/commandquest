@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.tinylog.Logger;
 
 /**
@@ -54,7 +55,8 @@ public final class AutoPay {
         List<Tap> plan = null;
         try {
             if (input != null && cost != null && me.getManaPool().isEmpty() && !paidFor.tracksManaSpent()) {
-                plan = plan(sources(me, paidFor), shards(cost), hand(me, paidFor));
+                UseLater later = ctl instanceof WebPlayerController w ? w.later() : null;
+                plan = plan(sources(me, paidFor, later), shards(cost), keep(me, paidFor, later));
             }
         } catch (RuntimeException e) {
             Logger.debug(e, "Couldn't plan the payment");
@@ -93,6 +95,12 @@ public final class AutoPay {
 
     /** Your untapped permanents that tap for exactly one mana with no other cost or effect. */
     static List<Source> sources(Player me, SpellAbility paidFor) {
+        return sources(me, paidFor, null);
+    }
+
+    /** {@code later}: what's waiting to be used later, whose own cards are tapped last (null: none). */
+    static List<Source> sources(Player me, SpellAbility paidFor, UseLater later) {
+        Set<Integer> waiting = later == null ? Set.of() : later.waitingCards();
         List<Source> out = new ArrayList<>();
         for (Card c : me.getCardsIn(ZoneType.Battlefield)) {
             if (c.isTapped() || c.isPhasedOut()) {
@@ -127,7 +135,8 @@ public final class AutoPay {
                 }
             }
             boolean otherAbilities = c.getSpellAbilities().stream().anyMatch(sa -> !sa.isManaAbility() && sa.isActivatedAbility());
-            int penalty = 1 + 2 * colors + (c.isCreature() ? 20 : 0) + (otherAbilities ? 3 : 0) + (anyColor ? 1 : 0);
+            int penalty = 1 + 2 * colors + (c.isCreature() ? 20 : 0) + (otherAbilities ? 3 : 0) + (anyColor ? 1 : 0)
+                    + (waiting.contains(c.getId()) ? 30 : 0);
             out.add(new Source(c, byColor, penalty, anyColor));
         }
         out.sort(Comparator.comparingInt(Source::penalty).thenComparingInt(s -> s.card().getId()));
@@ -167,30 +176,51 @@ public final class AutoPay {
             if (c == paying || c.isLand()) {
                 continue;
             }
-            forge.card.mana.ManaCost mc = c.getManaCost();
-            if (mc == null || mc.isNoCost() || mc.hasHybrid() || mc.hasPhyrexian() || mc.countX() > 0) {
-                continue;
+            HandSpell spell = spell(c.getManaCost());
+            if (spell != null) {
+                out.add(spell);
             }
-            Map<Byte, Integer> colored = new LinkedHashMap<>();
-            for (byte color : COLORS) {
-                ManaCostShard shard = switch (color) {
-                    case MagicColor.WHITE -> ManaCostShard.WHITE;
-                    case MagicColor.BLUE -> ManaCostShard.BLUE;
-                    case MagicColor.BLACK -> ManaCostShard.BLACK;
-                    case MagicColor.RED -> ManaCostShard.RED;
-                    default -> ManaCostShard.GREEN;
-                };
-                int n = mc.getShardCount(shard);
-                if (n > 0) {
-                    colored.put(color, n);
-                }
-            }
-            if (mc.getShardCount(ManaCostShard.COLORLESS) > 0) {
-                continue;   // {C}: rare, leave it out
-            }
-            out.add(new HandSpell(colored, mc.getGenericCost()));
         }
         return out;
+    }
+
+    /** What to keep mana for: your hand, and the abilities you've put off until later. */
+    static List<HandSpell> keep(Player me, SpellAbility paidFor, UseLater later) {
+        List<HandSpell> out = new ArrayList<>(hand(me, paidFor));
+        if (later != null) {
+            for (SpellAbility sa : later.waiting(me.getGame(), me)) {
+                HandSpell cost = sa.getPayCosts() == null ? null : spell(sa.getPayCosts().getTotalMana());
+                if (cost != null && sa.getHostCard() != paidFor.getHostCard()) {
+                    out.add(cost);
+                }
+            }
+        }
+        return out;
+    }
+
+    /** A plain mana cost (no hybrid, Phyrexian, X or {C}); else null. */
+    private static HandSpell spell(forge.card.mana.ManaCost mc) {
+        if (mc == null || mc.isNoCost() || mc.hasHybrid() || mc.hasPhyrexian() || mc.countX() > 0) {
+            return null;
+        }
+        Map<Byte, Integer> colored = new LinkedHashMap<>();
+        for (byte color : COLORS) {
+            ManaCostShard shard = switch (color) {
+                case MagicColor.WHITE -> ManaCostShard.WHITE;
+                case MagicColor.BLUE -> ManaCostShard.BLUE;
+                case MagicColor.BLACK -> ManaCostShard.BLACK;
+                case MagicColor.RED -> ManaCostShard.RED;
+                default -> ManaCostShard.GREEN;
+            };
+            int n = mc.getShardCount(shard);
+            if (n > 0) {
+                colored.put(color, n);
+            }
+        }
+        if (mc.getShardCount(ManaCostShard.COLORLESS) > 0) {
+            return null;   // {C}: rare, leave it out
+        }
+        return new HandSpell(colored, mc.getGenericCost());
     }
 
     /** Could these sources (the ones not {@code used}) pay for this spell? */

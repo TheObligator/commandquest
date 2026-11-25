@@ -30,6 +30,7 @@ import forge.web.engine.AutoPay;
 import forge.web.engine.ManaTaps;
 import forge.web.engine.Payment;
 import forge.web.engine.Rewind;
+import forge.web.engine.UseLater;
 import forge.web.engine.ForgeEngine;
 import forge.web.engine.GameSession;
 import io.javalin.websocket.WsContext;
@@ -157,7 +158,7 @@ public final class GameHub {
         }
     }
 
-    private record Joined(Conn conn, Deck deck, Map<String, String> tokens, String deckId, JsonNode abilities) {}
+    private record Joined(Conn conn, Deck deck, Map<String, String> tokens, String deckId, JsonNode abilities, JsonNode later) {}
 
     private static final java.util.regex.Pattern GAME_KEY = java.util.regex.Pattern.compile("^[0-9a-f]{32}$");
 
@@ -289,6 +290,7 @@ public final class GameHub {
             }
             case "stops" -> stops(c, m.path("stops"));
             case "yield" -> yieldTo(c, m.path("key").asText(""), m.path("autoYield"), m.path("decision").asText(null), m.path("everyCopy"));
+            case "later" -> later(c, m);
             case "manual" -> manual(c, m);
             case "payFree" -> payFree(c);
             case "manaOptions" -> manaOptions(c, m.path("ids"));
@@ -395,7 +397,7 @@ public final class GameHub {
                     }
                 });
                 seat.setFreePlay(freePlay);
-                seat.setDeck(m.path("deck").path("id").asText(null), m.path("deck").path("abilities"));
+                seat.setDeck(m.path("deck").path("id").asText(null), m.path("deck").path("abilities"), m.path("deck").path("later"));
                 h.seat = seat;
                 seats.add(new GameSession.Seat(name, mine, seat, tokenArt(m.path("deck").path("tokens"))));
                 List<Deck> ai = Decks.randomPrecons(opponents);
@@ -462,7 +464,7 @@ public final class GameHub {
                         send(c, gone);
                         return;
                     }
-                    g.joined.put(c.user, new Joined(c, deck, tokens, m.path("deck").path("id").asText(null), m.path("deck").path("abilities")));
+                    g.joined.put(c.user, new Joined(c, deck, tokens, m.path("deck").path("id").asText(null), m.path("deck").path("abilities"), m.path("deck").path("later")));
                     everyone = g.joined.size() >= g.roster.players().size();
                 }
                 if (everyone) {
@@ -562,7 +564,7 @@ public final class GameHub {
                     }
                 });
                 seat.setFreePlay(g.roster.freePlay());
-                seat.setDeck(j.deckId(), j.abilities());
+                seat.setDeck(j.deckId(), j.abilities(), j.later());
                 h.seat = seat;
                 seats.add(new GameSession.Seat(name, j.deck(), seat, j.tokens()));
                 users.put(name, user);
@@ -743,6 +745,9 @@ public final class GameHub {
                 a.put("ability", sa.getId());
                 a.put("label", label);
                 a.put("enabled", playable.contains(sa.getId()) || playableText.contains(label));
+                if (UseLater.applies(sa) && (card.getController() == me || card.getOwner() == me)) {
+                    a.put("later", sa.getRestrictions().isSorcerySpeed() ? "sorcery" : "any");
+                }
             }
             if (playable.isEmpty()) {
                 o.put("reason", noTargets ? "Nothing it can target right now." : Explain.whyNot(g, me, card, priorityInput(ctl)));
@@ -787,6 +792,38 @@ public final class GameHub {
             if (seat != null) {
                 seat.refresh();
             }
+        });
+    }
+
+    /**
+     * Abilities put off to a step ({@link UseLater}): {@code action} {@code set} (card {@code id}, its ability's
+     * {@code label}, and when), {@code cancel} or {@code leave} (the entry's {@code id}).
+     */
+    private void later(Conn c, JsonNode m) {
+        act(c, ctl -> {
+            Game g = game(c);
+            BrowserSeat seat = seat(c);
+            Player me = g == null || seat == null || seat.player() == null ? null : g.getPlayer(seat.player().getId());
+            if (me == null || !(ctl instanceof WebPlayerController w)) {
+                return;
+            }
+            int id = m.path("id").asInt(-1);
+            switch (m.path("action").asText("")) {
+                case "set" -> {
+                    Card card = g.findById(id);
+                    boolean yours = card != null && canSee(card, seat.player()) && (card.getController() == me || card.getOwner() == me);
+                    String why = w.later().set(g, me, yours ? card : null, m.path("label").asText(""), UseLater.Spec.of(m));
+                    if (why != null) {
+                        notice(c, why);
+                    }
+                }
+                case "cancel" -> w.later().cancel(id);
+                case "leave" -> w.later().leave(id);
+                default -> {
+                    return;
+                }
+            }
+            seat.refresh();
         });
     }
 

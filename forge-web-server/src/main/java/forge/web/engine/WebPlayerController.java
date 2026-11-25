@@ -5,6 +5,8 @@ import forge.game.Game;
 import forge.game.GameEntity;
 import forge.game.GameType;
 import forge.game.ability.ApiType;
+import forge.game.cost.CostPart;
+import forge.game.cost.CostPayLife;
 import forge.game.card.Card;
 import forge.game.card.CardCollection;
 import forge.game.card.CardCollectionView;
@@ -47,6 +49,7 @@ import org.tinylog.Logger;
  *       you see the new seven and decide again; only the hand you keep has cards put back. Forge
  *       asks for them straight after each mulligan, before you've decided to keep.</li>
  *   <li><b>An automatic upkeep stop</b> when you can use an upkeep-only ability ({@link UpkeepStop}).</li>
+ *   <li><b>Abilities put off to a step</b> are used there ({@link UseLater}).</li>
  *   <li><b>Revealed cards show in a window you close</b>, without stopping the game. Forge waits
  *       on an OK (with "End Turn" beside it) or a list to dismiss.</li>
  *   <li><b>Scry and surveil in one window</b> with the cards, for any number of cards. Forge asks
@@ -60,6 +63,8 @@ public class WebPlayerController extends PlayerControllerHuman {
     private final BrowserSeat seat;
     /** This player's auto-yield and always yes / no settings, per ability. */
     private final AbilitySettings abilities;
+    /** Abilities this player has put off to a step. */
+    private final UseLater later;
     /** The card {@link UpkeepStop} found when this player last got priority, or null. */
     private volatile Card upkeepCard;
     /** Turn on which the player was last told about an automatic upkeep stop. */
@@ -69,6 +74,7 @@ public class WebPlayerController extends PlayerControllerHuman {
         super(game, p, lp);
         this.seat = seat;
         this.abilities = seat == null ? new AbilitySettings() : seat.abilities();
+        this.later = seat == null ? new UseLater() : seat.later();
     }
 
     // ---- Auto-yield and always yes / no: ours, with a scope per ability, instead of Forge's ----
@@ -277,8 +283,12 @@ public class WebPlayerController extends PlayerControllerHuman {
             askAgain = false;
             return List.of(); // not a pass: Forge checks the game over and comes back
         }
-        if (passingUntilMyTurn()) {
+        if (dueNow()) {
+            return List.of(auto);
+        }
+        if (passingUntilMyTurn() || passOwnAbility()) {
             getGui().awaitNextInput();
+            later.passed();
             return null; // pass
         }
         Card found = null;
@@ -288,12 +298,113 @@ public class WebPlayerController extends PlayerControllerHuman {
             // Never let the check break the game: without it you simply get your normal stops.
         }
         upkeepCard = found;
-        return super.chooseSpellAbilityToPlay();
+        List<SpellAbility> chosen = super.chooseSpellAbilityToPlay();
+        if (chosen == null) {
+            stopHere = false;
+            later.passed();
+        }
+        return chosen;
+    }
+
+    // ---- Use later: an ability put off to this step ----
+
+    /** The ability being used for the player, or just used. */
+    private volatile SpellAbility auto;
+    /** True while {@link #auto} is being put on the stack: its costs are paid without asking. */
+    private boolean playingAuto;
+    /** The stack item of an ability used for the player, which they then pass on as they would have; -1: none. */
+    private int passOn = -1;
+    /** Give the player priority here even without a stop (until they pass). */
+    private volatile boolean stopHere;
+    /** Paying life for an ability used for the player asks first when it would leave them with less than this. */
+    static final int KEEP_LIFE = 5;
+
+    public UseLater later() {
+        return later;
+    }
+
+    /** An ability put off until now is to be used ({@link #auto}). Also ends auto-passing when the player has to decide about one. */
+    private boolean dueNow() {
+        UseLater.Next next;
+        try {
+            next = later.next(getGame(), player);
+        } catch (RuntimeException e) {
+            Logger.warn(e, "Couldn't check the abilities put off until later");
+            return false;
+        }
+        if (next.ability() != null) {
+            auto = next.ability();
+            return true;
+        }
+        if (next.stop()) {
+            stopForPlayer();
+        }
+        if (next.notice() != null && seat != null) {
+            seat.notice(next.notice());
+        }
+        return false;
+    }
+
+    private void stopForPlayer() {
+        stopHere = true;
+        passingFrom = -1;
+        getYieldController().applyInterrupt();
+        if (seat != null) {
+            seat.refresh();
+        }
+    }
+
+    /** The ability just used for the player is on top of the stack: pass on it, once. */
+    private boolean passOwnAbility() {
+        int id = passOn;
+        passOn = -1;
+        var top = getGame().getStack().peek();
+        return id >= 0 && top != null && top.getId() == id;
+    }
+
+    @Override
+    public boolean playChosenSpellAbility(SpellAbility chosenSa) {
+        boolean forPlayer = chosenSa == auto;
+        String label = UseLater.applies(chosenSa) ? UseLater.label(chosenSa) : null;
+        Card host = chosenSa.getHostCard();
+        boolean played;
+        playingAuto = forPlayer;
+        try {
+            played = super.playChosenSpellAbility(chosenSa);
+        } finally {
+            playingAuto = false;
+            auto = null;
+        }
+        if (played && label != null) {
+            later.used(host.getId(), label);
+        }
+        if (forPlayer) {
+            var top = getGame().getStack().peek();
+            if (!played) {
+                stopForPlayer(); // they backed out (of choosing a target, say): it's theirs to decide
+            } else if (top != null && top.getActivatingPlayer() == player && top.getSourceCard() != null && top.getSourceCard().getId() == host.getId()) {
+                passOn = top.getId();
+            }
+        }
+        return played;
+    }
+
+    /** Costs of an ability used for the player: they said to use it, so no "do you want to sacrifice it?". */
+    @Override
+    public boolean confirmPayment(CostPart part, String question, SpellAbility sa) {
+        if (playingAuto && auto != null && sa.getHostCard() == auto.getHostCard()
+                && !(part instanceof CostPayLife && player.getLife() - part.getAbilityAmount(sa) < KEEP_LIFE)) {
+            return true;
+        }
+        return super.confirmPayment(part, question, sa);
     }
 
     @Override
     public boolean isUiSetToSkipPhase(PlayerView turnPlayer, PhaseType phase) {
         boolean skip = super.isUiSetToSkipPhase(turnPlayer, phase);
+        if (skip && stopHere) {
+            return false;
+        }
         Card card = upkeepCard;
         if (!skip || phase != PhaseType.UPKEEP || card == null) {
             return skip;

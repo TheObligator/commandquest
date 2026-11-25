@@ -107,14 +107,22 @@ public final class BrowserSeat implements IRemote {
         return me;
     }
 
+    /** Abilities you've put off to a step. */
+    private final UseLater later = new UseLater();
+
+    UseLater later() {
+        return later;
+    }
+
     AbilitySettings abilities() {
         return abilities;
     }
 
-    /** The deck you're playing: the browser's id for it, and the ability settings saved with it. */
-    public void setDeck(String id, com.fasterxml.jackson.databind.JsonNode savedAbilities) {
+    /** The deck you're playing: the browser's id for it, and the ability settings and put-off abilities saved with it. */
+    public void setDeck(String id, JsonNode savedAbilities, JsonNode savedLater) {
         deckId = id != null && !id.isBlank() && id.length() <= 64 ? id : null;
         abilities.seed(savedAbilities);
+        later.seed(savedLater);
     }
 
     /** Rewinding in this seat's game (null while it's off). */
@@ -324,6 +332,11 @@ public final class BrowserSeat implements IRemote {
                 searching.forEach(id -> s.add(String.valueOf(id)));
             }
             yields(gv, view);
+            Player self = live == null ? null : live.getPlayer(me.getId());
+            ArrayNode waiting = self == null ? null : later.json(json, live, self);
+            if (waiting != null && !waiting.isEmpty()) {
+                view.set("later", waiting);
+            }
             o.set("view", view);
             state = json.writeValueAsString(o);
         } catch (Exception e) {

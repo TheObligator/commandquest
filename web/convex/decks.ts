@@ -6,6 +6,8 @@ import { checkBracket, colorCards, DeckError, MAX_DECKS_PER_USER, summarize, val
 import { CARD_LIST } from "../src/deckFormats";
 import { DEFAULT_GROUPING, isGroupBy } from "../src/deckGroups";
 import { withSaved } from "../src/game/abilities";
+import { canSaveLater, withSavedLater, type LaterSpec } from "../src/game/later";
+import { laterSpec } from "./schema";
 import { deckCard } from "./schema";
 
 // Every function is scoped to the signed-in user: nobody can read or change another user's decks.
@@ -196,6 +198,7 @@ export const setTokenArt = mutation({
 });
 
 const MAX_SAVED_ABILITIES = 200;
+const MAX_SAVED_LATER = 50;
 
 /** Save an ability's setting with a deck, for every copy of it (nothing set takes it out). */
 export const setAbility = mutation({
@@ -215,5 +218,21 @@ export const setAbility = mutation({
     if (next.length > MAX_SAVED_ABILITIES) throw new ConvexError(`You can save up to ${MAX_SAVED_ABILITIES} abilities with a deck.`);
     // Not an edit to the deck, so `updatedAt` (the deck list's order) stays put.
     await ctx.db.patch(id, { abilities: next.length ? next : undefined });
+  },
+});
+
+/** Save an ability to be used later with a deck, for every copy of the card (no spec takes it out). */
+export const setLater = mutation({
+  args: { id: v.id("decks"), card: v.string(), text: v.string(), spec: v.union(v.null(), v.object(laterSpec)) },
+  handler: async (ctx, { id, card, text, spec }) => {
+    const userId = await requireUser(ctx);
+    const deck = await ctx.db.get(id);
+    if (!deck || deck.userId !== userId) throw new ConvexError("Deck not found.");
+    if (!text.trim() || text.length > 2000 || !card.trim() || card.length > 200) throw new ConvexError("Not an ability.");
+    const full = spec && ({ ...spec, everyCopy: true } as LaterSpec);
+    if (full && (!canSaveLater(full) || (full.when === "STEP" && !full.phase) || (full.phase?.length ?? 0) > 40)) throw new ConvexError("That can't be saved with a deck.");
+    const next = withSavedLater(deck.later ?? [], card, text, full);
+    if (next.length > MAX_SAVED_LATER) throw new ConvexError(`You can save up to ${MAX_SAVED_LATER} abilities to use later with a deck.`);
+    await ctx.db.patch(id, { later: next.length ? next : undefined });
   },
 });

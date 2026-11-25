@@ -6,18 +6,24 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { errorMessage } from "../app/errors";
 import { toast } from "../dom";
 import { AbilityMarks } from "../game/AbilityMenu";
+import { laterText } from "../game/later";
 import "../game/abilityMarks.css";
 
 export function DeckAbilities({ deckId }: { deckId?: string }) {
-  const saved = useQuery(api.decks.get, deckId ? { id: deckId } : "skip")?.abilities ?? [];
+  const deck = useQuery(api.decks.get, deckId ? { id: deckId } : "skip");
+  const saved = deck?.abilities ?? [];
+  const later = deck?.later ?? [];
   const setAbility = useMutation(api.decks.setAbility);
-  if (!deckId || !saved.length) return null;
+  const setLater = useMutation(api.decks.setLater);
+  if (!deckId || !(saved.length + later.length)) return null;
+  const removeLater = (card: string, text: string) =>
+    setLater({ id: deckId as Id<"decks">, card, text, spec: null }).catch((e) => toast(errorMessage(e), "error"));
   const remove = (card: string, text: string) =>
     setAbility({ id: deckId as Id<"decks">, card, text, autoYield: false, decision: "ASK" }).catch((e) => toast(errorMessage(e), "error"));
   return (
     <section className="board deck-abilities">
       <h2>
-        Saved abilities<span className="muted"> {saved.length}</span>
+        Saved abilities<span className="muted"> {saved.length + later.length}</span>
       </h2>
       <p className="muted small">Used whenever you play this deck. Add one in a game: right-click a card, pick the ability, and tick “Save with this deck”.</p>
       <ul>
@@ -29,6 +35,16 @@ export function DeckAbilities({ deckId }: { deckId?: string }) {
             </div>
             <AbilityMarks setting={a} />
             <button className="btn small ghost" onClick={() => void remove(a.card, a.text)} aria-label={`Remove the setting for ${a.card}`}>Remove</button>
+          </li>
+        ))}
+        {later.map((l) => (
+          <li key={`later-${l.card}-${l.text}`}>
+            <div>
+              <strong>{l.card}</strong>
+              <span className="small muted">{l.text}</span>
+            </div>
+            <span className="ab-marks"><b className="ab-mark later">{l.ask ? "asks" : "used"}: {laterText(l)}</b></span>
+            <button className="btn small ghost" onClick={() => void removeLater(l.card, l.text)} aria-label={`Remove the setting for ${l.card}`}>Remove</button>
           </li>
         ))}
       </ul>

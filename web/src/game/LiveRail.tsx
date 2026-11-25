@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AUTO_PASS } from "./ActionRail";
 import { isAttackPrompt } from "./AttackArrows";
 import { manaChoiceFor } from "./manaOptions";
+import { LaterRail } from "./LaterMenu";
 import { RewindPanel } from "./RewindPanel";
 import { ScryDialog } from "./ScryDialog";
 import { Kbd, useHotkeys } from "./useHotkeys";
@@ -31,6 +32,8 @@ export function LiveRail(props: {
   const { game, nameOf } = props;
   return (
     <aside className="action-rail">
+
+      <LaterRail />
 
       {/* At the bottom, by your hand: what the game wants now, then the skips. */}
       {manaChoiceFor(game.ask, null) ? (
