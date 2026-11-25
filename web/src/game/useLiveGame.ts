@@ -583,6 +583,16 @@ export function useLiveGame() {
     setYield(key: string, change: { autoYield?: boolean; decision?: Decision; everyCopy?: boolean }) {
       send({ t: "yield", key, ...change });
     },
+    /** Record and run combos (docs/combos.md); `times` 0: until stopped. */
+    combos: {
+      record: () => void send({ t: "combo", action: "record" }),
+      keep: () => void send({ t: "combo", action: "keep" }),
+      discard: () => void send({ t: "combo", action: "discard" }),
+      run: (id: number, times: number) => void send({ t: "combo", action: "run", id, times }),
+      stop: () => void send({ t: "combo", action: "stop" }),
+      rename: (id: number, name: string) => void send({ t: "combo", action: "rename", id, name }),
+      remove: (id: number) => void send({ t: "combo", action: "remove", id }),
+    },
     /** Put an ability off to a step (docs/use-later.md). */
     setLater: (id: number, label: string, spec: LaterSpec) => send({ t: "later", action: "set", id, label, ...spec }),
     cancelLater: (id: number) => send({ t: "later", action: "cancel", id }),

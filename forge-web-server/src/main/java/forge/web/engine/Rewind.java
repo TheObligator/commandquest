@@ -127,6 +127,20 @@ public final class Rewind {
     private String note;
     private int noteId;
     private Runnable changed = () -> { };
+    /** A combo is running: the moments in between aren't saved, so the whole run is one step back. */
+    private volatile boolean held;
+
+    void hold(boolean on) {
+        held = on;
+        if (!on) {
+            dirty = true;
+        }
+    }
+
+    /** Changes whenever a rewind is asked for, answered or done. */
+    synchronized int activity() {
+        return noteId * 2 + (pending != null ? 1 : 0);
+    }
 
     public Rewind(Game game, int level) {
         this.game = game;
@@ -314,6 +328,9 @@ public final class Rewind {
             Point last = points.isEmpty() ? null : points.get(points.size() - 1);
             if (last != null && last.actor()[0] == null) {
                 last.actor()[0] = byHand(last.logSize());
+            }
+            if (held && last != null && last.turn() == ph.getTurn()) {
+                return;
             }
             if (!dirty && last != null && last.sameStep(ph.getTurn(), ph.getPhase())) {
                 return;   // only priority moved on: rewinding to the newest point gives the same game

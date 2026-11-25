@@ -1226,7 +1226,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
         },
         onCancel: () => setStepPick(null),
       } : undefined}
-      rail={(preview) => <LiveRail game={{ ...game, ok, cancel, setAutoPass, clickCard: click }} nameOf={nameOf} colorOf={colorOf} preview={preview} boardAsk={board && game.ask ? { onOk: boardPicked.length >= game.ask.min && boardPicked.length <= game.ask.max ? answerBoard : null } : undefined} pickAsk={!!askCards || windowAsk} onShowPick={pickKey && pickHidden === pickKey ? () => setPickHidden("") : undefined} />}
+      rail={(preview) => <LiveRail priority={priorityPrompt} game={{ ...game, ok, cancel, setAutoPass, clickCard: click }} nameOf={nameOf} colorOf={colorOf} preview={preview} boardAsk={board && game.ask ? { onOk: boardPicked.length >= game.ask.min && boardPicked.length <= game.ask.max ? answerBoard : null } : undefined} pickAsk={!!askCards || windowAsk} onShowPick={pickKey && pickHidden === pickKey ? () => setPickHidden("") : undefined} />}
       hand={{
         onPlay: click,
         onClick: click,

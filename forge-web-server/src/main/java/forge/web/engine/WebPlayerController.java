@@ -283,6 +283,9 @@ public class WebPlayerController extends PlayerControllerHuman {
             askAgain = false;
             return List.of(); // not a pass: Forge checks the game over and comes back
         }
+        if (comboActive()) {
+            return super.chooseSpellAbilityToPlay(); // every pass is the player's own
+        }
         if (dueNow()) {
             return List.of(auto);
         }
@@ -304,6 +307,17 @@ public class WebPlayerController extends PlayerControllerHuman {
             later.passed();
         }
         return chosen;
+    }
+
+    // ---- Combos: while recording or running one, nothing is skipped or answered for the player ----
+
+    private boolean comboActive() {
+        return seat != null && seat.combos().active();
+    }
+
+    @Override
+    public boolean isMacroActive() {
+        return comboActive() || super.isMacroActive();
     }
 
     // ---- Use later: an ability put off to this step ----
@@ -401,6 +415,9 @@ public class WebPlayerController extends PlayerControllerHuman {
 
     @Override
     public boolean isUiSetToSkipPhase(PlayerView turnPlayer, PhaseType phase) {
+        if (comboActive()) {
+            return false;
+        }
         boolean skip = super.isUiSetToSkipPhase(turnPlayer, phase);
         if (skip && stopHere) {
             return false;

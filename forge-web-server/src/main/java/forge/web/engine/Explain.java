@@ -128,4 +128,21 @@ public final class Explain {
             return true; // when in doubt, let Forge decide
         }
     }
+
+    /**
+     * Would this click start only things that need a target when there's none? ({@code ability}:
+     * the one picked from the card's menu, else everything the card can do now.)
+     */
+    public static boolean noTargets(Card card, Player me, Integer ability, String label) {
+        java.util.List<SpellAbility> options = new java.util.ArrayList<>();
+        for (SpellAbility sa : card.getAllPossibleAbilities(me, true)) {
+            if (sa.isManaAbility()) {
+                continue;
+            }
+            if (ability == null || sa.getId() == ability || (label != null && label.equals(sa.getView().getDescription()))) {
+                options.add(sa);
+            }
+        }
+        return !options.isEmpty() && options.stream().noneMatch(sa -> hasTargets(sa, me));
+    }
 }

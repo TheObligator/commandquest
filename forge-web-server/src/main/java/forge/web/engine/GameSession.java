@@ -121,6 +121,8 @@ public final class GameSession {
                 if (seat.remote() instanceof BrowserSeat browser) {
                     browser.attach(gui, s.tokenArt, s::game);
                     browser.setRewind(s::rewind);
+                    browser.setComboRunning(s::comboRunning);
+                    browser.combos().setTable(s.aroundCombos());
                     s.browsers.add(browser);
                 }
                 guiMap.put(rp, gui);
@@ -177,6 +179,47 @@ public final class GameSession {
             g.subscribeToEvents(r);
             rewind = r;
         }
+    }
+
+    /** Someone is running a combo. */
+    private boolean comboRunning() {
+        for (BrowserSeat b : browsers) {
+            if (b.combos().running()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** A whole combo run is one step back for rewinding, and few frames of the recording. */
+    private Combos.Table aroundCombos() {
+        return new Combos.Table() {
+            @Override
+            public void started() {
+                hold(true);
+            }
+
+            @Override
+            public void ended() {
+                hold(comboRunning());
+                browsers.forEach(BrowserSeat::refresh);
+            }
+
+            @Override
+            public int rewinds() {
+                Rewind r = rewind;
+                return r == null ? 0 : r.activity();
+            }
+
+            private void hold(boolean on) {
+                if (rewind != null) {
+                    rewind.hold(on);
+                }
+                if (recording != null) {
+                    recording.hold(on);
+                }
+            }
+        };
     }
 
     private boolean hooked;

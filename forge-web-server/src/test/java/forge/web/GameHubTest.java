@@ -559,4 +559,91 @@ public class GameHubTest {
         }
         return n;
     }
+
+    /** Recording a combo over the socket: the clicks in between are its steps, and nothing by hand is let in. */
+    @Test(timeOut = 240_000)
+    public void recordsACombo() throws Exception {
+        MyRandom.setRandom(new Random(9));
+        TestTokens tokens = new TestTokens();
+        Javalin app = WebServer.create(new WebServer.Options(null, Set.of(), null, tokens.auth(), 2)).start(0);
+        Browser b = new Browser();
+        WebSocket ws = HttpClient.newHttpClient().newWebSocketBuilder()
+                .buildAsync(URI.create("ws://localhost:" + app.port() + "/ws"), b).get(5, TimeUnit.SECONDS);
+        try {
+            ws.sendText("{\"t\":\"hello\",\"token\":\"" + tokens.valid("combo") + "\"}", true);
+            next(b, "hello", 10_000);
+            ObjectNode start = json.createObjectNode();
+            start.put("t", "start").put("name", "Tester").put("opponents", 1).set("deck", deck());
+            ws.sendText(json.writeValueAsString(start), true);
+
+            JsonNode view = null;
+            String stage = "land";
+            int land = -1;
+            boolean refused = false;
+            long end = System.currentTimeMillis() + 120_000;
+            while (!stage.equals("done")) {
+                Assert.assertTrue(System.currentTimeMillis() < end, "timed out at " + stage);
+                String text = b.inbox.poll(5, TimeUnit.SECONDS);
+                if (text == null) {
+                    continue;
+                }
+                JsonNode m = json.readTree(text);
+                String t = m.path("t").asText();
+                if (t.equals("state")) {
+                    view = m.path("view");
+                }
+                if (t.equals("notice")) {
+                    refused |= m.path("message").asText().contains("can't be part of a combo");
+                }
+                if (t.equals("ask")) {
+                    ObjectNode a = json.createObjectNode();
+                    a.put("t", "answer").put("id", m.path("id").asInt()).putArray("choice").add(0);
+                    ws.sendText(json.writeValueAsString(a), true);
+                }
+                if (view == null) {
+                    continue;
+                }
+                JsonNode combos = view.path("combos");
+                if (stage.equals("recording") && combos.has("recording")) {
+                    ws.sendText("{\"t\":\"manual\",\"id\":" + land + ",\"action\":\"tap\"}", true);
+                    ws.sendText("{\"t\":\"card\",\"id\":" + land + "}", true);
+                    stage = "tapping";
+                } else if (stage.equals("tapping") && combos.path("recording").size() == 1 && t.equals("prompt")) {
+                    ws.sendText("{\"t\":\"combo\",\"action\":\"keep\",\"name\":\"Plains mana\"}", true);
+                    stage = "keeping";
+                } else if (stage.equals("keeping") && combos.path("list").size() == 1) {
+                    JsonNode c = combos.path("list").get(0);
+                    Assert.assertEquals(c.path("name").asText(), "Plains mana");
+                    Assert.assertEquals(c.path("steps").size(), 1, c.toString());
+                    Assert.assertTrue(c.path("gains").toString().contains("+1 {W}"), c.toString());
+                    Assert.assertFalse(c.path("loops").asBoolean(), "the Plains stays tapped");
+                    Assert.assertFalse(combos.has("recording"));
+                    stage = "done";
+                } else if (t.equals("prompt") && (stage.equals("land") || stage.equals("main"))) {
+                    boolean myMain = view.path("active").asText().equals(view.path("viewer").asText()) && view.path("step").asText().equals("MAIN1")
+                            && m.path("cancel").path("label").asText().matches("End Turn|Undo.*") && view.path("stack").isEmpty();
+                    JsonNode field = view.path("players").get(0).path("battlefield");
+                    if (myMain && !field.isEmpty()) {
+                        land = field.get(0).path("id").asInt();
+                        stage = "recording";
+                        ws.sendText("{\"t\":\"combo\",\"action\":\"record\"}", true);
+                    } else if (myMain && stage.equals("land")) {
+                        for (JsonNode c : view.path("players").get(0).path("hand")) {
+                            if (c.path("name").asText().equals("Plains")) {
+                                ws.sendText("{\"t\":\"card\",\"id\":" + c.path("id").asInt() + "}", true);
+                                stage = "main";
+                                break;
+                            }
+                        }
+                    } else if (!myMain && m.path("ok").path("enabled").asBoolean()) {
+                        ws.sendText("{\"t\":\"ok\"}", true);
+                    }
+                }
+            }
+            Assert.assertTrue(refused, "nothing by hand while recording");
+        } finally {
+            ws.abort();
+            app.stop();
+        }
+    }
 }

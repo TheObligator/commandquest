@@ -22,11 +22,11 @@ import forge.interfaces.IGameController;
 import forge.web.engine.AbilitySettings;
 import forge.web.engine.AutoPass;
 import forge.web.engine.BrowserSeat;
+import forge.web.engine.Combos;
 import forge.web.engine.Decks;
 import forge.web.engine.WebPlayerController;
 import forge.web.engine.Explain;
 import forge.web.engine.ManualActions;
-import forge.web.engine.AutoPay;
 import forge.web.engine.ManaTaps;
 import forge.web.engine.Payment;
 import forge.web.engine.Rewind;
@@ -212,6 +212,9 @@ public final class GameHub {
     /** Keeps the game for a while: the player may be reloading the page or reconnecting. Call holding h. */
     private void away(Hosted h) {
         h.conn = null;
+        if (h.seat != null) {
+            h.seat.combos().stop();
+        }
         h.expiry = timers.schedule(() -> {
             if (h.conn == null) {
                 Logger.info("Game for {} ended: they didn't come back", h.user);
@@ -246,11 +249,21 @@ public final class GameHub {
             error(c, "Sign in first");
             return;
         }
+        if (inCombo(c, t, m)) {
+            return;
+        }
         switch (t) {
             case "start" -> start(c, m);
             case "table" -> table(c, m);
-            case "ok" -> act(c, ctl -> ok(c, ctl));
-            case "cancel" -> act(c, IGameController::selectButtonCancel);
+            case "ok" -> act(c, ctl -> {
+                note(c, m);
+                ok(c, ctl);
+            });
+            case "cancel" -> act(c, ctl -> {
+                note(c, m);
+                ctl.selectButtonCancel();
+            });
+            case "combo" -> combo(c, m);
             case "concede" -> {
                 BrowserSeat seat = seat(c);
                 if (seat != null) {
@@ -261,7 +274,10 @@ public final class GameHub {
             }
             case "card" -> {
                 int id = m.path("id").asInt();
-                act(c, ctl -> click(c, ctl, id, null, null));
+                act(c, ctl -> {
+                    note(c, m);
+                    click(c, ctl, id, null, null);
+                });
             }
             case "actions" -> {
                 int id = m.path("id").asInt();
@@ -271,13 +287,17 @@ public final class GameHub {
                 int id = m.path("id").asInt();
                 int ability = m.path("ability").asInt();
                 String label = m.path("label").asText(null);
-                act(c, ctl -> click(c, ctl, id, ability, label));
+                act(c, ctl -> {
+                    note(c, m);
+                    click(c, ctl, id, ability, label);
+                });
             }
             case "player" -> {
                 int id = m.path("id").asInt();
                 act(c, ctl -> {
                     Player p = game(c) == null ? null : game(c).getPlayer(id);
                     if (p != null) {
+                        note(c, m);
                         ctl.selectPlayer(p.getView(), null);
                     }
                 });
@@ -285,6 +305,7 @@ public final class GameHub {
             case "answer" -> {
                 BrowserSeat seat = seat(c);
                 if (seat != null) {
+                    note(c, m);
                     seat.answer(m.path("id").asInt(), m.path("choice"), m.path("text").asText(null));
                 }
             }
@@ -294,8 +315,8 @@ public final class GameHub {
             case "manual" -> manual(c, m);
             case "payFree" -> payFree(c);
             case "manaOptions" -> manaOptions(c, m.path("ids"));
-            case "tapForMana" -> tapForMana(c, m.path("picks"));
-            case "payPool" -> payPool(c, m.path("color").asText(""));
+            case "tapForMana" -> tapForMana(c, m);
+            case "payPool" -> payPool(c, m);
             case "library" -> library(c, m);
             case "libraryCards" -> libraryCards(c, m.path("top").asInt(0), m.path("log").asBoolean(false), m.path("owner").asInt(-1));
             case "letSearch" -> letSearch(c, m.path("to").asInt(-1), true);
@@ -674,7 +695,7 @@ public final class GameHub {
             return;
         }
         Player who = seat.player() == null ? null : g.getPlayer(seat.player().getId());
-        if (who != null && priorityInput(ctl) && noTargets(card, who, ability, label)) {
+        if (who != null && priorityInput(ctl) && Explain.noTargets(card, who, ability, label)) {
             notice(c, "Nothing it can target right now.");
             return;
         }
@@ -691,23 +712,6 @@ public final class GameHub {
             o.put("message", Explain.whyNot(g, me, card, priorityInput(ctl)));
             send(c, o);
         }
-    }
-
-    /**
-     * Would this click start only things that need a target when there's none? ({@code ability}:
-     * the one picked from the card's menu, else everything the card can do now.)
-     */
-    private static boolean noTargets(Card card, Player me, Integer ability, String label) {
-        List<SpellAbility> options = new ArrayList<>();
-        for (SpellAbility sa : card.getAllPossibleAbilities(me, true)) {
-            if (sa.isManaAbility()) {
-                continue;
-            }
-            if (ability == null || sa.getId() == ability || (label != null && label.equals(sa.getView().getDescription()))) {
-                options.add(sa);
-            }
-        }
-        return !options.isEmpty() && options.stream().noneMatch(sa -> Explain.hasTargets(sa, me));
     }
 
     /** The card's abilities for its menu: everything Forge lists for this player, and whether each can be used now. */
@@ -792,6 +796,85 @@ public final class GameHub {
             if (seat != null) {
                 seat.refresh();
             }
+        });
+    }
+
+    /** Not while a combo is being recorded: they're no part of playing it. */
+    private static final Set<String> NOT_IN_RECORDING = Set.of("manual", "payFree", "library", "counter", "rewind", "autopass", "letSearch", "endSearch");
+
+    /**
+     * While this player runs a combo it plays for them, so their own moves are ignored (the browser may send
+     * some by itself); while they record one, what can't be recorded is refused. True: nothing more to do.
+     */
+    private boolean inCombo(Conn c, String t, JsonNode m) {
+        BrowserSeat seat = seat(c);
+        if (seat == null) {
+            return false;
+        }
+        boolean running = seat.combos().running();
+        if (running && t.equals("concede")) {
+            seat.combos().stop();
+            return false;
+        }
+        boolean answering = t.equals("rewind") && !Set.of("ask", "change").contains(m.path("action").asText("ask"));
+        boolean refused = NOT_IN_RECORDING.contains(t) && !answering && (running || seat.combos().recording());
+        if (refused) {
+            notice(c, running ? "Your combo is running. Stop it first." : "That can't be part of a combo. Stop recording first.");
+        }
+        return refused || (running && Combos.MOVES.contains(t));
+    }
+
+    /** This move, for the combo being recorded (if any). */
+    private void note(Conn c, JsonNode m) {
+        BrowserSeat seat = seat(c);
+        if (seat != null && seat.combos().recording()) {
+            try {
+                seat.combos().note(m);
+            } catch (RuntimeException e) {
+                Logger.warn(e, "Couldn't record a move");
+                seat.combos().cancelRecording();
+            }
+        }
+    }
+
+    /**
+     * Combos ({@link Combos}): {@code action} {@code record}, {@code keep} ({@code name}), {@code discard}; {@code run}
+     * ({@code id}, {@code times}, 0 until stopped), {@code stop}; {@code rename} ({@code id}, {@code name}), {@code remove} ({@code id}).
+     */
+    private void combo(Conn c, JsonNode m) {
+        BrowserSeat seat = seat(c);
+        if (seat == null) {
+            return;
+        }
+        String action = m.path("action").asText("");
+        if (action.equals("stop")) {
+            seat.combos().stop();
+            return;
+        }
+        act(c, ctl -> {
+            int id = m.path("id").asInt(-1);
+            String why = switch (action) {
+                case "record" -> seat.combos().record();
+                case "keep" -> seat.combos().keep(m.path("name").asText(""));
+                case "run" -> seat.combos().run(id, m.path("times").asInt(1));
+                case "discard" -> {
+                    seat.combos().cancelRecording();
+                    yield null;
+                }
+                case "rename" -> {
+                    seat.combos().rename(id, m.path("name").asText(""));
+                    yield null;
+                }
+                case "remove" -> {
+                    seat.combos().remove(id);
+                    yield null;
+                }
+                default -> null;
+            };
+            if (why != null) {
+                notice(c, why);
+            }
+            seat.refresh();
         });
     }
 
@@ -1005,11 +1088,7 @@ public final class GameHub {
     private void ok(Conn c, IGameController ctl) {
         BrowserSeat seat = seat(c);
         Game g = game(c);
-        if (Payment.input(ctl) != null && seat != null && seat.player() != null && g != null) {
-            AutoPay.run(ctl, g.getPlayer(seat.player().getId()), ctl::selectButtonOk);
-        } else {
-            ctl.selectButtonOk();
-        }
+        Payment.ok(ctl, g == null || seat == null || seat.player() == null ? null : g.getPlayer(seat.player().getId()));
     }
 
     /** Is free play on in this game? If not, tells the browser that manual overrides are off. */
@@ -1177,7 +1256,8 @@ public final class GameHub {
     }
 
     /** Taps cards for mana as picked in the browser (docs/game-protocol.md, {@code tapForMana}). */
-    private void tapForMana(Conn c, JsonNode picksJson) {
+    private void tapForMana(Conn c, JsonNode m) {
+        JsonNode picksJson = m.path("picks");
         act(c, ctl -> {
             Game g = game(c);
             BrowserSeat seat = seat(c);
@@ -1189,6 +1269,7 @@ public final class GameHub {
                 notice(c, "You can tap for mana when you have priority or are paying a cost.");
                 return;
             }
+            note(c, m);
             List<ManaTaps.Pick> picks = new ArrayList<>();
             for (JsonNode p : picksJson) {
                 if (picks.size() < 100) {
@@ -1212,38 +1293,16 @@ public final class GameHub {
      * While paying a cost, use mana from your pool: one of a color ({@code W U B R G C}), or
      * {@code all} for as much as it can pay.
      */
-    private void payPool(Conn c, String color) {
+    private void payPool(Conn c, JsonNode m) {
         act(c, ctl -> {
-            forge.gamemodes.match.input.InputPayMana pay = Payment.input(ctl);
             BrowserSeat seat = seat(c);
             Game g = game(c);
             Player me = g == null || seat == null || seat.player() == null ? null : g.getPlayer(seat.player().getId());
-            if (pay == null || me == null) {
+            if (me == null) {
                 return;
             }
-            List<Byte> colors = new ArrayList<>();
-            for (byte b : forge.card.mana.ManaAtom.MANATYPES) {
-                if (color.equals("all") || forge.card.MagicColor.toShortString(b).equals(color)) {
-                    colors.add(b);
-                }
-            }
-            // Colored mana first, so colorless pays generic only once the colors are covered.
-            for (int guard = 0; guard < 50 && Payment.input(ctl) == pay; guard++) {
-                boolean used = false;
-                for (byte b : colors) {
-                    if (me.getManaPool().getAmountOfColor(b) > 0 && Payment.input(ctl) == pay) {
-                        int before = me.getManaPool().totalMana();
-                        pay.useManaFromPool(b);
-                        used |= me.getManaPool().totalMana() < before;
-                        if (!color.equals("all")) {
-                            break;
-                        }
-                    }
-                }
-                if (!used || !color.equals("all")) {
-                    break;
-                }
-            }
+            note(c, m);
+            Payment.payPool(ctl, me, m.path("color").asText(""));
             seat.refresh();
         });
     }

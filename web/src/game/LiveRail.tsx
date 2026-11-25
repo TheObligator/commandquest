@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AUTO_PASS } from "./ActionRail";
 import { isAttackPrompt } from "./AttackArrows";
 import { manaChoiceFor } from "./manaOptions";
+import { CombosPanel } from "./CombosPanel";
 import { LaterRail } from "./LaterMenu";
 import { RewindPanel } from "./RewindPanel";
 import { ScryDialog } from "./ScryDialog";
@@ -22,6 +23,8 @@ export function LiveRail(props: {
   nameOf: (id: string) => string;
   colorOf: (id: string) => string;
   preview: Preview | null;
+  /** You have priority: a combo can be recorded or run from here. */
+  priority?: boolean;
   /** The pick window (cards to choose from a pile) is hidden: bring it back. */
   onShowPick?: () => void;
   /** The question (`game.ask`) is answered by clicking on the table; this answers it with what's clicked (null: not yet allowed). */
@@ -33,6 +36,9 @@ export function LiveRail(props: {
   return (
     <aside className="action-rail">
 
+      {game.status === "playing" && (
+        <CombosPanel combos={game.view?.combos} actions={game.combos} canRecord={!!props.priority} />
+      )}
       <LaterRail />
 
       {/* At the bottom, by your hand: what the game wants now, then the skips. */}
@@ -102,6 +108,11 @@ function PromptPanel({ game, nameOf, onShowPick }: { game: LiveGame; nameOf: (id
           <>
             <h3>Connection lost</h3>
             <p><Waiting text="Reconnecting…" /></p>
+          </>
+        ) : game.view?.combos?.running ? (
+          <>
+            <h3>Running your combo</h3>
+            <p>It plays by itself. Stop it under Combos.</p>
           </>
         ) : game.sent?.what === "answer" ? (
           <>

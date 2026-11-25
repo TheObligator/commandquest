@@ -6,6 +6,7 @@
 // card shows only that it is there (plus public facts like tapped or counters) unless the
 // player is allowed to look at it (Forge: CardView.canBeShownTo).
 
+import type { CombosView } from "./combos";
 import type { LaterEntry } from "./later";
 import type { AbilitySettings, Decision } from "./abilities";
 import type { StepId } from "./phases";
@@ -151,6 +152,8 @@ export interface GameView {
   viewer: string;
   /** Live games: your auto-yield and always yes / no settings. */
   abilities?: AbilitySettings;
+  /** Live games: your combos. */
+  combos?: CombosView;
   /** Live games: abilities you've put off to a step. */
   later?: LaterEntry[];
   /** Live games: the saved deck you're playing (its Convex id). */

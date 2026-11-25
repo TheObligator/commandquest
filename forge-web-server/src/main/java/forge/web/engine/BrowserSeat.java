@@ -95,6 +95,7 @@ public final class BrowserSeat implements IRemote {
         this.json = json;
         this.views = new ViewJson(json);
         this.sink = sink;
+        this.combos = new Combos(this, json);
     }
 
     void attach(ProtocolGuiGame gui, Map<String, Map<String, String>> tokenArtByPlayer, java.util.function.Supplier<Game> game) {
@@ -105,6 +106,48 @@ public final class BrowserSeat implements IRemote {
 
     public PlayerView player() {
         return me;
+    }
+
+    private final Combos combos;
+
+    /** Your combos in this game. */
+    public Combos combos() {
+        return combos;
+    }
+
+    /** Someone at the table is running a combo: views are sent less often, or they'd take most of the time. */
+    private volatile java.util.function.BooleanSupplier comboRunning = () -> false;
+    private static final int VIEW_EVERY_MS = 200;
+    private volatile long lastView;
+    private final java.util.concurrent.atomic.AtomicBoolean viewDue = new java.util.concurrent.atomic.AtomicBoolean();
+
+    void setComboRunning(java.util.function.BooleanSupplier running) {
+        comboRunning = running;
+    }
+
+    /** The question open now (its {@code ask} message), or null. */
+    ObjectNode openAsk() {
+        return pending.values().stream().map(Pending::ask).max(java.util.Comparator.comparingInt(a -> a.path("id").asInt())).orElse(null);
+    }
+
+    /** The Forge input whose buttons were last shown: it's ready to be answered. */
+    private volatile forge.gamemodes.match.input.Input shownInput;
+
+    forge.gamemodes.match.input.Input shownInput() {
+        return shownInput;
+    }
+
+    String promptMessage() {
+        return promptMessage;
+    }
+
+    boolean closed() {
+        return closed;
+    }
+
+    WebPlayerController webController() {
+        IGuiGame g = gui;
+        return g != null && me != null && gui.getGameController(me) instanceof WebPlayerController w ? w : null;
     }
 
     /** Abilities you've put off to a step. */
@@ -207,7 +250,7 @@ public final class BrowserSeat implements IRemote {
                     ObjectNode o = last.deepCopy();
                     o.put("message", text);
                     lastPrompt = o;
-                    emit(o);
+                    emitPrompt(o);
                 }
             }
             case updateButtons -> {
@@ -221,7 +264,9 @@ public final class BrowserSeat implements IRemote {
                 o.set("cancel", button((String) a[2], (Boolean) a[4]));
                 payment(o);
                 lastPrompt = o;
-                emit(o);
+                emitPrompt(o);
+                WebPlayerController w = webController();
+                shownInput = w == null ? null : w.getInputQueue().getInput();
             }
             case showRevealedCards -> {
                 List<CardView> shown = new ArrayList<>();
@@ -246,7 +291,7 @@ public final class BrowserSeat implements IRemote {
             }
             case awaitNextInput -> {
                 lastPrompt = null;
-                emit(msg("waiting"));
+                emitPrompt(msg("waiting"));
             }
             case finishGame, afterGameEnd -> {
                 lastPrompt = null; // nothing to answer any more (Forge then clears the prompt text)
@@ -298,6 +343,16 @@ public final class BrowserSeat implements IRemote {
         if (gv == null || me == null) {
             return;
         }
+        if (comboRunning.getAsBoolean() && System.currentTimeMillis() - lastView < VIEW_EVERY_MS) {
+            if (viewDue.compareAndSet(false, true)) {
+                forge.util.ThreadUtil.delay(VIEW_EVERY_MS, () -> forge.gui.FThreads.invokeInEdtLater(() -> {
+                    viewDue.set(false);
+                    pushState();
+                }));
+            }
+            return;
+        }
+        lastView = System.currentTimeMillis();
         String state;
         try {
             ObjectNode o = msg("state");
@@ -334,6 +389,10 @@ public final class BrowserSeat implements IRemote {
             yields(gv, view);
             Player self = live == null ? null : live.getPlayer(me.getId());
             ArrayNode waiting = self == null ? null : later.json(json, live, self);
+            ObjectNode own = combos.json();
+            if (own != null) {
+                view.set("combos", own);
+            }
             if (waiting != null && !waiting.isEmpty()) {
                 view.set("later", waiting);
             }
@@ -397,6 +456,9 @@ public final class BrowserSeat implements IRemote {
      */
     private ArrayNode playable() {
         ArrayNode ids = json.createArrayNode();
+        if (combos.running()) {
+            return ids; // working out what's affordable plays with the mana pool the run is using
+        }
         try {
             Game g = game.get();
             Player p = g == null || me == null ? null : g.getPlayer(me.getId());
@@ -857,7 +919,7 @@ public final class BrowserSeat implements IRemote {
         Pending p = new Pending(new CompletableFuture<>(), options, ev, o);
         pending.put(id, p);
         pushState();
-        emit(o);
+        emitPrompt(o);
         try {
             return p.answer().get();
         } catch (InterruptedException e) {
@@ -1172,11 +1234,24 @@ public final class BrowserSeat implements IRemote {
     /** The browser left: release every waiting question so the game thread never hangs. */
     public void close() {
         closed = true;
+        combos.stop();
         pending.values().forEach(p -> p.answer().completeExceptionally(new IllegalStateException("seat closed")));
         out.shutdown();
     }
 
     // ---- plumbing ----
+
+    /** Nothing to answer for now (a combo run answers). */
+    void waiting() {
+        emit(msg("waiting"));
+    }
+
+    /** Prompts and questions, unless a combo run is answering them. */
+    private void emitPrompt(ObjectNode o) {
+        if (!combos.running()) {
+            emit(o);
+        }
+    }
 
     /** A short message the browser shows as a toast (e.g. why the game stopped). */
     public void notice(String message) {

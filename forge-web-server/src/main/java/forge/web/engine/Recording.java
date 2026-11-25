@@ -58,6 +58,14 @@ public final class Recording {
     private boolean truncated;
     private Consumer<Recording> onFinish = r -> { };
     private ObjectNode meta;
+    /** A combo is running. */
+    private volatile boolean held;
+    private static final int HELD_EVERY_MS = 400;
+    private long lastFrame;
+
+    void hold(boolean on) {
+        held = on;
+    }
 
     public Recording(Game game, ObjectMapper json, Map<String, Map<String, String>> tokenArtByPlayer) {
         this.game = game;
@@ -86,7 +94,11 @@ public final class Recording {
             } else if (ev instanceof GameEventPlayerPriority) {
                 var ph = game.getPhaseHandler();
                 long key = ph.getTurn() * 100L + (ph.getPhase() == null ? 0 : ph.getPhase().ordinal());
+                if (held && key == stepKey && frames.size() > 0 && System.currentTimeMillis() - lastFrame < HELD_EVERY_MS) {
+                    return;     // a combo is running: a few frames of it are enough
+                }
                 if (dirty || key != stepKey) {
+                    lastFrame = System.currentTimeMillis();
                     stepKey = key;
                     frame();
                 }

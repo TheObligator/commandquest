@@ -43,6 +43,49 @@ public final class Payment {
         return null;
     }
 
+    /** OK: while {@code me} is paying mana it's Auto-pay (our planner, else Forge's); otherwise Forge's OK. Forge's UI thread. */
+    public static void ok(IGameController ctl, Player me) {
+        if (input(ctl) != null && me != null) {
+            AutoPay.run(ctl, me, ctl::selectButtonOk);
+        } else {
+            ctl.selectButtonOk();
+        }
+    }
+
+    /**
+     * While paying a cost, use mana from the pool: one of a color ({@code W U B R G C}), or
+     * {@code all} for as much as it can pay. Forge's UI thread.
+     */
+    public static void payPool(IGameController ctl, Player me, String color) {
+        InputPayMana pay = input(ctl);
+        if (pay == null) {
+            return;
+        }
+        List<Byte> colors = new ArrayList<>();
+        for (byte b : forge.card.mana.ManaAtom.MANATYPES) {
+            if (color.equals("all") || forge.card.MagicColor.toShortString(b).equals(color)) {
+                colors.add(b);
+            }
+        }
+        // Colored mana first, so colorless pays generic only once the colors are covered.
+        for (int guard = 0; guard < 50 && input(ctl) == pay; guard++) {
+            boolean used = false;
+            for (byte b : colors) {
+                if (me.getManaPool().getAmountOfColor(b) > 0 && input(ctl) == pay) {
+                    int before = me.getManaPool().totalMana();
+                    pay.useManaFromPool(b);
+                    used |= me.getManaPool().totalMana() < before;
+                    if (!color.equals("all")) {
+                        break;
+                    }
+                }
+            }
+            if (!used || !color.equals("all")) {
+                break;
+            }
+        }
+    }
+
     /** The spell or ability {@code me} is paying mana for, with its unpaid cost; null if none. */
     public static Info info(IGameController ctl, Player me) {
         if (me == null || input(ctl) == null) {
