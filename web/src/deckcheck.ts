@@ -2,6 +2,7 @@
 // game). Card data comes from `card()`, Scryfall's data for a deck entry (undefined if unknown).
 import { MAX_DECK_SIZE, type Board, type DeckCard } from "../convex/model/deckRules";
 import type { CardSupport } from "./cardsupport";
+import { isPlainList } from "./deckFormats";
 import { fitsIdentity, validateConquest, type OffIdentity } from "./formats/conquest";
 import { canPair } from "./formats/partners";
 import { noMaxDeckSize, offIdentity } from "./formats/rulebreakers";
@@ -45,6 +46,7 @@ export function checkDeck(
   const count = (board?: Board) => deck.cards.filter((c) => (board ? c.board === board : c.board === "main" || c.board === "commander")).reduce((n, c) => n + c.quantity, 0);
   const missing = knownMissing ?? played.filter((c) => !card(c)).map((c) => c.name);
   if (missing.length) problems.push(`Scryfall doesn't know: ${list(missing)}. Check the spelling.`);
+  if (isPlainList(deck.format)) return { problems, notes, needsFreePlay };
   if (support) {
     const status = played.filter((c) => card(c)).map((c) => [c, support.status(card(c) ?? c.name)] as const);
     const absent = status.filter(([, st]) => !st.works && st.missing).map(([c]) => c.name);

@@ -67,6 +67,17 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_user", ["userId"]),
 
+  /** Sets of cards players keep to add to decks (convex/packages.ts). */
+  packages: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+    /** What it's for, in the player's words. */
+    note: v.optional(v.string()),
+    cards: v.array(deckCard),
+    groupBy: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_user_updated", ["userId", "updatedAt"]),
+
   /** Default priority stops (docs/stops.md). One row per user; absent = the defaults. */
   stopPresets: defineTable({
     userId: v.id("users"),

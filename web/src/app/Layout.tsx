@@ -4,6 +4,7 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { navigate, useRoute } from "./router";
 import { UpdateNotice } from "./UpdateNotice";
+import { CreateMenu } from "../components/CreateMenu";
 import { BrandMark } from "../components/BrandMark";
 
 /** `full`: the page uses the whole window width (the game table). */
@@ -22,7 +23,7 @@ export function Layout({ children, full }: { children: React.ReactNode; full?: b
           {nav("/replays", "Replays")}
           {nav("/settings", "Settings")}
         </nav>
-        <Account />
+        <Account create={!full} />
       </header>
       <main id="view" className={full ? "full" : undefined}>
         {!full && path !== "/settings" && <UsernamePrompt />}
@@ -41,7 +42,8 @@ export function Layout({ children, full }: { children: React.ReactNode; full?: b
   );
 }
 
-function Account() {
+/** `create`: show the Create menu (not over a game). */
+function Account({ create }: { create: boolean }) {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const me = useQuery(api.users.me, isAuthenticated ? {} : "skip");
   const { signOut } = useAuthActions();
@@ -55,6 +57,7 @@ function Account() {
   }
   return (
     <div className="account">
+      {create && <CreateMenu />}
       {me?.image && <img className="avatar" src={me.image} alt="" />}
       <span className="user">{me === undefined ? <Spinner /> : me?.name ?? ""}</span>
       <button className="btn ghost small" onClick={() => void signOut().then(() => navigate("/"))}>Sign out</button>

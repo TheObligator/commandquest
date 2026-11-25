@@ -8,7 +8,9 @@ import { navigate, useRoute } from "../app/router";
 import { bracketName } from "../brackets";
 import { closeOnBackdrop } from "../carddetails";
 import { CardMenu, type MenuItem } from "../components/CardMenu";
+import { DeckTabs } from "../components/DeckTabs";
 import { BusyLabel, CoverWait, DeckSkeletons } from "../components/Spinner";
+import { CARD_LIST, formatLabel } from "../deckFormats";
 import { toast } from "../dom";
 import { artistOf, cachedById, cardsById } from "../scryfall";
 import { useGameChecks } from "../useGameDecks";
@@ -147,7 +149,7 @@ export function DeckList() {
   return (
     <>
       <div className="page-head row">
-        <h1>Your decks</h1>
+        <DeckTabs current="decks" />
         {actions}
       </div>
       {decks === undefined || folders === undefined ? (
@@ -222,9 +224,9 @@ export function DeckList() {
                 </div>
                 <div className="deck-meta">
                   <h3>{d.name}</h3>
-                  <p>{d.commanders.length ? d.commanders.join(" & ") : "No commander"}</p>
+                  {d.format !== CARD_LIST && <p>{d.commanders.length ? d.commanders.join(" & ") : "No commander"}</p>}
                   <p className="muted small">
-                    {capitalize(d.format)}
+                    {formatLabel(d.format)}
                     {d.format === "commander" && d.bracket ? ` · Bracket ${d.bracket} (${bracketName(d.bracket)})` : ""} · {d.cardCount} cards · {ago(d.updatedAt)}
                   </p>
                   {shown === "all" && inFolder && <p className="muted small deck-folder">📁 {inFolder.name}</p>}

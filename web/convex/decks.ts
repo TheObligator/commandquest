@@ -3,6 +3,7 @@ import { ConvexError, v } from "convex/values";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { DeckError, MAX_DECKS_PER_USER, summarize, validateDeck, type DeckInput } from "./model/deckRules";
+import { CARD_LIST } from "../src/deckFormats";
 import { DEFAULT_GROUPING, isGroupBy } from "../src/deckGroups";
 import { withSaved } from "../src/game/abilities";
 import { deckCard } from "./schema";
@@ -43,7 +44,7 @@ export const list = query({
       .withIndex("by_user_updated", (q) => q.eq("userId", userId))
       .order("desc")
       .take(MAX_DECKS_PER_USER);
-    return decks.map((d) => ({ _id: d._id, name: d.name, format: d.format, bracket: d.bracket, folderId: d.folderId, updatedAt: d.updatedAt, ...summarize(d.cards) }));
+    return decks.map((d) => ({ _id: d._id, name: d.name, format: d.format, bracket: d.bracket, folderId: d.folderId, updatedAt: d.updatedAt, ...summarize(d.cards, d.format === CARD_LIST) }));
   },
 });
 
@@ -61,7 +62,7 @@ export const forPlay = query({
       .withIndex("by_user_updated", (q) => q.eq("userId", userId))
       .order("desc")
       .take(PLAY_DECKS);
-    return decks.map((d) => ({ _id: d._id, name: d.name, format: d.format, cards: d.cards, extraColor: d.extraColor, commanders: summarize(d.cards).commanders }));
+    return decks.filter((d) => d.format !== CARD_LIST).map((d) => ({ _id: d._id, name: d.name, format: d.format, cards: d.cards, extraColor: d.extraColor, commanders: summarize(d.cards).commanders }));
   },
 });
 

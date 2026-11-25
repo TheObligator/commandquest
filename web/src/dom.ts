@@ -79,8 +79,14 @@ export function rulesText(text: string | undefined): HTMLElement {
   return box;
 }
 
+/** Takes a message with a button away, when what its button acts on is gone. */
+export function dismissToastAction() {
+  document.querySelector("#toast.has-action")?.classList.remove("show", "has-action");
+}
+
 let toastTimer: number | undefined;
-export function toast(message: string, kind: "info" | "error" = "info") {
+/** `action`: a button in the message, e.g. Undo. */
+export function toast(message: string, kind: "info" | "error" = "info", action?: { label: string; run: () => void }) {
   let el = document.querySelector<HTMLDivElement>("#toast");
   if (!el) {
     el = h("div", { id: "toast", role: "status" });
@@ -88,7 +94,11 @@ export function toast(message: string, kind: "info" | "error" = "info") {
   }
   el.textContent = message;
   el.dataset.kind = kind;
+  el.classList.toggle("has-action", !!action);
+  if (action) {
+    el.append(h("button", { class: "text-link", onclick: () => (el!.classList.remove("show", "has-action"), action.run()) }, action.label));
+  }
   el.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => el!.classList.remove("show"), kind === "error" ? 6000 : 2500);
+  toastTimer = window.setTimeout(() => el!.classList.remove("show", "has-action"), kind === "error" || action ? 6000 : 2500);
 }

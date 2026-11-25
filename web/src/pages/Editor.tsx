@@ -9,14 +9,18 @@ import { closeOnBackdrop, showCardDetails } from "../carddetails";
 import { CARD_TYPE, cardDragData, looksLikeCard, readDrop, type DroppedCard } from "../carddrop";
 import { useCardSupport, type CardSupport } from "../cardsupport";
 import { mergeDuplicates, parseDecklist, writeDecklist, type ParsedToken } from "../decklist";
-import { toast } from "../dom";
+import { dismissToastAction, toast } from "../dom";
 import { CardMenu, type MenuItem, type MenuSection } from "../components/CardMenu";
 import { ContextMenu, type ContextMenuState } from "../components/ContextMenu";
 import { ColorStats } from "../components/ColorStats";
 import { DeckBar, DeckTypeCounts } from "../components/DeckBar";
 import { DeckBracket } from "../components/DeckBracket";
 import { deckAverages, playableLandBack } from "../deckstats";
-import { FORMATS } from "../deckFormats";
+import { CARD_LIST, FORMATS, formatLabel, isPlainList, PACKAGE } from "../deckFormats";
+import { AddToPackage } from "../components/AddToPackage";
+import { PackagesPane } from "../components/PackagesPane";
+import { MAX_PACKAGE_NAME, MAX_PACKAGE_NOTE } from "../../convex/model/packageRules";
+import { cardKey, copiesIn, type PackageEntry } from "../packages";
 import { DeckAbilities } from "../components/DeckAbilities";
 import { DeckTokens } from "../components/DeckTokens";
 import { FlipButton, useFlips } from "../components/FlipButton";
@@ -38,24 +42,29 @@ import * as scry from "../scryfall";
 import { tokenPicks } from "../tokens";
 import { useCardPreview } from "../useCardPreview";
 import { printingPref, usePrintingPref } from "../usePrintingPref";
-import { BOARDS } from "./boards";
+import { BOARDS, boardLabel, boardsFor } from "./boards";
 import { canCommand, identityFilter, SearchBox, SearchResults } from "./EditorSearch";
-import { capitalize } from "./DeckList";
 
 /** Up to this many main-deck planeswalkers are shown beside the commander(s). */
 const MAX_WALKERS_BESIDE_COMMANDER = 3;
 
 const COLORS: Record<string, string> = { W: "White", U: "Blue", B: "Black", R: "Red", G: "Green" };
 const UNTITLED = "Untitled deck";
+const UNTITLED_PACKAGE = "Untitled package";
+const UNTITLED_NAMES = [UNTITLED, UNTITLED_PACKAGE, "Untitled list"];
 /** A card name compared without case or its back face ("Delver of Secrets // Insectile Aberration"). */
 const front = (name: string) => name.split(" // ")[0].toLowerCase();
 
 type TokenPick = { identity: string; scryfallId: string };
 
 interface Draft {
-  id?: Id<"decks">;
+  /** A deck's id, or a package's. */
+  id?: string;
   name: string;
+  /** `PACKAGE` for a package. */
   format: string;
+  /** A package's note. */
+  note?: string;
   cards: DeckCard[];
   /** The color a Rulebreaker commander like Tolabow lets this deck add. */
   extraColor?: string;
@@ -65,8 +74,43 @@ interface Draft {
 }
 
 /** The editor's URL: the deck (or a new one) and the search open in it, if any. */
-function editorPath(id: Id<"decks"> | undefined, search: string | null) {
-  return `/decks/${id ?? "new"}${search ? `?${new URLSearchParams({ q: search })}` : ""}`;
+function editorPath(format: string, id: string | undefined, search: string | null) {
+  return `${format === PACKAGE ? "/decks/packages" : "/decks"}/${id ?? "new"}${search ? `?${new URLSearchParams({ q: search })}` : ""}`;
+}
+
+/** What the editor calls the thing being edited. */
+const nounOf = (format: string) => (format === PACKAGE ? "package" : format === CARD_LIST ? "list" : "deck");
+
+/** Where the editor keeps what it edits: your decks (and card lists), or your packages. */
+function useStore(isPackage: boolean) {
+  const deck = { create: useMutation(api.decks.create), update: useMutation(api.decks.update), remove: useMutation(api.decks.remove), groupBy: useMutation(api.decks.setGroupBy) };
+  const pkg = { create: useMutation(api.packages.create), update: useMutation(api.packages.update), remove: useMutation(api.packages.remove), groupBy: useMutation(api.packages.setGroupBy) };
+  const deckBody = (d: Draft) => ({ name: d.name, format: d.format, cards: d.cards, extraColor: d.extraColor, bracket: d.bracket, bracketTags: d.bracketTags });
+  const packageBody = (d: Draft) => ({ name: d.name, note: d.note, cards: d.cards });
+  return {
+    create: async (d: Draft): Promise<string> => (isPackage ? pkg.create(packageBody(d)) : deck.create(deckBody(d))),
+    update: async (id: string, d: Draft): Promise<unknown> =>
+      isPackage ? pkg.update({ id: id as Id<"packages">, ...packageBody(d) }) : deck.update({ id: id as Id<"decks">, ...deckBody(d) }),
+    remove: async (id: string): Promise<unknown> => (isPackage ? pkg.remove({ id: id as Id<"packages"> }) : deck.remove({ id: id as Id<"decks"> })),
+    setGroupBy: async (id: string, groupBy: GroupBy): Promise<unknown> =>
+      isPackage ? pkg.groupBy({ id: id as Id<"packages">, groupBy }) : deck.groupBy({ id: id as Id<"decks">, groupBy }),
+  };
+}
+
+/** The same editor for a package: one list of cards, without a commander, boards or a format. */
+export function PackageEditor({ id }: { id?: string }) {
+  const saved = useQuery(api.packages.get, id ? { id } : "skip");
+  if (id && saved === undefined) return <Loading text="Opening the package…" />;
+  if (id && saved === null) {
+    return (
+      <>
+        <p className="form-error">Package not found.</p>
+        <a href="#/decks/packages" className="link">← Back to packages</a>
+      </>
+    );
+  }
+  const initial: Draft = saved ? { id: saved._id, name: saved.name, note: saved.note, format: PACKAGE, cards: saved.cards } : { name: UNTITLED_PACKAGE, format: PACKAGE, cards: [] };
+  return <DeckEditor initial={initial} initialGroupBy={saved && isGroupBy(saved.groupBy) ? saved.groupBy : DEFAULT_GROUPING} />;
 }
 
 /** Loads the deck (if editing one), then hands it to the editor once. */
@@ -99,7 +143,7 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
   // until they're in rather than a list that fills in piece by piece.
   const [loadingCards, setLoadingCards] = useState(() => initial.cards.some((c) => !scry.cachedExact(c) && !scry.cached(c)));
   const [, setCardData] = useState(0); // bumped when Scryfall data arrives, to re-render
-  const [tab, setTab] = useState<"search" | "import">(query.has("import") ? "import" : "search");
+  const [tab, setTab] = useState<"search" | "import" | "packages">(query.has("import") ? "import" : "search");
   // The open search is in the URL (#/decks/<id>?q=…), so a reload or a shared link reopens it.
   const [searchQuery, setSearchQuery] = useState<string | null>(() => query.get("q") || null);
   const searchRef = useRef(searchQuery);
@@ -110,17 +154,22 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
   const pref = usePrintingPref();
   const [repicking, setRepicking] = useState(false);
 
-  const createDeck = useMutation(api.decks.create);
-  const updateDeck = useMutation(api.decks.update);
-  const removeDeck = useMutation(api.decks.remove);
+  const isPackage = initial.format === PACKAGE;
+  const plain = isPlainList(deck.format);
+  const noun = nounOf(deck.format);
+  const home = isPackage ? "/decks/packages" : "/decks";
+  const homeLabel = isPackage ? "Your packages" : "Your decks";
+  /** Where picked names go: a plain list has only the one board. */
+  const addBoard: Board = plain ? "main" : addTo;
+  const store = useStore(isPackage);
+  const createPackage = useMutation(api.packages.create);
   const importFromUrl = useAction(api.importDeck.fromUrl);
   const addTokenArt = useMutation(api.decks.addTokenArt);
-  const saveGroupBy = useMutation(api.decks.setGroupBy);
   // How this deck is grouped is remembered with it (for a new deck, once it's created).
   const [groupBy, setGroupByState] = useState<GroupBy>(initialGroupBy);
   const groupByRef = useRef(groupBy);
-  const rememberGroupBy = (id: Id<"decks">) =>
-    saveGroupBy({ id, groupBy: groupByRef.current }).catch((e) => toast(`Couldn't remember how this deck is grouped: ${errorMessage(e)}`, "error"));
+  const rememberGroupBy = (id: string) =>
+    store.setGroupBy(id, groupByRef.current).catch((e) => toast(`Couldn't remember how this ${noun} is grouped: ${errorMessage(e)}`, "error"));
   const setGroupBy = (by: GroupBy) => {
     groupByRef.current = by;
     setGroupByState(by);
@@ -136,16 +185,24 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
   const deckRef = useRef(deck);
   deckRef.current = deck;
   const version = useRef(0);
-  const idRef = useRef<Id<"decks"> | undefined>(initial.id);
+  const idRef = useRef<string | undefined>(initial.id);
   const inFlight = useRef(false);
   const again = useRef(false);
   const deleted = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      dismissToastAction();
+    };
+  }, []);
 
   const firstSearch = useRef(true);
   useEffect(() => {
     if (firstSearch.current) return void (firstSearch.current = false); // the URL already says it
     if (deleted.current) return;
-    replaceQuietly(editorPath(idRef.current, searchQuery));
+    replaceQuietly(editorPath(initial.format, idRef.current, searchQuery));
   }, [searchQuery]);
 
   const markChanged = () => {
@@ -202,7 +259,8 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
 
   // ---- Deck changes ----
   /** Adds one copy. A new card gets your default printing unless `exact` (you picked this printing). */
-  async function addCard(c: scry.ScryCard, board: Board, exact = false, copies = 1) {
+  async function addCard(c: scry.ScryCard, to: Board, exact = false, copies = 1) {
+    const board: Board = isPlainList(deckRef.current.format) ? "main" : to;
     const name = scry.deckName(c);
     const p = printingPref();
     const inBoard = deckRef.current.cards.some((x) => x.board === board && x.name.toLowerCase() === name.toLowerCase());
@@ -267,7 +325,7 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
 
   async function addByName(name: string) {
     try {
-      await addCard(await scry.named(name), addTo);
+      await addCard(await scry.named(name), addBoard);
     } catch (e) {
       toast(`Couldn't find ${name}: ${errorMessage(e)}`, "error");
     }
@@ -381,13 +439,71 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
     });
   }
 
-  async function applyImport(cards: DeckCard[], replace: boolean, name?: string, format?: string, tokens: ParsedToken[] = []) {
+  /** Adds a package's cards (each with how many copies), and offers to take them out again. */
+  function addPackage(entries: PackageEntry[], to: Board, packageName: string, tag?: string) {
+    const board: Board = isPlainList(deckRef.current.format) ? "main" : to;
+    const added = entries.flatMap((e) => {
+      const s = scry.cachedExact(e.card) ?? scry.cached(e.card);
+      const print = e.card.scryfallId || !s ? {} : { scryfallId: s.id, set: s.set, collectorNumber: s.collector_number };
+      const tags = cleanCardTags([...(e.card.tags ?? []), ...(tag ? [tag] : [])]);
+      const { tags: _, ...card } = e.card;
+      return e.copies > 0 ? [{ ...card, ...print, ...(tags.length ? { tags } : {}), name: s ? scry.deckName(s) : card.name, quantity: e.copies, board }] : [];
+    });
+    if (!added.length) return;
+    const same = (a: DeckCard, b: DeckCard) => a.board === b.board && cardKey(a.name) === cardKey(b.name);
+    change((d) => {
+      for (const a of added) {
+        const there = d.cards.find((c) => same(c, a));
+        if (!there) d.cards.push({ ...a });
+        else {
+          // A card that's there already keeps its own printing, category and tags.
+          there.quantity = Math.min(MAX_QUANTITY, there.quantity + a.quantity);
+          if (tag) there.tags = cleanCardTags([...(there.tags ?? []), tag]);
+        }
+      }
+      return d;
+    });
+    const n = copiesIn(entries);
+    toast(`Added ${n} card${n === 1 ? "" : "s"} from ${packageName}`, "info", {
+      label: "Undo",
+      run: () => {
+        if (!mounted.current) return;
+        change((d) => ({
+          ...d,
+          cards: d.cards.flatMap((c) => {
+            const a = added.find((x) => same(x, c));
+            if (!a) return [c];
+            return c.quantity > a.quantity ? [{ ...c, quantity: c.quantity - a.quantity }] : [];
+          }),
+        }));
+      },
+    });
+  }
+
+  /** A new package of the deck's main board, without its basic lands (and without its commander). */
+  async function saveAsPackage() {
+    const cards = mergeDuplicates(
+      deck.cards
+        .filter((c) => c.board === "main" && !/^Basic\b/.test(scry.cached(c)?.type_line ?? ""))
+        .map((c) => ({ ...c, board: "main" as const })),
+    );
+    if (!cards.length) return toast("There are no cards to put in a package yet.", "error");
+    try {
+      const id = await createPackage({ name: deck.name.slice(0, MAX_PACKAGE_NAME), cards });
+      toast(`Saved ${cards.length} cards as a package`, "info", { label: "Open it", run: () => navigate(`/decks/packages/${id}`) });
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+  }
+
+  async function applyImport(imported: DeckCard[], replace: boolean, name?: string, format?: string, tokens: ParsedToken[] = []) {
+    const cards = plain ? imported.map((c) => ({ ...c, board: "main" as const })) : imported;
     const merged = mergeDuplicates(replace ? cards : [...deck.cards, ...cards]);
     change((d) => ({
       ...d,
       cards: merged,
-      name: name && (replace || d.name === UNTITLED) ? name : d.name,
-      format: format && FORMATS.includes(format) && replace ? format : d.format,
+      name: name && (replace || UNTITLED_NAMES.includes(d.name)) ? name.slice(0, isPackage ? MAX_PACKAGE_NAME : 100) : d.name,
+      format: format && FORMATS.includes(format) && replace && !isPlainList(d.format) ? format : d.format,
     }));
     setTab("search");
     toast(`Imported ${cards.reduce((n, c) => n + c.quantity, 0)} cards`);
@@ -422,13 +538,13 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
   /** The token printings an imported list names become this deck's token art. */
   async function importTokenArt(tokens: ParsedToken[]) {
     const known = tokens.filter((t) => t.scryfallId || (t.set && t.collectorNumber));
-    if (!known.length) return;
+    if (!known.length || isPackage) return;
     const asCards: DeckCard[] = known.map((t) => ({ name: t.name, quantity: 1, board: "main", scryfallId: t.scryfallId, set: t.set, collectorNumber: t.collectorNumber }));
     try {
       await scry.resolve(asCards);
       const picks = tokenPicks(asCards.map((c) => (c.scryfallId ? scry.cachedById(c.scryfallId) : scry.cachedPrinting(c.set!, c.collectorNumber!))));
       if (!picks.length) return;
-      if (idRef.current) await addTokenArt({ id: idRef.current, picks });
+      if (idRef.current) await addTokenArt({ id: idRef.current as Id<"decks">, picks });
       else pendingTokenArt.current = [...pendingTokenArt.current.filter((p) => !picks.some((q) => q.identity === p.identity)), ...picks];
       toast(`Imported art for ${picks.length} token${picks.length === 1 ? "" : "s"}`);
     } catch (e) {
@@ -445,26 +561,25 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
     }
     const d = deckRef.current;
     if (!d.name.trim()) {
-      setSaveError("give the deck a name");
+      setSaveError(`give the ${noun} a name`);
       return;
     }
     inFlight.current = true;
     setSaving(true);
     const savingVersion = version.current;
-    const body = { name: d.name, format: d.format, cards: d.cards, extraColor: d.extraColor, bracket: d.bracket, bracketTags: d.bracketTags };
     try {
-      if (idRef.current) await updateDeck({ id: idRef.current, ...body });
+      if (idRef.current) await store.update(idRef.current, d);
       else {
-        const id = await createDeck(body);
+        const id = await store.create(d);
         idRef.current = id;
         if (groupByRef.current !== DEFAULT_GROUPING) void rememberGroupBy(id);
         if (pendingTokenArt.current.length) {
           const picks = pendingTokenArt.current;
           pendingTokenArt.current = [];
-          addTokenArt({ id, picks }).catch((e) => toast(`Couldn't save the deck's token art: ${errorMessage(e)}`, "error"));
+          addTokenArt({ id: id as Id<"decks">, picks }).catch((e) => toast(`Couldn't save the deck's token art: ${errorMessage(e)}`, "error"));
         }
         setDeck((x) => ({ ...x, id }));
-        replaceQuietly(editorPath(id, searchRef.current));
+        replaceQuietly(editorPath(initial.format, id, searchRef.current));
       }
       setSaveError("");
       setSavedOnce(true);
@@ -503,8 +618,8 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
       void saveRef.current();
       return true;
     }
-    return confirm(`This deck couldn't be saved (${saveErrorRef.current}). Leave anyway?`);
-  }, []);
+    return confirm(`This ${noun} couldn't be saved (${saveErrorRef.current}). Leave anyway?`);
+  }, [noun]);
   useLeaveGuard(guard);
   useEffect(() => () => {
     if (dirtyRef.current && !saveErrorRef.current) void saveRef.current();
@@ -526,16 +641,16 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
     if (!id) {
       deleted.current = true;
       setDirty(false);
-      setTimeout(() => navigate("/decks"));
+      setTimeout(() => navigate(home));
       return;
     }
     if (!confirm(`Delete "${deck.name}"? This can't be undone.`)) return;
     try {
       deleted.current = true;
-      await removeDeck({ id });
+      await store.remove(id);
       setDirty(false);
-      toast("Deck deleted");
-      setTimeout(() => navigate("/decks"));
+      toast(`${noun.charAt(0).toUpperCase() + noun.slice(1)} deleted`);
+      setTimeout(() => navigate(home));
     } catch (e) {
       deleted.current = false;
       toast(errorMessage(e), "error");
@@ -582,7 +697,7 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
     const count = initial.cards.reduce((n, c) => n + c.quantity, 0);
     return (
       <div className="editor-loading" role="status">
-        <a href="#/decks" className="back link">← Your decks</a>
+        <a href={`#${home}`} className="back link">← {homeLabel}</a>
         <div className="spinner" aria-hidden="true" />
         <h2>{deck.name}</h2>
         <p><ScryfallWaiting text={`Loading ${count} cards from Scryfall…`} still={`Still loading ${count} cards.`} /></p>
@@ -605,7 +720,7 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
       onMakeCommander={makeCommander}
       onPrinting={setPrinting}
       onAddCommander={(c) => void addCard(c, "commander")}
-      dropTo={dropTo}
+      dropTo={dropTo && plain ? "main" : dropTo}
       onExtraColor={(c) => change((d) => ({ ...d, extraColor: c }))}
       onBracket={(b) => change((d) => ({ ...d, bracket: b }))}
       onBracketTags={(t) => change((d) => ({ ...d, bracketTags: t.length ? t : undefined }))}
@@ -616,12 +731,18 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
     <div className="editor">
       <div className="editor-head">
         {/* While searching, the search page's own "Back to deck" is the way back; this one, to the deck list, steps aside. */}
-        <a href="#/decks" className={`back${searchQuery !== null ? " minor" : ""}`} title="Back to your decks">{searchQuery !== null ? "← Your decks" : "←"}</a>
-        <input className="deck-name" value={deck.name} maxLength={100} aria-label="Deck name" onChange={(e) => change((d) => ({ ...d, name: e.target.value }))} />
-        <select aria-label="Format" value={deck.format} onChange={(e) => change((d) => ({ ...d, format: e.target.value }))}>
-          {FORMATS.map((f) => <option key={f} value={f}>{capitalize(f)}</option>)}
-        </select>
-        <FolderSelect deckId={deck.id} />
+        <a href={`#${home}`} className={`back${searchQuery !== null ? " minor" : ""}`} title={`Back to ${homeLabel.toLowerCase()}`}>{searchQuery !== null ? `← ${homeLabel}` : "←"}</a>
+        <input className="deck-name" value={deck.name} maxLength={isPackage ? MAX_PACKAGE_NAME : 100} aria-label={`${noun.charAt(0).toUpperCase() + noun.slice(1)} name`} onChange={(e) => change((d) => ({ ...d, name: e.target.value }))} />
+        {isPackage ? (
+          <input className="package-note" value={deck.note ?? ""} maxLength={MAX_PACKAGE_NOTE} aria-label="Note" placeholder="What it's for (optional)" onChange={(e) => change((d) => ({ ...d, note: e.target.value }))} />
+        ) : (
+          <>
+            <select aria-label="Format" value={deck.format} onChange={(e) => change((d) => ({ ...d, format: e.target.value }))}>
+              {FORMATS.map((f) => <option key={f} value={f}>{formatLabel(f)}</option>)}
+            </select>
+            <FolderSelect deckId={deck.id as Id<"decks"> | undefined} />
+          </>
+        )}
         <span className="count-badge" data-ok={String(badgeOk)}>{badge}</span>
         <div className="spacer" />
         <span className={`save-state small ${saveError ? "error" : "muted"}`} role="status">{saving && <Spinner />} {saveState}</span>
@@ -630,10 +751,11 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
           <div className="menu-list" onClick={(e) => (e.currentTarget.parentElement as HTMLDetailsElement).removeAttribute("open")}>
             <button onClick={() => void copyList()}>Copy decklist</button>
             <button onClick={downloadList}>Download .txt</button>
+            {!isPackage && <button onClick={() => void saveAsPackage()}>Save as a package</button>}
           </div>
         </details>
         <details className="menu">
-          <summary className="btn ghost" title="Change the printing of every card in the deck"><BusyLabel busy={repicking} working="Finding…">Printings</BusyLabel></summary>
+          <summary className="btn ghost" title={`Change the printing of every card in the ${noun}`}><BusyLabel busy={repicking} working="Finding…">Printings</BusyLabel></summary>
           <div className="menu-list" onClick={(e) => (e.currentTarget.parentElement as HTMLDetailsElement).removeAttribute("open")}>
             {[pref, ...PRINTING_PREFS.map((x) => x.id).filter((x) => x !== pref)].map((x) => (
               <button key={x} disabled={repicking || !deck.cards.length} title={PRINTING_PREFS.find((y) => y.id === x)!.hint} onClick={() => void setAllPrintings(x)}>
@@ -642,7 +764,7 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
             ))}
           </div>
         </details>
-        <button className="btn ghost danger" onClick={() => void remove()} title="Delete deck">Delete</button>
+        <button className="btn ghost danger" onClick={() => void remove()} title={`Delete ${noun}`}>Delete</button>
       </div>
       {searchQuery !== null ? (
         <SearchResults
@@ -651,7 +773,7 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
           deck={deck.cards}
           commanders={commanders}
           extraColor={deck.extraColor}
-          defaultBoard={addTo}
+          defaultBoard={addBoard}
           onDefaultBoard={setAddTo}
           onAdd={addCard}
           onQty={setQty}
@@ -666,9 +788,11 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
             <div className="tabs">
               <button className={`tab${tab === "search" ? " active" : ""}`} onClick={() => setTab("search")}>Search</button>
               <button className={`tab${tab === "import" ? " active" : ""}`} onClick={() => setTab("import")}>Import</button>
+                {!isPackage && <button className={`tab${tab === "packages" ? " active" : ""}`} onClick={() => setTab("packages")}>Packages</button>}
             </div>
-            <SearchPane hidden={tab !== "search"} addTo={addTo} onAddTo={setAddTo} onPick={(n) => void addByName(n)} onSubmit={setSearchQuery} autoFocus={!deck.cards.length && tab === "search"} identity={identityFilter(deck.format, deck.cards, commanders, deck.extraColor)} />
+            <SearchPane hidden={tab !== "search"} boards={boardsFor(deck.format)} addTo={addBoard} onAddTo={setAddTo} onPick={(n) => void addByName(n)} onSubmit={setSearchQuery} autoFocus={!deck.cards.length && tab === "search"} identity={identityFilter(deck.format, deck.cards, commanders, deck.extraColor)} />
             <ImportPane hidden={tab !== "import"} startReplacing={deck.cards.length === 0} onImport={applyImport} importFromUrl={(url) => importFromUrl({ url })} autoFocus={tab === "import"} />
+            {tab === "packages" && <PackagesPane hidden={false} deck={deck} onAdd={addPackage} />}
           </aside>
           {deckView}
         </div>
@@ -687,17 +811,17 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
 
 // ---- Search ---------------------------------------------------------------------------
 
-function SearchPane(props: { hidden: boolean; addTo: Board; onAddTo: (b: Board) => void; onPick: (name: string) => void; onSubmit: (q: string) => void; autoFocus: boolean; identity: ReturnType<typeof identityFilter> }) {
+function SearchPane(props: { hidden: boolean; boards: typeof BOARDS; addTo: Board; onAddTo: (b: Board) => void; onPick: (name: string) => void; onSubmit: (q: string) => void; autoFocus: boolean; identity: ReturnType<typeof identityFilter> }) {
   return (
     <div className="pane" hidden={props.hidden}>
       <SearchBox onPick={props.onPick} onSubmit={props.onSubmit} autoFocus={props.autoFocus} identity={props.identity} />
       <div className="search-help">
-        <label className="inline small muted">
+        {props.boards.length > 1 && <label className="inline small muted">
           Picked names go to{" "}
           <select aria-label="Add cards to" value={props.addTo} onChange={(e) => props.onAddTo(e.target.value as Board)}>
-            {BOARDS.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
+            {props.boards.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
           </select>
-        </label>
+        </label>}
         <p className="muted small">
           Pick a name to add it, or press Enter to see every result with images. Scryfall syntax works too:{" "}
           <a href="https://scryfall.com/docs/syntax" target="_blank" rel="noopener">search syntax</a>.
@@ -890,6 +1014,9 @@ function DeckView(props: {
   /** "GC" on Game Changers in Commander decks (Commander Brackets). */
   const gameChanger = (s: scry.ScryCard | undefined, className: string) =>
     deck.format === "commander" && s?.game_changer ? <span className={className} title="Game Changer: Exhibition and Core decks allow none, Upgraded up to 3">GC</span> : null;
+  const noun = nounOf(deck.format);
+  /** The card being added to a package. */
+  const [packaging, setPackaging] = useState<DeckCard | null>(null);
   const preview = useCardPreview();
   const flips = useFlips();
   const [printingsFor, setPrintingsFor] = useState<DeckCard | null>(null);
@@ -929,8 +1056,8 @@ function DeckView(props: {
     return (
       <section className={`panel deck-view${dropTo ? " dropping" : ""}`}>
         <div className="empty">
-          <h3>This deck is empty</h3>
-          <p>Search for cards on the left, switch to Import to bring in a list, or drag cards in from EDHREC.</p>
+          <h3>This {noun} is empty</h3>
+          <p>Search for cards on the left, switch to Import to bring in a list{deck.format === PACKAGE ? "" : ", add a package"}, or drag cards in from EDHREC.</p>
         </div>
       </section>
     );
@@ -953,7 +1080,7 @@ function DeckView(props: {
           ...(asPartner ? [{ label: "★ Add as second commander", run: () => props.onMakeCommander(c, true) }] : []),
           { label: cmdrs.length ? (cmdrs.length > 1 ? "★ Make commander (replaces both)" : `★ Make commander (replaces ${cmdrs[0].name})`) : "★ Make commander", run: () => props.onMakeCommander(c, false) },
         ];
-    const moves = BOARDS.filter((b) => b.id !== c.board && !(b.id === "commander" && eligible)).map((b) => ({ board: b, run: () => props.onMove(c, b.id) }));
+    const moves = boardsFor(deck.format).filter((b) => b.id !== c.board && !(b.id === "commander" && eligible)).map((b) => ({ board: b, run: () => props.onMove(c, b.id) }));
     return { commander, moves };
   };
 
@@ -964,9 +1091,10 @@ function DeckView(props: {
       ...moves.map((m) => ({ label: m.board.id === "commander" ? "Move to commander" : `Move to ${m.board.label.toLowerCase()}`, run: m.run })),
       ...commander,
       { label: "Choose printing…", run: () => setPrintingsFor(c) },
+      ...(deck.format === PACKAGE ? [] : [{ label: "Add to package…", run: () => setPackaging(c) }]),
       { label: "Add tags…", run: () => setTagging({ board: c.board, name: c.name }) },
       ...(groupBy === "category" && c.board !== "commander" ? [{ label: "Choose category…", run: () => setCategorizing({ board: c.board, name: c.name }) }] : []),
-      { label: c.quantity > 1 ? `Remove all ${c.quantity}` : "Remove from deck", run: () => props.onQty(c, 0), danger: true },
+      { label: c.quantity > 1 ? `Remove all ${c.quantity}` : `Remove from ${noun}`, run: () => props.onQty(c, 0), danger: true },
     ]);
   };
 
@@ -1002,12 +1130,11 @@ function DeckView(props: {
    * right-click on the card (no native <select>).
    */
   const menuSections = (c: DeckCard, s: scry.ScryCard | undefined): MenuSection[] => {
-    const boardLabel = BOARDS.find((b) => b.id === c.board)!.label;
     const { commander, moves } = destinations(c, s);
     const commanderItems: MenuItem[] = commander.map((x) => ({ label: x.label, onSelect: x.run }));
     const sections: MenuSection[] = [
       {
-        title: `${c.quantity} × ${c.name} · ${boardLabel}`,
+        title: `${c.quantity} × ${c.name} · ${boardLabel(c.board, deck.format)}`,
         items: [
           { label: "+ Add one", keepOpen: true, onSelect: () => props.onQty(c, c.quantity + 1) },
           { label: "− Remove one", keepOpen: c.quantity > 1, onSelect: () => props.onQty(c, c.quantity - 1) },
@@ -1020,6 +1147,7 @@ function DeckView(props: {
           { label: "Card details", disabled: !s, onSelect: () => s && openDetails(c, s) },
           { label: "Choose printing…", onSelect: () => setPrintingsFor(c) },
           { label: c.tags?.length ? `Tags: ${c.tags.join(", ")}` : "Add tags…", onSelect: () => setTagging({ board: c.board, name: c.name }) },
+          ...(deck.format === PACKAGE ? [] : [{ label: "Add to package…", onSelect: () => setPackaging(c) }]),
         ],
       },
       ...categorySection(c, s),
@@ -1028,7 +1156,7 @@ function DeckView(props: {
         title: "Move to",
         items: moves.map((m) => ({ label: m.board.label, onSelect: m.run })),
       },
-      { items: [{ label: c.quantity > 1 ? `Remove all ${c.quantity}` : "Remove from deck", danger: true, onSelect: () => props.onQty(c, 0) }] },
+      { items: [{ label: c.quantity > 1 ? `Remove all ${c.quantity}` : `Remove from ${noun}`, danger: true, onSelect: () => props.onQty(c, 0) }] },
     ];
     return sections.filter((sec) => sec.items.length);
   };
@@ -1153,14 +1281,14 @@ function DeckView(props: {
           <a href={CONQUEST.rulesUrl} target="_blank" rel="noopener">Full rules ↗</a>
         </p>
       )}
-      <DeckBracket
+      {!isPlainList(deck.format) && <DeckBracket
         cards={deck.cards}
         commander={deck.format === "commander"}
         bracket={deck.bracket}
         tags={deck.bracketTags ?? []}
         onBracket={props.onBracket}
         onTags={props.onBracketTags}
-      />
+      />}
       <div className="deck-controls">
         <CardViewToggle view={view} onChange={setView} />
         <label className="group-by">
@@ -1171,6 +1299,7 @@ function DeckView(props: {
         </label>
       </div>
       {(() => {
+        const mainLabel = isPlainList(deck.format) ? "Cards" : "Main deck";
         const sum = (g: DeckCard[]) => g.reduce((n, c) => n + c.quantity, 0);
         const commanders = [...deck.cards.filter((c) => c.board === "commander")].sort((a, z) => a.name.localeCompare(z.name));
         const main = deck.cards.filter((c) => c.board === "main");
@@ -1285,7 +1414,7 @@ function DeckView(props: {
           return (
             <>
               {(commanders.length > 0 || main.length > 0) &&
-                section("deck", commanders.length ? "Deck" : "Main deck", [...commanders, ...main], laid(commanders.length || partnerSlot ? [commanderGroup, ...groups] : groups))}
+                section("deck", commanders.length ? "Deck" : mainLabel, [...commanders, ...main], laid(commanders.length || partnerSlot ? [commanderGroup, ...groups] : groups))}
               {other("side")}
               {other("maybe")}
             </>
@@ -1308,7 +1437,7 @@ function DeckView(props: {
             ) : (
               commanderBoard
             )}
-            {main.length > 0 && section("main", "Main deck", main, laid(mainGroups))}
+            {main.length > 0 && section("main", mainLabel, main, laid(mainGroups))}
             {other("side")}
             {other("maybe")}
           </>
@@ -1319,8 +1448,8 @@ function DeckView(props: {
         cards={deck.cards}
         identity={deck.format === "commander" || deck.format === "conquest" ? [...new Set(deck.cards.filter((c) => c.board === "commander").flatMap((c) => scry.cached(c)?.color_identity ?? []))] : undefined}
       />
-      <DeckTokens deckId={deck.id} cards={deck.cards} />
-      <DeckAbilities deckId={deck.id} />
+      {deck.format !== PACKAGE && <DeckTokens deckId={deck.id} cards={deck.cards} />}
+      {deck.format !== PACKAGE && <DeckAbilities deckId={deck.id} />}
       {preview.element}
       {contextMenu && <ContextMenu menu={contextMenu} onClose={closeMenu} />}
       {tagging && (() => {
@@ -1345,6 +1474,7 @@ function DeckView(props: {
           />
         );
       })()}
+      {packaging && <AddToPackage card={packaging} onClose={() => setPackaging(null)} />}
       {printingsFor && <Printings card={printingsFor} onPick={(p) => props.onPrinting(printingsFor, p)} onClose={() => setPrintingsFor(null)} />}
       {pickingPartner && leadCard && slotLabel && (
         <PartnerPicker commander={leadCard} label={slotLabel} onPick={props.onAddCommander} onClose={() => setPickingPartner(false)} />

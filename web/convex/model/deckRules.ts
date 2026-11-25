@@ -135,8 +135,9 @@ function cleanTags(tags: string[], maxLength: number, maxCount: number): string[
   return out.slice(0, maxCount);
 }
 
-export function summarize(cards: DeckCard[]): DeckSummary {
+/** `anyCover`: without a commander, the first card with a printing is the cover (card lists). */
+export function summarize(cards: DeckCard[], anyCover = false): DeckSummary {
   const cardCount = cards.filter((c) => c.board === "main" || c.board === "commander").reduce((n, c) => n + c.quantity, 0);
   const cmdrs = cards.filter((c) => c.board === "commander");
-  return { cardCount, commanders: cmdrs.map((c) => c.name), coverScryfallId: cmdrs.find((c) => c.scryfallId)?.scryfallId };
+  return { cardCount, commanders: cmdrs.map((c) => c.name), coverScryfallId: (cmdrs.find((c) => c.scryfallId) ?? (anyCover ? cards.find((c) => c.scryfallId) : undefined))?.scryfallId };
 }

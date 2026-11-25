@@ -13,23 +13,23 @@ import { useCardSupport } from "../cardsupport";
 import { CardImg } from "../components/CardImg";
 import { BusyLabel, ScryfallWaiting } from "../components/Spinner";
 import { FlipButton, useFlips } from "../components/FlipButton";
-import { FORMATS, hasCommander } from "../deckFormats";
+import { CARD_LIST, FORMATS, formatLabel, hasCommander } from "../deckFormats";
 import * as scry from "../scryfall";
 import { printingPref } from "../usePrintingPref";
-import { capitalize } from "./DeckList";
 import { canCommand } from "./EditorSearch";
 
 const NEW_FOLDER = "__new__";
 const MAX_RESULTS = 24;
 
-export function NewDeckDialog({ folderId, onClose }: { folderId?: Id<"deckFolders">; onClose: () => void }) {
+/** `list`: make a card list (the format is settled). */
+export function NewDeckDialog({ folderId, list, onClose }: { folderId?: Id<"deckFolders">; list?: boolean; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   const folders = useQuery(api.folders.list);
   const createDeck = useMutation(api.decks.create);
   const createFolder = useMutation(api.folders.create);
 
   const [name, setName] = useState("");
-  const [format, setFormat] = useState("commander");
+  const [format, setFormat] = useState(list ? CARD_LIST : "commander");
   const [commander, setCommander] = useState<scry.ScryCard | null>(null);
   const [folder, setFolder] = useState<string>(folderId ?? "");
   const [folderName, setFolderName] = useState("");
@@ -39,6 +39,7 @@ export function NewDeckDialog({ folderId, onClose }: { folderId?: Id<"deckFolder
   useEffect(() => ref.current?.showModal(), []);
 
   const needsCommander = hasCommander(format);
+  const untitled = format === CARD_LIST ? "Untitled list" : "Untitled deck";
   // A commander picked for Commander may not suit Conquest's stricter rules.
   useEffect(() => {
     if (commander && !(needsCommander && canCommand(commander, format))) setCommander(null);
@@ -46,7 +47,7 @@ export function NewDeckDialog({ folderId, onClose }: { folderId?: Id<"deckFolder
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
-    const deckName = name.trim() || commander?.name || "Untitled deck";
+    const deckName = name.trim() || commander?.name || untitled;
     setBusy(true);
     setError("");
     try {
@@ -81,18 +82,18 @@ export function NewDeckDialog({ folderId, onClose }: { folderId?: Id<"deckFolder
     <dialog ref={ref} className="new-deck" onClose={onClose} onClick={(e) => closeOnBackdrop(e.nativeEvent, ref.current)}>
       <button className="dialog-close" aria-label="Close" onClick={() => ref.current?.close()}>×</button>
       <form onSubmit={(e) => void create(e)}>
-        <h3>New deck</h3>
+        <h3>{list ? "New list" : "New deck"}</h3>
         <label>
           Name
-          <input value={name} maxLength={100} autoFocus placeholder={commander?.name ?? "Untitled deck"} onChange={(e) => setName(e.target.value)} />
+          <input value={name} maxLength={100} autoFocus placeholder={commander?.name ?? untitled} onChange={(e) => setName(e.target.value)} />
         </label>
-        <div className="new-deck-row">
-          <label>
+        <div className={list ? undefined : "new-deck-row"}>
+          {!list && <label>
             Format
             <select value={format} onChange={(e) => setFormat(e.target.value)}>
-              {FORMATS.map((f) => <option key={f} value={f}>{capitalize(f)}</option>)}
+              {FORMATS.map((f) => <option key={f} value={f}>{formatLabel(f)}</option>)}
             </select>
-          </label>
+          </label>}
           <label>
             Folder
             <select value={folder} onChange={(e) => setFolder(e.target.value)} disabled={folders === undefined}>
@@ -102,6 +103,7 @@ export function NewDeckDialog({ folderId, onClose }: { folderId?: Id<"deckFolder
             </select>
           </label>
         </div>
+        {format === CARD_LIST && <p className="muted small format-hint">Any cards, any number: no commander, deck size or legality checks. Lists can't be picked for games.</p>}
         {folder === NEW_FOLDER && (
           <label>
             New folder name
@@ -112,7 +114,7 @@ export function NewDeckDialog({ folderId, onClose }: { folderId?: Id<"deckFolder
         <p className="form-error">{error}</p>
         <div className="actions new-deck-actions">
           <button type="button" className="btn ghost" onClick={() => ref.current?.close()}>Cancel</button>
-          <button className="btn" disabled={busy}><BusyLabel busy={busy} working="Creating…">Create deck</BusyLabel></button>
+          <button className="btn" disabled={busy}><BusyLabel busy={busy} working="Creating…">{format === CARD_LIST ? "Create list" : "Create deck"}</BusyLabel></button>
         </div>
       </form>
     </dialog>

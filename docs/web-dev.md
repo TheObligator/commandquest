@@ -110,6 +110,21 @@ boards ("Creature", "Maybeboard") aren't kept as categories.
 
 The grouping is saved with each deck (`decks.groupBy`, set by `decks.setGroupBy`); the default is Type.
 
+### Card lists and packages
+
+A **card list** is a deck whose format is `cardlist` (`web/src/deckFormats.ts`): one list of any cards, with
+no commander, size, color or legality checks. It's in the deck list and its folders, but games don't offer it.
+
+A **package** (`web/convex/packages.ts`, the Packages tab of the Decks page) is a set of cards to add to decks.
+It's private to its owner and is edited in the deck editor (`PackageEditor`), with one board. The deck
+editor's Packages tab (`web/src/components/PackagesPane.tsx`) checks each package against the deck with
+`planPackage` (`web/src/packages.ts`): the commanders' color identity, with Rulebreakers and Conquest's
+hybrid rule, the format's legality, and what the deck has already. "+ Add" takes only what fits. Clicking
+the package shows the rest too, which can be added with a warning. Cards are copied in, so editing a
+package later doesn't change decks it was added to.
+
+"+ Create" in the top bar makes a deck, package or list from any page (not during a game).
+
 ### Cards that don't work in games
 
 The deck editor, its search results and the game start screen mark cards that won't work in a game

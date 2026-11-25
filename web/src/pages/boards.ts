@@ -1,4 +1,5 @@
 import type { Board } from "../../convex/model/deckRules";
+import { isPlainList, PACKAGE } from "../deckFormats.ts";
 
 export const BOARDS: { id: Board; label: string }[] = [
   { id: "commander", label: "Commander" },
@@ -7,17 +8,21 @@ export const BOARDS: { id: Board; label: string }[] = [
   { id: "maybe", label: "Considering" },
 ];
 
-export const boardLabel = (b: Board) => BOARDS.find((x) => x.id === b)!.label;
+/** The boards cards can be added to. Packages and card lists are one list. */
+export const boardsFor = (format: string) => (isPlainList(format) ? BOARDS.filter((b) => b.id === "main") : BOARDS);
+
+export const boardLabel = (b: Board, format = "") =>
+  b === "main" && isPlainList(format) ? (format === PACKAGE ? "Package" : "List") : BOARDS.find((x) => x.id === b)!.label;
 
 const SHORT_BOARD: Record<Board, string> = { commander: "commander", main: "main", side: "side", maybe: "considering" };
 
 /** Where a search result already is in the deck, one part per board, commander first. */
-export function inDeckParts(entries: { board: Board; quantity: number }[]): { board: Board; text: string }[] {
+export function inDeckParts(entries: { board: Board; quantity: number }[], format = ""): { board: Board; text: string }[] {
   const order: Board[] = ["commander", "main", "side", "maybe"];
   const sorted = [...entries].sort((a, z) => order.indexOf(a.board) - order.indexOf(z.board));
   if (sorted.length === 1) {
     const [e] = sorted;
-    const text = e.board === "commander" ? (e.quantity > 1 ? `${e.quantity} as commander` : "Commander") : `${e.quantity} in ${boardLabel(e.board).toLowerCase()}`;
+    const text = e.board === "commander" ? (e.quantity > 1 ? `${e.quantity} as commander` : "Commander") : `${e.quantity} in ${boardLabel(e.board, format).toLowerCase()}`;
     return [{ board: e.board, text }];
   }
   return sorted.map((e) => ({ board: e.board, text: `${e.quantity} ${SHORT_BOARD[e.board]}` }));

@@ -12,12 +12,13 @@ import { FlipButton, useFlips } from "../components/FlipButton";
 import { BusyLabel, CardSkeletons, ScryfallWaiting, Spinner, Waiting } from "../components/Spinner";
 import { cardLegality, fitsIdentity, isCommanderEligible } from "../formats/conquest";
 import { bestExtraColor, identityQuery, mentionsIdentity, offIdentity } from "../formats/rulebreakers";
+import { isPlainList, PACKAGE } from "../deckFormats";
 import { commanderCards } from "../edhrec";
 import { compileQuery } from "../game/scryquery";
 import { localNames, startLocalSearch } from "../localsearch";
 import * as scry from "../scryfall";
 import { displayTerms, forEdhrecCards, hasOrder, joinQuery, locallyReadable, nameTerms, restrictToNames, stripDisplay } from "../searchquery";
-import { BOARDS, boardLabel, inDeckParts } from "./boards";
+import { BOARDS, boardLabel, boardsFor, inDeckParts } from "./boards";
 
 /** The ⓘ button, drawn in CSS (the Unicode glyph renders badly in many fonts). */
 export function InfoButton({ label, onClick, className = "" }: { label: string; onClick: () => void; className?: string }) {
@@ -504,14 +505,14 @@ export function SearchResults(props: {
     const playable = support?.status(c);
     const face = flips.face(c);
     const img = scry.imageUrl(c, "normal", face);
-    const commander = canCommand(c, props.format);
+    const commander = !isPlainList(props.format) && canCommand(c, props.format);
     const details = () =>
       showCardDetails(c, [
-        { label: `+ Add to ${boardLabel(props.defaultBoard).toLowerCase()}`, run: () => props.onAdd(c, props.defaultBoard, exact) },
+        { label: `+ Add to ${boardLabel(props.defaultBoard, props.format).toLowerCase()}`, run: () => props.onAdd(c, props.defaultBoard, exact) },
         ...(commander ? [{ label: "★ Set as commander", run: () => props.onAdd(c, "commander", exact) }] : []),
       ]);
     return (
-      <div key={c.id} className={`search-card${count ? ` in-deck in-${inDeckParts(inDeck)[0].board}` : ""}${verdict.ok ? "" : " not-legal"}${playable && !playable.works ? (playable.missing ? " not-playable" : " known-issue") : ""}`}>
+      <div key={c.id} className={`search-card${count ? ` in-deck in-${inDeckParts(inDeck, props.format)[0].board}` : ""}${verdict.ok ? "" : " not-legal"}${playable && !playable.works ? (playable.missing ? " not-playable" : " known-issue") : ""}`}>
         <button className="tile-img" title={`${c.name}: card details`} onClick={details}>
           {img ? <CardImg src={img} name={c.name} alt={c.name} loading="lazy" /> : <span className="noimg">{c.name}</span>}
         </button>
@@ -524,8 +525,8 @@ export function SearchResults(props: {
           <span className="gc-badge tile-gc" title="Game Changer: Exhibition and Core decks allow none, Upgraded up to 3">GC</span>
         )}
         {count > 0 && (
-          <span className="in-deck-badge" title={inDeck.map((e) => `${e.quantity} in ${boardLabel(e.board).toLowerCase()}`).join(", ")}>
-            {inDeckParts(inDeck).map((p, i) => (
+          <span className="in-deck-badge" title={inDeck.map((e) => `${e.quantity} in ${boardLabel(e.board, props.format).toLowerCase()}`).join(", ")}>
+            {inDeckParts(inDeck, props.format).map((p, i) => (
               <span key={p.board} className={`board-${p.board}`}>{i > 0 && <span className="sep"> · </span>}{p.text}</span>
             ))}
           </span>
@@ -551,7 +552,7 @@ export function SearchResults(props: {
                 {
                   title: "Remove one from",
                   items: inDeck.map((e) => ({
-                    label: `${boardLabel(e.board)} (${e.quantity})`,
+                    label: `${boardLabel(e.board, props.format)} (${e.quantity})`,
                     keepOpen: inDeck.length > 1 || e.quantity > 1,
                     onSelect: () => props.onQty(e, e.quantity - 1),
                   })),
@@ -559,7 +560,7 @@ export function SearchResults(props: {
               ]}
             />
           )}
-          <button className="btn small add-btn" onClick={() => props.onAdd(c, props.defaultBoard, exact)} title={`Add to ${boardLabel(props.defaultBoard).toLowerCase()}`}>
+          <button className="btn small add-btn" onClick={() => props.onAdd(c, props.defaultBoard, exact)} title={`Add to ${boardLabel(props.defaultBoard, props.format).toLowerCase()}`}>
             + Add
           </button>
           <CardMenu
@@ -569,7 +570,7 @@ export function SearchResults(props: {
             sections={[
               {
                 title: "Add to",
-                items: BOARDS.filter((b) => b.id !== "commander" || commander).map((b) => ({
+                items: boardsFor(props.format).filter((b) => b.id !== "commander" || commander).map((b) => ({
                   label: b.label,
                   keepOpen: true,
                   onSelect: () => props.onAdd(c, b.id, exact),
@@ -578,7 +579,7 @@ export function SearchResults(props: {
               {
                 items: [
                   {
-                    label: `Add to ${boardLabel(props.defaultBoard).toLowerCase()}`,
+                    label: `Add to ${boardLabel(props.defaultBoard, props.format).toLowerCase()}`,
                     onSelect: () => {},
                     amount: { initial: 2, min: 1, max: MAX_QUANTITY, button: "Add", onAmount: (n) => props.onAdd(c, props.defaultBoard, exact, n) },
                   },
@@ -595,16 +596,16 @@ export function SearchResults(props: {
   return (
     <section className="panel search-page">
       <div className="search-page-head">
-        <button className="btn back-to-deck" onClick={props.onClose}>← Back to deck</button>
+        <button className="btn back-to-deck" onClick={props.onClose}>← Back to {props.format === PACKAGE ? "package" : isPlainList(props.format) ? "list" : "deck"}</button>
         <div className="search-page-box">
           <SearchBox key={props.query} initial={props.query} onSubmit={props.onSearch} onPick={props.onPickName} />
         </div>
-        <label className="inline small muted">
+        {boardsFor(props.format).length > 1 && <label className="inline small muted">
           + Add goes to{" "}
           <select value={props.defaultBoard} onChange={(e) => props.onDefaultBoard(e.target.value as Board)}>
             {BOARDS.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
           </select>
-        </label>
+        </label>}
       </div>
       <p className="muted small">
         {error ? (

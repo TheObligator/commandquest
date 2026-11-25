@@ -4,6 +4,7 @@ import { internalMutation, internalQuery, mutation, query, type MutationCtx, typ
 import type { Doc, Id } from "./_generated/dataModel";
 import { displayName } from "../src/username";
 import { summarize } from "./model/deckRules";
+import { CARD_LIST } from "../src/deckFormats";
 import {
   aiSeats,
   AWAY_MS,
@@ -286,6 +287,7 @@ export const setDeck = mutation({
     }
     const deck = await ctx.db.get(deckId);
     if (!deck || deck.userId !== userId) throw new ConvexError("Deck not found.");
+    if (deck.format === CARD_LIST) throw new ConvexError("That's a card list, not a deck to play.");
     await ctx.db.patch(seat._id, { deckId, deckName: deck.name, commanders: summarize(deck.cards).commanders, ready: false });
   },
 });
