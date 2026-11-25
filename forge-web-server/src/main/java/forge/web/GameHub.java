@@ -838,7 +838,7 @@ public final class GameHub {
     }
 
     /**
-     * Combos ({@link Combos}): {@code action} {@code record}, {@code keep} ({@code name}), {@code discard}; {@code run}
+     * Combos ({@link Combos}): {@code action} {@code record}, {@code keep} ({@code name}, {@code ref}), {@code discard}; {@code run}
      * ({@code id}, {@code times}, 0 until stopped), {@code stop}; {@code rename} ({@code id}, {@code name}), {@code remove} ({@code id}).
      */
     private void combo(Conn c, JsonNode m) {
@@ -855,7 +855,7 @@ public final class GameHub {
             int id = m.path("id").asInt(-1);
             String why = switch (action) {
                 case "record" -> seat.combos().record();
-                case "keep" -> seat.combos().keep(m.path("name").asText(""));
+                case "keep" -> seat.combos().keep(m.path("name").asText(""), m.path("ref").asText(null));
                 case "run" -> seat.combos().run(id, m.path("times").asInt(1));
                 case "discard" -> {
                     seat.combos().cancelRecording();

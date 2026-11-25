@@ -40,3 +40,24 @@ It ignores your other moves meanwhile. Runs are capped at 1000 loops. Against AI
 - **Replays:** a frame every 400 ms at most (`Recording.hold`).
 - **Views:** everyone's are sent every 200 ms at most, and the runner's doesn't work out what's playable:
   that simulates payments with the mana pool the run is using.
+
+## Known combos (Commander Spellbook)
+
+A deck's combos come from [Commander Spellbook](https://commanderspellbook.com), which is credited and
+linked wherever they show. Convex: `web/convex/combos.ts`, `model/spellbook.ts`. Client:
+`web/src/game/spellbook.ts`, `useDeckCombos.ts`, `components/DeckCombos.tsx`.
+
+- **Per deck:** when a Commander deck's cards have changed (and settled), `combos.lookUp` sends its card
+  names, nothing else, to `find-my-combos` and stores the answer with that deck (`deckCombos`, under a key
+  of the cards it's for): up to 150 combos, and the 30 most played ones it's a single card away from. It's
+  asked again after 30 days, and never more than once in 10 seconds for a deck. There's no copy of their
+  database, and their data isn't in this repository: their MIT license covers their code, not clearly the data.
+- **Deck editor:** the Combos section lists both, with each combo's needs and steps.
+- **In a game:** a combo with all its named cards where they need to be (`isReady`) is offered in the
+  player's own rail, three at most, until it's recorded or put away. Cards it doesn't name, mana and other
+  conditions can't be checked; its window lists them.
+- **Recording one:** the steps show as a checklist. They're English sentences, so what's ticked off is a
+  guess from the recording (`guideProgress`); a step can be ticked by hand. The recording keeps the
+  combo's id (`ref`).
+- **Checking it:** the combo's window compares what one time round changed with what the combo makes
+  (`showsResult`): mana, life, damage, cards, mill, tokens and counters. The rest "can't be checked".

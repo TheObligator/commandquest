@@ -9,6 +9,8 @@ export interface Combo {
   gains: string[];
   /** It ends where it started, so it can be repeated. */
   loops: boolean;
+  /** The Commander Spellbook combo it was recorded as. */
+  ref?: string;
 }
 
 export interface CombosView {

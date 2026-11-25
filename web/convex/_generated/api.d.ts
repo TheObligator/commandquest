@@ -9,6 +9,7 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as combos from "../combos.js";
 import type * as crons from "../crons.js";
 import type * as decks from "../decks.js";
 import type * as folders from "../folders.js";
@@ -19,6 +20,7 @@ import type * as model_folderRules from "../model/folderRules.js";
 import type * as model_importers from "../model/importers.js";
 import type * as model_packageRules from "../model/packageRules.js";
 import type * as model_replays from "../model/replays.js";
+import type * as model_spellbook from "../model/spellbook.js";
 import type * as model_tables from "../model/tables.js";
 import type * as packages from "../packages.js";
 import type * as replays from "../replays.js";
@@ -36,6 +38,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  combos: typeof combos;
   crons: typeof crons;
   decks: typeof decks;
   folders: typeof folders;
@@ -46,6 +49,7 @@ declare const fullApi: ApiFromModules<{
   "model/importers": typeof model_importers;
   "model/packageRules": typeof model_packageRules;
   "model/replays": typeof model_replays;
+  "model/spellbook": typeof model_spellbook;
   "model/tables": typeof model_tables;
   packages: typeof packages;
   replays: typeof replays;

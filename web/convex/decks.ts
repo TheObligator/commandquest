@@ -7,8 +7,7 @@ import { CARD_LIST } from "../src/deckFormats";
 import { DEFAULT_GROUPING, isGroupBy } from "../src/deckGroups";
 import { withSaved } from "../src/game/abilities";
 import { canSaveLater, withSavedLater, type LaterSpec } from "../src/game/later";
-import { laterSpec } from "./schema";
-import { deckCard } from "./schema";
+import { deckCard, laterSpec } from "./schema";
 
 // Every function is scoped to the signed-in user: nobody can read or change another user's decks.
 
@@ -130,6 +129,8 @@ export const remove = mutation({
     const existing = await ctx.db.get(id);
     if (!existing || existing.userId !== userId) throw new ConvexError("Deck not found.");
     await ctx.db.delete(id);
+    const combos = await ctx.db.query("deckCombos").withIndex("by_deck", (q) => q.eq("deckId", id)).unique();
+    if (combos) await ctx.db.delete(combos._id);
   },
 });
 

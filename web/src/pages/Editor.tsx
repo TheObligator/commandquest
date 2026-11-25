@@ -16,11 +16,12 @@ import { ColorStats } from "../components/ColorStats";
 import { DeckBar, DeckTypeCounts } from "../components/DeckBar";
 import { DeckBracket } from "../components/DeckBracket";
 import { deckAverages, playableLandBack } from "../deckstats";
-import { CARD_LIST, FORMATS, formatLabel, isPlainList, PACKAGE } from "../deckFormats";
+import { CARD_LIST, FORMATS, formatLabel, isPlainList, PACKAGE, hasCommander } from "../deckFormats";
 import { AddToPackage } from "../components/AddToPackage";
 import { PackagesPane } from "../components/PackagesPane";
 import { MAX_PACKAGE_NAME, MAX_PACKAGE_NOTE } from "../../convex/model/packageRules";
 import { cardKey, copiesIn, type PackageEntry } from "../packages";
+import { DeckCombos } from "../components/DeckCombos";
 import { DeckAbilities } from "../components/DeckAbilities";
 import { DeckTokens } from "../components/DeckTokens";
 import { FlipButton, useFlips } from "../components/FlipButton";
@@ -1449,6 +1450,7 @@ function DeckView(props: {
         identity={deck.format === "commander" || deck.format === "conquest" ? [...new Set(deck.cards.filter((c) => c.board === "commander").flatMap((c) => scry.cached(c)?.color_identity ?? []))] : undefined}
       />
       {deck.format !== PACKAGE && <DeckTokens deckId={deck.id} cards={deck.cards} />}
+      {hasCommander(deck.format) && <DeckCombos deckId={deck.id} />}
       {deck.format !== PACKAGE && <DeckAbilities deckId={deck.id} />}
       {preview.element}
       {contextMenu && <ContextMenu menu={contextMenu} onClose={closeMenu} />}

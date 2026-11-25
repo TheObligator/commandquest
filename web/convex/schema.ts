@@ -15,6 +15,18 @@ export const deckCard = v.object({
   category: v.optional(v.string()),
 });
 
+/** A deck's combo from Commander Spellbook (src/game/spellbook.ts). */
+export const spellbookCombo = v.object({
+  id: v.string(),
+  cards: v.array(v.object({ name: v.string(), zones: v.string(), quantity: v.optional(v.number()), commander: v.optional(v.boolean()) })),
+  needs: v.array(v.string()),
+  results: v.array(v.string()),
+  mana: v.optional(v.string()),
+  before: v.optional(v.string()),
+  steps: v.array(v.string()),
+});
+export const nearCombo = v.object({ id: v.string(), cards: v.array(v.string()), missing: v.string(), results: v.array(v.string()) });
+
 /** When an ability put off in a game is used (src/game/later.ts). */
 export const laterSpec = {
   when: v.union(v.literal("BEFORE_MY_TURN"), v.literal("MY_UPKEEP"), v.literal("NEXT_END"), v.literal("STEP")),
@@ -87,6 +99,15 @@ export default defineSchema({
     groupBy: v.optional(v.string()),
     updatedAt: v.number(),
   }).index("by_user_updated", ["userId", "updatedAt"]),
+
+  /** Each deck's combos from Commander Spellbook, for the cards `key` stands for (convex/combos.ts). */
+  deckCombos: defineTable({
+    deckId: v.id("decks"),
+    key: v.string(),
+    combos: v.array(spellbookCombo),
+    near: v.array(nearCombo),
+    at: v.number(),
+  }).index("by_deck", ["deckId"]),
 
   /** Default priority stops (docs/stops.md). One row per user; absent = the defaults. */
   stopPresets: defineTable({

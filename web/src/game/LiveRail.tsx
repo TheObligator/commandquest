@@ -5,6 +5,7 @@ import { AUTO_PASS } from "./ActionRail";
 import { isAttackPrompt } from "./AttackArrows";
 import { manaChoiceFor } from "./manaOptions";
 import { CombosPanel } from "./CombosPanel";
+import type { MyZones, SpellbookCombo } from "./spellbook";
 import { LaterRail } from "./LaterMenu";
 import { RewindPanel } from "./RewindPanel";
 import { ScryDialog } from "./ScryDialog";
@@ -25,6 +26,9 @@ export function LiveRail(props: {
   preview: Preview | null;
   /** You have priority: a combo can be recorded or run from here. */
   priority?: boolean;
+  /** Your deck's combos (Commander Spellbook) and your cards, to offer the ones that are ready. */
+  knownCombos?: SpellbookCombo[];
+  myZones?: MyZones;
   /** The pick window (cards to choose from a pile) is hidden: bring it back. */
   onShowPick?: () => void;
   /** The question (`game.ask`) is answered by clicking on the table; this answers it with what's clicked (null: not yet allowed). */
@@ -37,7 +41,7 @@ export function LiveRail(props: {
     <aside className="action-rail">
 
       {game.status === "playing" && (
-        <CombosPanel combos={game.view?.combos} actions={game.combos} canRecord={!!props.priority} />
+        <CombosPanel combos={game.view?.combos} actions={game.combos} canRecord={!!props.priority} known={props.knownCombos} mine={props.myZones} />
       )}
       <LaterRail />
 

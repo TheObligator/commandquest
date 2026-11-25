@@ -658,19 +658,36 @@ dialog.decision-window.wide { width: min(860px, calc(100vw - 32px)); }
 .action-rail > .ar-combos > header { align-items: center; margin: 0; }
 .ar-combos .btn { padding: 2px 8px; flex: none; }
 .rec-dot { display: inline-block; width: 8px; height: 8px; margin-right: 4px; border-radius: 50%; background: #e2574c; }
-.ar-combos ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 5px; max-height: 150px; overflow-y: auto; }
-.ar-combos ul li, .combo-rec, .combo-run { padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: #171a22; font-size: .8rem; }
-.ar-combos ul li { display: flex; align-items: center; gap: 6px; }
-.ar-combos ul li > div { flex: 1; min-width: 0; display: grid; }
-.ar-combos ul strong, .combo-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ar-combos ul span { color: var(--muted); font-size: .74rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ar-combos > ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 5px; max-height: 150px; overflow-y: auto; }
+.ar-combos > ul > li, .combo-rec, .combo-run { padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: #171a22; font-size: .8rem; }
+.ar-combos > ul > li { display: flex; align-items: center; gap: 6px; }
+.ar-combos > ul > li > div { flex: 1; min-width: 0; display: grid; }
+.ar-combos > ul strong, .combo-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ar-combos > ul span { color: var(--muted); font-size: .74rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .combo-rec, .combo-run { margin-top: 6px; }
 .combo-rec { border-color: #8a352d; background: #24130f; }
 .combo-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .combo-row > span { display: flex; gap: 4px; }
+.combo-guide button { min-width: 0; }
 .combo-rec p, .combo-run p { margin: 4px 0 0; color: var(--muted); font-size: .74rem; }
 .ar-combos ol, .combo-window ol { margin: 5px 0 0; padding-left: 20px; font-size: .78rem; line-height: 1.45; color: #cfd3dc; max-height: 130px; overflow-y: auto; }
 .combo-run progress { width: 100%; height: 6px; margin-top: 6px; accent-color: var(--accent); }
 .combo-gains { padding: 7px 10px; border-radius: 8px; border: 1px solid rgb(224 168 79 / 35%); background: rgb(224 168 79 / 10%); color: var(--accent-2); font-size: .85rem; }
 .combo-window .dw-opt input.num { width: 64px; padding: 3px 6px; margin: 0 4px; text-align: center; border-radius: 6px; border: 1px solid var(--line); background: #0e1016; color: var(--text); font: inherit; }
 .combo-window .dw-text { padding-right: 36px; }
+.ar-combos > .combo-offers > li, .ar-combos > ul > li.ready { border-color: var(--accent); }
+.combo-guide { list-style: none; margin: 5px 0 0; padding: 0; display: grid; max-height: 240px; overflow-y: auto; gap: 1px; }
+.ar-combos > ul.combo-offers { max-height: 230px; }
+.ar-combos > ul.combo-offers strong { white-space: normal; }
+.combo-guide button { display: flex; gap: 6px; width: 100%; padding: 4px 6px; border: 0; background: none; color: #cfd3dc; font: inherit; font-size: .76rem; line-height: 1.35; text-align: left; cursor: pointer; border-radius: 6px; }
+.combo-guide button:hover { background: rgb(255 255 255 / 6%); }
+.combo-guide i { flex: none; width: 12px; font-style: normal; color: #6fcf97; }
+.combo-guide .done button { color: var(--muted); }
+.combo-guide .now button { outline: 1px solid #7fd1ff; background: rgb(127 209 255 / 8%); }
+.combo-guide .now i { color: #7fd1ff; }
+.combo-checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: .82rem; }
+.combo-checks li::before { display: inline-block; width: 18px; content: "·"; color: var(--muted); }
+.combo-checks .yes::before { content: "✓"; color: #6fcf97; }
+.combo-checks .no::before { content: "!"; color: #ef6b6b; font-weight: 700; }
+.combo-checks .unknown { color: var(--muted); }
+.combo-window .dc-text { padding: 0; max-height: 40vh; overflow-y: auto; }

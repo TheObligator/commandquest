@@ -586,7 +586,7 @@ export function useLiveGame() {
     /** Record and run combos (docs/combos.md); `times` 0: until stopped. */
     combos: {
       record: () => void send({ t: "combo", action: "record" }),
-      keep: () => void send({ t: "combo", action: "keep" }),
+      keep: (name?: string, ref?: string) => void send({ t: "combo", action: "keep", name, ref }),
       discard: () => void send({ t: "combo", action: "discard" }),
       run: (id: number, times: number) => void send({ t: "combo", action: "run", id, times }),
       stop: () => void send({ t: "combo", action: "stop" }),

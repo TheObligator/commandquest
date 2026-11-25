@@ -1,0 +1,14 @@
+/* Combos from Commander Spellbook: the deck editor's list, and a combo's text (also in games). */
+.deck-combos > p { margin: 0 0 10px; }
+.deck-combos > ul { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; max-width: 720px; }
+.deck-combos > ul > li { border: 1px solid var(--line); border-radius: 8px; }
+.deck-combos summary { cursor: pointer; list-style: none; }
+.deck-combos summary::-webkit-details-marker { display: none; }
+.dc-row { display: flex; align-items: center; gap: 12px; padding: 8px 10px; }
+.dc-cards { flex: 1 1 55%; min-width: 0; display: grid; gap: 2px; }
+.dc-row > .small { flex: 1 1 35%; color: var(--accent-2); text-align: right; }
+.dc-row > a.small { flex: none; }
+.dc-text { padding: 0 12px 10px; line-height: 1.5; }
+.dc-text p { margin: 0 0 6px; white-space: pre-line; }
+.dc-text ol { margin: 0 0 6px; padding-left: 20px; }
+.deck-combos .dc-credit { margin: 10px 0 0; }

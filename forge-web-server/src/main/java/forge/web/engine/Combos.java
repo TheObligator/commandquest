@@ -82,13 +82,16 @@ public final class Combos {
         final List<String> gains;
         /** It ends where it started, so it can be repeated. */
         final boolean loops;
+        /** The browser's id for the known combo it was recorded as, or null. */
+        final String ref;
 
-        Combo(int id, String name, List<Step> steps, List<String> gains, boolean loops) {
+        Combo(int id, String name, List<Step> steps, List<String> gains, boolean loops, String ref) {
             this.id = id;
             this.name = name;
             this.steps = steps;
             this.gains = gains;
             this.loops = loops;
+            this.ref = ref;
         }
     }
 
@@ -288,7 +291,12 @@ public final class Combos {
     }
 
     /** Keeps what was recorded as a combo. Returns why it can't, or null. Forge's UI thread. */
-    public synchronized String keep(String name) {
+    public String keep(String name) {
+        return keep(name, null);
+    }
+
+    /** {@code ref}: the browser's id for the known combo (Commander Spellbook's) it was recorded as, or null. */
+    public synchronized String keep(String name, String ref) {
         if (recording == null) {
             return "Nothing is being recorded.";
         }
@@ -310,7 +318,8 @@ public final class Combos {
         }
         ComboState to = ComboState.of(seat.webController().getGame(), seat.webController().getPlayer());
         boolean loops = asked.equals(startedAsking) && from.step().equals(to.step()) && from.ready(to);
-        combos.add(new Combo(nextId, name(name, "Combo " + nextId), List.copyOf(steps), from.changes(to), loops));
+        combos.add(new Combo(nextId, name(name, "Combo " + nextId), List.copyOf(steps), from.changes(to), loops,
+                ref == null || ref.isBlank() || ref.length() > 128 ? null : ref));
         nextId++;
         cancelRecording();
         return null;
@@ -649,7 +658,7 @@ public final class Combos {
     // ---- for the browser ----
 
     /**
-     * For the player's own view: {@code {recording?: [step], running?: {id, loop, times?}, list: [{id, name, steps, gains, loops}]}},
+     * For the player's own view: {@code {recording?: [step], running?: {id, loop, times?}, list: [{id, name, steps, gains, loops, ref?}]}},
      * or null when there's nothing.
      */
     synchronized ObjectNode json() {
@@ -680,6 +689,9 @@ public final class Combos {
             ArrayNode gains = n.putArray("gains");
             c.gains.forEach(gains::add);
             n.put("loops", c.loops);
+            if (c.ref != null) {
+                n.put("ref", c.ref);
+            }
         }
         return o;
     }

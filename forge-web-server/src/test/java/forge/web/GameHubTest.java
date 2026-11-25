@@ -609,11 +609,12 @@ public class GameHubTest {
                     ws.sendText("{\"t\":\"card\",\"id\":" + land + "}", true);
                     stage = "tapping";
                 } else if (stage.equals("tapping") && combos.path("recording").size() == 1 && t.equals("prompt")) {
-                    ws.sendText("{\"t\":\"combo\",\"action\":\"keep\",\"name\":\"Plains mana\"}", true);
+                    ws.sendText("{\"t\":\"combo\",\"action\":\"keep\",\"name\":\"Plains mana\",\"ref\":\"12-34\"}", true);
                     stage = "keeping";
                 } else if (stage.equals("keeping") && combos.path("list").size() == 1) {
                     JsonNode c = combos.path("list").get(0);
                     Assert.assertEquals(c.path("name").asText(), "Plains mana");
+                    Assert.assertEquals(c.path("ref").asText(), "12-34");
                     Assert.assertEquals(c.path("steps").size(), 1, c.toString());
                     Assert.assertTrue(c.path("gains").toString().contains("+1 {W}"), c.toString());
                     Assert.assertFalse(c.path("loops").asBoolean(), "the Plains stays tapped");

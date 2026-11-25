@@ -17,6 +17,8 @@ import { BusyLabel, Spinner, Waiting } from "../components/Spinner";
 import { useCardData } from "../game/cards";
 import { LaterProvider, laterItems, type LaterControls } from "../game/LaterMenu";
 import { canPickStep, type LaterSpec } from "../game/later";
+import type { MyZones } from "../game/spellbook";
+import { useDeckCombos } from "../useDeckCombos";
 import { LiveRail } from "../game/LiveRail";
 import { REWIND_LEVELS } from "../game/RewindPanel";
 import { LAYOUTS, LayoutPicker, TableBoard, useStored, useTableStops, type LayoutId, type MenuPart, type MenuTarget } from "../game/TableBoard";
@@ -451,6 +453,18 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
       setAbility({ id: deck._id, card, text, ...setting }).catch((e) => toast(errorMessage(e), "error"));
     },
   };
+  // Your deck's combos (docs/combos.md): the ones whose cards are where they need to be are offered.
+  const knownCombos = useDeckCombos(view.deckId).found?.combos;
+  const myZones = useMemo<MyZones>(() => {
+    const me = view.players[0];
+    return {
+      H: me.hand,
+      B: view.players.flatMap((p) => p.battlefield).filter((c) => c.controller === view.viewer),
+      C: me.command,
+      E: view.players.flatMap((p) => p.exile).filter((c) => c.owner === view.viewer),
+      G: me.graveyard,
+    };
+  }, [view]);
   // Abilities put off to a step (docs/use-later.md).
   const saveLater = useMutation(api.decks.setLater);
   const [stepPick, setStepPick] = useState<{ card: string; sorcery: boolean; done: (s: LaterSpec) => void } | null>(null);
@@ -1226,7 +1240,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
         },
         onCancel: () => setStepPick(null),
       } : undefined}
-      rail={(preview) => <LiveRail priority={priorityPrompt} game={{ ...game, ok, cancel, setAutoPass, clickCard: click }} nameOf={nameOf} colorOf={colorOf} preview={preview} boardAsk={board && game.ask ? { onOk: boardPicked.length >= game.ask.min && boardPicked.length <= game.ask.max ? answerBoard : null } : undefined} pickAsk={!!askCards || windowAsk} onShowPick={pickKey && pickHidden === pickKey ? () => setPickHidden("") : undefined} />}
+      rail={(preview) => <LiveRail priority={priorityPrompt} knownCombos={knownCombos} myZones={myZones} game={{ ...game, ok, cancel, setAutoPass, clickCard: click }} nameOf={nameOf} colorOf={colorOf} preview={preview} boardAsk={board && game.ask ? { onOk: boardPicked.length >= game.ask.min && boardPicked.length <= game.ask.max ? answerBoard : null } : undefined} pickAsk={!!askCards || windowAsk} onShowPick={pickKey && pickHidden === pickKey ? () => setPickHidden("") : undefined} />}
       hand={{
         onPlay: click,
         onClick: click,
