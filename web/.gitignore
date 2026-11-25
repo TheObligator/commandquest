@@ -8,3 +8,5 @@ dist/
 *.tsbuildinfo
 # built from Scryfall bulk data by scripts/cardnames.ts
 /public/card-names.json
+# built from Scryfall bulk data by scripts/cardcategories.ts
+/public/card-categories.json

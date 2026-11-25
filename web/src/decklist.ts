@@ -4,6 +4,8 @@
 //   Archidekt:         "1x Sol Ring (c21) 263 [Ramp]", "[Commander{top}]"
 // Kept free of DOM and TypeScript-only runtime syntax so `node --test` can run it directly.
 
+import { archidektCategories } from "../convex/model/importers.ts";
+
 export type Board = "commander" | "main" | "side" | "maybe";
 
 export interface ParsedCard {
@@ -12,6 +14,9 @@ export interface ParsedCard {
   board: Board;
   set?: string;
   collectorNumber?: string;
+  /** The deck's own category for the card, and other labels (Archidekt's "[Ramp,Artifacts]"). */
+  category?: string;
+  tags?: string[];
 }
 
 /** A token printing listed with the deck (a "Tokens" section): used as the deck's token art. */
@@ -99,6 +104,8 @@ export function parseDecklist(text: string): ParsedList {
     const card: ParsedCard = { name: m[2].trim(), quantity, board };
     if (m[3]) card.set = m[3].toLowerCase();
     if (m[4]) card.collectorNumber = m[4];
+    // "[Ramp{top},Artifacts]": the {…} marks are Archidekt's settings for the category.
+    if (m[6]) Object.assign(card, archidektCategories(m[6].split(",").map((c) => c.replace(/\{[^}]*\}/g, ""))));
     if (quantity < 1) {
       out.errors.push(raw.trim());
       continue;
@@ -141,8 +148,9 @@ export function mergeDuplicates<T extends ParsedCard>(cards: T[]): T[] {
     if (prev) {
       prev.quantity += c.quantity;
       // Tags from both entries (moving a tagged card onto an untagged copy keeps its tags).
-      const tags = [...((prev as { tags?: string[] }).tags ?? []), ...((c as { tags?: string[] }).tags ?? [])];
-      if (tags.length) (prev as { tags?: string[] }).tags = [...new Map(tags.map((t) => [t.toLowerCase(), t])).values()];
+      const tags = [...(prev.tags ?? []), ...(c.tags ?? [])];
+      if (c.category && !prev.category) prev.category = c.category;
+      if (tags.length) prev.tags = [...new Map(tags.map((t) => [t.toLowerCase(), t])).values()];
     } else {
       const copy = { ...c };
       seen.set(key, copy);

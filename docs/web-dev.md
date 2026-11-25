@@ -91,6 +91,25 @@ Scryfall syntax, search Scryfall as before. A Rulebreaker that asks about someth
 have (it keeps front-face types, power of 4 or more, mana value of 7 or more) needs it added in
 `buildCardNames` and `cardAt`.
 
+### Card categories (Group by → Category)
+
+Grouped by category, each card shows once: under its own category (`DeckCard.category`, chosen from the
+card's menu or imported from Archidekt), else the best automatic one, else its type. Lands stay under Land
+unless given a category. Categories are separate from tags, which can be several per card.
+
+Automatic categories come from Scryfall Tagger's oracle tags. `CATEGORY_RULES` in `src/cardCategories.ts`
+says which tags make each category, most telling category first. `scripts/cardcategories.ts` applies the
+rules to the `oracle_tags` bulk file (6 MB) and writes `web/public/card-categories.json` (300 KB, not
+committed), run by `vite.config.ts` like the card names, with the same fallbacks: the last list, or the
+committed copy in `web/data/card-categories.json`. It also falls back if Tagger drops a tag a rule
+names: the build warns, and the rules need fixing. After changing the rules, run `npm run cardcategories`
+and commit the copy. Unlike the card names, CI doesn't cache it: each build downloads it.
+
+From Archidekt, a card's first category becomes its category and any others become tags. Card types and
+boards ("Creature", "Maybeboard") aren't kept as categories.
+
+The grouping is saved with each deck (`decks.groupBy`, set by `decks.setGroupBy`); the default is Type.
+
 ### Cards that don't work in games
 
 The deck editor, its search results and the game start screen mark cards that won't work in a game

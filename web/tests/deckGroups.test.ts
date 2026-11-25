@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { DeckCard } from "../convex/model/deckRules.ts";
 import type { ScryCard } from "../src/scryfall.ts";
-import { deckTags, groupCards, primaryType } from "../src/deckGroups.ts";
+import { categoryOf, deckCategories, deckTags, groupCards, isGroupBy, primaryType } from "../src/deckGroups.ts";
 
 const data: Record<string, Partial<ScryCard>> = {
   "Sol Ring": { type_line: "Artifact", cmc: 1, colors: [], color_identity: [], rarity: "uncommon", set: "c21", set_name: "Commander 2021", released_at: "2021-04-23", artist: "Mike Bierek" },
@@ -50,4 +50,42 @@ test("colors, identity, mana value, rarity, set, subtype, artist", () => {
   assert.deepEqual(shape("subtype").slice(0, 2), ["Elf: Llanowar Elves", "Forest: Forest"]);
   assert.ok(shape("artist").includes("Unknown artist: Fact or Fiction, Kenrith, the Returned King, Emeria's Call"));
   assert.deepEqual(shape("none").length, 1);
+});
+
+const fits: Record<string, string[]> = { "Sol Ring": ["Ramp"], "Llanowar Elves": ["Ramp"], Counterspell: ["Counterspells", "Removal"], "Fact or Fiction": ["Draw", "Mill"], Forest: ["Ramp"] };
+const auto = (c: ScryCard) => fits[c.name] ?? [];
+const byCategory = (cards: DeckCard[], a?: typeof auto) => groupCards(cards, "category", cardOf, a).map((g) => `${g.label}: ${g.cards.map((c) => c.name).join(", ")}`);
+
+test("category: each card once, under its best category; without one, under its type; lands under Land", () => {
+  assert.deepEqual(byCategory(deck, auto), [
+    "Counterspells: Counterspell",
+    "Draw: Fact or Fiction",
+    "Ramp: Llanowar Elves, Sol Ring",
+    "Creature: Kenrith, the Returned King",
+    "Sorcery: Emeria's Call",
+    "Land: Forest",
+    "Loading…: Not Loaded Yet",
+  ]);
+});
+
+test("category: the deck's own category wins, ignoring case, even for lands and cards still loading", () => {
+  const own = (name: string, category: string): DeckCard => ({ ...card(name), category });
+  const cards = [own("Fact or Fiction", "ramp"), card("Sol Ring"), own("Forest", "Utility lands"), own("Not Loaded Yet", "Win condition"), own("Counterspell", "creature"), card("Kenrith, the Returned King")];
+  assert.deepEqual(byCategory(cards, auto), [
+    "ramp: Sol Ring, Fact or Fiction",
+    "Utility lands: Forest",
+    "Win condition: Not Loaded Yet",
+    "Creature: Counterspell, Kenrith, the Returned King",
+  ]);
+  assert.deepEqual(deckCategories([...cards, own("Sol Ring", "RAMP")]), ["ramp", "Utility lands", "Win condition", "creature"]);
+  assert.equal(categoryOf(card("Forest"), cardOf(card("Forest")), auto), undefined);
+});
+
+test("category: cards wait while the automatic categories load, except lands and the player's own", () => {
+  assert.deepEqual(byCategory([{ ...card("Sol Ring"), category: "Rocks" }, card("Forest"), card("Counterspell")]), ["Rocks: Sol Ring", "Land: Forest", "Loading…: Counterspell"]);
+});
+
+test("saved groupings are checked", () => {
+  assert.ok(isGroupBy("category"));
+  assert.ok(!isGroupBy("nonsense") && !isGroupBy(undefined));
 });

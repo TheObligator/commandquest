@@ -11,8 +11,10 @@ export interface DeckCard {
   scryfallId?: string;
   set?: string;
   collectorNumber?: string;
-  /** The player's own categories for this card ("Ramp", "Win condition", …), for grouping the deck. */
+  /** The player's own labels for this card ("Test", "Win condition", …), for grouping the deck. */
   tags?: string[];
+  /** The category the player (or an imported deck) puts this card in; absent = the automatic one (src/cardCategories.ts). */
+  category?: string;
 }
 
 export interface DeckInput {
@@ -92,6 +94,8 @@ export function validateDeck(input: DeckInput): Required<Pick<DeckInput, "name" 
       if ((c.tags?.length ?? 0) > MAX_CARD_TAGS * 2) throw new DeckError(`A card can have at most ${MAX_CARD_TAGS} tags.`);
       const tags = cleanCardTags(c.tags ?? []);
       if (tags.length) out.tags = tags;
+      const category = cleanCategory(c.category);
+      if (category) out.category = category;
       return out;
     }),
   };
@@ -112,6 +116,11 @@ export function cleanBracketTags(tags: string[]): string[] {
 /** A card's tags tidied: trimmed, no blanks or repeats (ignoring case), capped in length and number. */
 export function cleanCardTags(tags: string[]): string[] {
   return cleanTags(tags, MAX_CARD_TAG_LENGTH, MAX_CARD_TAGS);
+}
+
+/** A card's category tidied like a tag, or undefined when there's nothing left of it. */
+export function cleanCategory(category: string | undefined): string | undefined {
+  return category === undefined ? undefined : cleanCardTags([category])[0];
 }
 
 function cleanTags(tags: string[], maxLength: number, maxCount: number): string[] {

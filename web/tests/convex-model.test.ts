@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DeckError, summarize, validateDeck } from "../convex/model/deckRules.ts";
-import { deckSource, parseArchidekt, parseMoxfield } from "../convex/model/importers.ts";
+import { archidektCategories, deckSource, parseArchidekt, parseMoxfield } from "../convex/model/importers.ts";
 import { cleanFolderName, FolderError, MAX_FOLDER_NAME } from "../convex/model/folderRules.ts";
 
 test("validateDeck trims, defaults the format and board, and clips printing fields", () => {
@@ -99,4 +99,35 @@ test("cleanFolderName trims, collapses spaces and rejects blanks, long names and
   bad("   ", [], /1-50 characters/);
   bad("x".repeat(MAX_FOLDER_NAME + 1), [], /1-50 characters/);
   bad("casual", ["Casual"], /already have a folder called "casual"/);
+});
+
+test("validateDeck tidies a card's category, and drops a blank one", () => {
+  const d = validateDeck({ name: "x", cards: [{ name: "Sol Ring", quantity: 1, board: "main", category: "  Mana   rocks " }, { name: "Opt", quantity: 1, board: "main", category: "  " }] });
+  assert.deepEqual(d.cards.map((c) => c.category), ["Mana rocks", undefined]);
+  assert.ok(!("category" in d.cards[1]));
+});
+
+test("parseArchidekt keeps the deck's own categories: the first is the card's, others are tags", () => {
+  const d = parseArchidekt({
+    name: "x", deckFormat: 3,
+    categories: [{ name: "Maybeboard", includedInDeck: false }, { name: "Cuts", includedInDeck: false }],
+    cards: [
+      { quantity: 1, categories: ["Commander", "Draw"], card: { oracleCard: { name: "A" } } },
+      { quantity: 1, categories: ["Mill", "Win condition", "mill"], card: { oracleCard: { name: "B" } } },
+      { quantity: 1, categories: ["Creature"], card: { oracleCard: { name: "C" } } },
+      { quantity: 1, categories: ["Land", "Utility"], card: { oracleCard: { name: "D" } } },
+      { quantity: 1, categories: ["Cuts", "Ramp"], card: { oracleCard: { name: "E" } } },
+      { quantity: 1, categories: ["Ramp", "Cuts"], card: { oracleCard: { name: "F" } } },
+      { quantity: 1, categories: null, card: { oracleCard: { name: "G" } } },
+    ],
+  });
+  const of = (n: string) => d.cards.filter((c) => c.name === n).map((c) => [c.board, c.category, c.tags])[0];
+  assert.deepEqual(of("A"), ["commander", "Draw", undefined]);
+  assert.deepEqual(of("B"), ["main", "Mill", ["Win condition"]]);
+  assert.deepEqual(of("C"), ["main", undefined, undefined]);
+  assert.deepEqual(of("D"), ["main", "Utility", undefined]);
+  assert.deepEqual(of("E"), ["maybe", "Ramp", undefined]);
+  assert.deepEqual(of("F"), ["main", "Ramp", undefined]);
+  assert.deepEqual(of("G"), ["main", undefined, undefined]);
+  assert.deepEqual(archidektCategories([]), {});
 });

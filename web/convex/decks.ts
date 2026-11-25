@@ -3,6 +3,7 @@ import { ConvexError, v } from "convex/values";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { DeckError, MAX_DECKS_PER_USER, summarize, validateDeck, type DeckInput } from "./model/deckRules";
+import { DEFAULT_GROUPING, isGroupBy } from "../src/deckGroups";
 import { withSaved } from "../src/game/abilities";
 import { deckCard } from "./schema";
 
@@ -123,6 +124,19 @@ export const remove = mutation({
     const existing = await ctx.db.get(id);
     if (!existing || existing.userId !== userId) throw new ConvexError("Deck not found.");
     await ctx.db.delete(id);
+  },
+});
+
+/** Remembers how you group this deck in the editor. */
+export const setGroupBy = mutation({
+  args: { id: v.id("decks"), groupBy: v.string() },
+  handler: async (ctx, { id, groupBy }) => {
+    const userId = await requireUser(ctx);
+    const deck = await ctx.db.get(id);
+    if (!deck || deck.userId !== userId) throw new ConvexError("Deck not found.");
+    if (!isGroupBy(groupBy)) throw new ConvexError("Unknown grouping.");
+    // Not an edit to the deck, so `updatedAt` (the deck list's order) stays put.
+    await ctx.db.patch(id, { groupBy: groupBy === DEFAULT_GROUPING ? undefined : groupBy });
   },
 });
 

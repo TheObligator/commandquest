@@ -1,7 +1,7 @@
 // Parsers for deck-site APIs (Moxfield, Archidekt). Pure, so `node --test` can run them.
 // Ported from the old Java server's DeckUrlImporter. The fetching happens in ../importDeck.ts.
 
-import type { Board, DeckCard } from "./deckRules";
+import { cleanCardTags, type Board, type DeckCard } from "./deckRules.ts";
 
 export interface ImportedDeck {
   name: string;
@@ -85,6 +85,19 @@ export function parseMoxfield(d: any): ImportedDeck {
 
 const ARCHIDEKT_FORMATS: Record<number, string> = { 1: "standard", 2: "modern", 3: "commander", 4: "legacy", 5: "vintage", 6: "pauper" };
 
+/** Archidekt categories that only say where a card goes or what type it is. */
+const NOT_CATEGORIES = new Set(["commander", "commanders", "sideboard", "maybeboard", "considering", "tokens", "creature", "planeswalker", "battle", "instant", "sorcery", "artifact", "enchantment", "land", "kindred", "other"]);
+
+/**
+ * A card's Archidekt categories as ours: the first is its category (Archidekt shows the card under
+ * that one), any others become tags. Archidekt files cards without a category under their type,
+ * which leaves ours to the automatic category.
+ */
+export function archidektCategories(cats: string[]): Pick<DeckCard, "category" | "tags"> {
+  const [category, ...tags] = cleanCardTags(cats.filter((c) => !NOT_CATEGORIES.has(c.trim().toLowerCase())));
+  return { ...(category ? { category } : {}), ...(tags.length ? { tags } : {}) };
+}
+
 /** Archidekt's deck JSON. Cards in categories left out of the deck go to the maybeboard (or sideboard). */
 export function parseArchidekt(d: any): ImportedDeck {
   const included = new Map<string, boolean>();
@@ -104,7 +117,8 @@ export function parseArchidekt(d: any): ImportedDeck {
     let board: Board = "main";
     if (cats.includes("Commander")) board = "commander";
     else if (cats.length && included.get(cats[0]) === false) board = cats[0].toLowerCase().includes("side") ? "side" : "maybe";
-    cards.push(card(name, qty, board, text(e.card.uid), text(e.card.edition?.editioncode), text(e.card.collectorNumber)));
+    const ours = archidektCategories(cats.filter((c) => included.get(c) !== false));
+    cards.push({ ...card(name, qty, board, text(e.card.uid), text(e.card.edition?.editioncode), text(e.card.collectorNumber)), ...ours });
   }
   return { name: text(d?.name) ?? "Imported deck", format: ARCHIDEKT_FORMATS[Number(d?.deckFormat)] ?? "other", source: "archidekt", cards: cards.sort(byBoard), tokens };
 }

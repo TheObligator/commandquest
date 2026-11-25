@@ -12,7 +12,8 @@
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
     "isolatedModules": true,
-    "noEmit": true
+    "noEmit": true,
+    "allowImportingTsExtensions": true
   },
   "include": ["./**/*", "../src/game/phases.ts"],
   "exclude": ["./_generated"]

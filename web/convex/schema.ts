@@ -12,6 +12,7 @@ export const deckCard = v.object({
   set: v.optional(v.string()),
   collectorNumber: v.optional(v.string()),
   tags: v.optional(v.array(v.string())),
+  category: v.optional(v.string()),
 });
 
 export default defineSchema({
@@ -52,6 +53,8 @@ export default defineSchema({
         }),
       ),
     ),
+    /** How the editor groups this deck (src/deckGroups.ts); absent = by type. */
+    groupBy: v.optional(v.string()),
     /** The folder the player filed this deck in (convex/folders.ts); absent = not in a folder. */
     folderId: v.optional(v.id("deckFolders")),
     updatedAt: v.number(),

@@ -2,7 +2,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-import { MAX_CARD_TAG_LENGTH, MAX_CARD_TAGS, MAX_QUANTITY, cleanCardTags, type Board, type DeckCard } from "../../convex/model/deckRules";
+import { MAX_CARD_TAG_LENGTH, MAX_CARD_TAGS, MAX_QUANTITY, cleanCardTags, cleanCategory, type Board, type DeckCard } from "../../convex/model/deckRules";
 import { errorMessage } from "../app/errors";
 import { navigate, replaceQuietly, useLeaveGuard, useRoute } from "../app/router";
 import { closeOnBackdrop, showCardDetails } from "../carddetails";
@@ -23,7 +23,8 @@ import { FlipButton, useFlips } from "../components/FlipButton";
 import { CardViewToggle, useCardView, useStackColumns } from "../cardView";
 import { ManaCurve } from "../components/ManaCurve";
 import { columnsOf, packStacks, stackColClass } from "../stackLayout";
-import { GROUPINGS, deckTags, groupCards, saveGroupBy, savedGroupBy, type CardGroup, type GroupBy } from "../deckGroups";
+import { DEFAULT_GROUPING, GROUPINGS, categoryOf, deckCategories, deckTags, fittingCategories, groupCards, isGroupBy, type AutoCategories, type CardGroup, type GroupBy } from "../deckGroups";
+import { useCardCategories } from "../useCardCategories";
 import { ManaCost } from "../components/ManaCost";
 import { CardImg, CardWait } from "../components/CardImg";
 import { KnownPrintings } from "../components/KnownPrintings";
@@ -81,10 +82,10 @@ export function Editor({ id }: { id?: string }) {
     );
   }
   const initial: Draft = saved ? { id: saved._id, name: saved.name, format: saved.format, cards: saved.cards, extraColor: saved.extraColor, bracket: saved.bracket, bracketTags: saved.bracketTags } : { name: UNTITLED, format: "commander", cards: [] };
-  return <DeckEditor initial={initial} />;
+  return <DeckEditor initial={initial} initialGroupBy={saved && isGroupBy(saved.groupBy) ? saved.groupBy : DEFAULT_GROUPING} />;
 }
 
-function DeckEditor({ initial }: { initial: Draft }) {
+function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupBy: GroupBy }) {
   const { query } = useRoute();
   const [deck, setDeck] = useState<Draft>(initial);
   const [dirty, setDirty] = useState(false);
@@ -114,6 +115,17 @@ function DeckEditor({ initial }: { initial: Draft }) {
   const removeDeck = useMutation(api.decks.remove);
   const importFromUrl = useAction(api.importDeck.fromUrl);
   const addTokenArt = useMutation(api.decks.addTokenArt);
+  const saveGroupBy = useMutation(api.decks.setGroupBy);
+  // How this deck is grouped is remembered with it (for a new deck, once it's created).
+  const [groupBy, setGroupByState] = useState<GroupBy>(initialGroupBy);
+  const groupByRef = useRef(groupBy);
+  const rememberGroupBy = (id: Id<"decks">) =>
+    saveGroupBy({ id, groupBy: groupByRef.current }).catch((e) => toast(`Couldn't remember how this deck is grouped: ${errorMessage(e)}`, "error"));
+  const setGroupBy = (by: GroupBy) => {
+    groupByRef.current = by;
+    setGroupByState(by);
+    if (idRef.current) void rememberGroupBy(idRef.current);
+  };
   // Token art from an import into a deck that isn't saved yet: stored once it's created.
   const pendingTokenArt = useRef<TokenPick[]>([]);
 
@@ -322,6 +334,18 @@ function DeckEditor({ initial }: { initial: Draft }) {
     });
   }
 
+  /** Puts a card in a category of your choosing (undefined: back to the automatic one). */
+  function setCategory(target: DeckCard, category: string | undefined) {
+    change((d) => {
+      const i = entryIndex(d.cards, target);
+      if (i < 0) return d;
+      const clean = cleanCategory(category);
+      if (clean) d.cards[i].category = clean;
+      else delete d.cards[i].category;
+      return d;
+    });
+  }
+
   function moveCard(target: DeckCard, board: Board) {
     const i = deck.cards.indexOf(target);
     change((d) => {
@@ -433,6 +457,7 @@ function DeckEditor({ initial }: { initial: Draft }) {
       else {
         const id = await createDeck(body);
         idRef.current = id;
+        if (groupByRef.current !== DEFAULT_GROUPING) void rememberGroupBy(id);
         if (pendingTokenArt.current.length) {
           const picks = pendingTokenArt.current;
           pendingTokenArt.current = [];
@@ -574,6 +599,9 @@ function DeckEditor({ initial }: { initial: Draft }) {
       onQty={setQty}
       onMove={moveCard}
       onTags={setTags}
+      onCategory={setCategory}
+      groupBy={groupBy}
+      onGroupBy={setGroupBy}
       onMakeCommander={makeCommander}
       onPrinting={setPrinting}
       onAddCommander={(c) => void addCard(c, "commander")}
@@ -846,6 +874,9 @@ function DeckView(props: {
   onQty: (c: DeckCard, q: number) => void;
   onMove: (c: DeckCard, b: Board) => void;
   onTags: (c: DeckCard, tags: string[]) => void;
+  onCategory: (c: DeckCard, category: string | undefined) => void;
+  groupBy: GroupBy;
+  onGroupBy: (by: GroupBy) => void;
   onMakeCommander: (c: DeckCard, partner: boolean) => void;
   onPrinting: (c: DeckCard, p: scry.ScryCard) => void;
   onAddCommander: (c: scry.ScryCard) => void;
@@ -868,13 +899,14 @@ function DeckView(props: {
   const closeMenu = useCallback(() => setMenu(null), []);
   const [view, setView] = useCardView();
   const stacked = view === "stacked" || view === "spread";
-  const [groupBy, setGroupByState] = useState<GroupBy>(savedGroupBy);
-  const setGroupBy = (by: GroupBy) => {
-    setGroupByState(by);
-    saveGroupBy(by);
-  };
+  const { groupBy } = props;
+  const categories = useCardCategories(groupBy === "category");
+  /** Undefined while the automatic categories load; without them, cards go by type. */
+  const auto: AutoCategories | undefined = categories === undefined ? undefined : (s) => categories?.of(s.oracle_id ?? s.card_faces?.[0]?.oracle_id) ?? [];
   /** The card whose tags are being edited (by board and name, so it survives edits). */
   const [tagging, setTagging] = useState<{ board: Board; name: string } | null>(null);
+  /** The card whose category is being chosen. */
+  const [categorizing, setCategorizing] = useState<{ board: Board; name: string } | null>(null);
   const [measure, stackCols] = useStackColumns();
   const support = useCardSupport();
 
@@ -933,6 +965,7 @@ function DeckView(props: {
       ...commander,
       { label: "Choose printing…", run: () => setPrintingsFor(c) },
       { label: "Add tags…", run: () => setTagging({ board: c.board, name: c.name }) },
+      ...(groupBy === "category" && c.board !== "commander" ? [{ label: "Choose category…", run: () => setCategorizing({ board: c.board, name: c.name }) }] : []),
       { label: c.quantity > 1 ? `Remove all ${c.quantity}` : "Remove from deck", run: () => props.onQty(c, 0), danger: true },
     ]);
   };
@@ -944,6 +977,25 @@ function DeckView(props: {
       <button className="qbtn" aria-label="One more" onClick={() => props.onQty(c, c.quantity + 1)}>+</button>
     </span>
   );
+
+  /** Grouped by category: the card's category, others it fits, and choosing any other. */
+  const categorySection = (c: DeckCard, s: scry.ScryCard | undefined): MenuSection[] => {
+    if (groupBy !== "category" || !auto || c.board === "commander") return [];
+    const fits = fittingCategories(s, auto);
+    const now = categoryOf(c, s, auto);
+    const same = (a: string | undefined, b: string | undefined) => a?.toLowerCase() === b?.toLowerCase();
+    const best = fits[0] ?? scry.primaryType(s);
+    return [
+      {
+        title: `Category: ${now ?? scry.primaryType(s)}`,
+        items: [
+          ...fits.slice(1, 4).filter((f) => !same(f, now)).map((f) => ({ label: `Move to ${f}`, onSelect: () => props.onCategory(c, f) })),
+          ...(c.category ? [{ label: `Automatic (${best})`, onSelect: () => props.onCategory(c, undefined) }] : []),
+          { label: "Choose category…", onSelect: () => setCategorizing({ board: c.board, name: c.name }) },
+        ],
+      },
+    ];
+  };
 
   /**
    * Every action for one deck entry. The same list opens from the "⋯" button and from a
@@ -970,6 +1022,7 @@ function DeckView(props: {
           { label: c.tags?.length ? `Tags: ${c.tags.join(", ")}` : "Add tags…", onSelect: () => setTagging({ board: c.board, name: c.name }) },
         ],
       },
+      ...categorySection(c, s),
       { items: commanderItems },
       {
         title: "Move to",
@@ -1112,7 +1165,7 @@ function DeckView(props: {
         <CardViewToggle view={view} onChange={setView} />
         <label className="group-by">
           <span className="muted">Group by</span>
-          <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as GroupBy)}>
+          <select value={groupBy} onChange={(e) => props.onGroupBy(e.target.value as GroupBy)}>
             {GROUPINGS.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
           </select>
         </label>
@@ -1135,7 +1188,7 @@ function DeckView(props: {
         );
         /** The board's groups; a lands group also counts the board's spells with a land on the back ("+ 2"). */
         const groupsOf = (cards: DeckCard[]): Group[] =>
-          groupCards(cards, groupBy, scry.cached).map((g) => (g.key === "type:Land" || g.key === "lands" ? { ...g, landBacks: cards } : g));
+          groupCards(cards, groupBy, scry.cached, auto).map((g) => (g.key === "type:Land" || g.key === "lands" ? { ...g, landBacks: cards } : g));
         const commanderGroup: Group = { key: "commander", label: commanders.length > 1 ? "Commanders" : "Commander", cards: commanders, whole: true, extra: partnerSlot };
         /** The walkers group moved up next to the commander. */
         const walkersFirst = (groups: Group[]) => {
@@ -1273,6 +1326,24 @@ function DeckView(props: {
       {tagging && (() => {
         const c = deck.cards.find((x) => x.board === tagging.board && x.name === tagging.name);
         return c ? <TagEditor card={c} suggestions={deckTags(deck.cards)} onChange={(t) => props.onTags(c, t)} onClose={() => setTagging(null)} /> : null;
+      })()}
+      {categorizing && (() => {
+        const c = deck.cards.find((x) => x.board === categorizing.board && x.name === categorizing.name);
+        if (!c) return null;
+        const s = scry.cached(c);
+        const any = auto ?? (() => []);
+        return (
+          <CategoryPicker
+            card={c}
+            now={categoryOf(c, s, any) ?? scry.primaryType(s)}
+            automatic={fittingCategories(s, any)[0] ?? scry.primaryType(s)}
+            fits={fittingCategories(s, any)}
+            all={categories?.names ?? []}
+            used={deckCategories(deck.cards)}
+            onPick={(k) => props.onCategory(c, k)}
+            onClose={() => setCategorizing(null)}
+          />
+        );
       })()}
       {printingsFor && <Printings card={printingsFor} onPick={(p) => props.onPrinting(printingsFor, p)} onClose={() => setPrintingsFor(null)} />}
       {pickingPartner && leadCard && slotLabel && (
@@ -1700,6 +1771,73 @@ function TagEditor({ card, suggestions, onChange, onClose }: { card: DeckCard; s
           <button className="btn" disabled={!draft.trim() || full}>Add</button>
         </div>
         <div className="actions new-deck-actions">
+          <button type="button" className="btn ghost" onClick={() => ref.current?.close()}>Done</button>
+        </div>
+      </form>
+    </dialog>
+  );
+}
+
+/** Choose the one category a card shows under: one it fits, any other, or a new one typed in. */
+function CategoryPicker(props: {
+  card: DeckCard;
+  now: string;
+  automatic: string;
+  fits: string[];
+  all: string[];
+  used: string[];
+  onPick: (category: string | undefined) => void;
+  onClose: () => void;
+}) {
+  const { card, now, fits } = props;
+  const ref = useRef<HTMLDialogElement>(null);
+  const [draft, setDraft] = useState("");
+  useEffect(() => ref.current?.showModal(), []);
+  const pick = (category: string | undefined) => {
+    props.onPick(category);
+    ref.current?.close();
+  };
+  const isNow = (k: string) => k.toLowerCase() === now.toLowerCase();
+  // Each name once, however it's spelled: the player's own spelling first.
+  const others = [...new Map([...props.all, ...props.used].map((k) => [k.toLowerCase(), k])).values()]
+    .filter((k) => !fits.some((f) => f.toLowerCase() === k.toLowerCase()))
+    .sort((a, z) => a.localeCompare(z));
+  const chips = (names: string[]) => (
+    <div className="reason-tags">
+      {names.map((k) => (
+        <button type="button" key={k} className={`reason-tag${isNow(k) ? " on" : ""}`} aria-pressed={isNow(k)} onClick={() => pick(k)}>{k}</button>
+      ))}
+    </div>
+  );
+  return (
+    <dialog ref={ref} className="new-deck tag-editor" onClose={props.onClose} onClick={(e) => closeOnBackdrop(e.nativeEvent, ref.current)}>
+      <button className="dialog-close" aria-label="Close" onClick={() => ref.current?.close()}>×</button>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (draft.trim()) pick(draft);
+        }}
+      >
+        <h3>Category for {card.name}</h3>
+        <p className="muted small">
+          A card shows under one category. Automatic ones come from <a href="https://tagger.scryfall.com/" target="_blank" rel="noopener">Scryfall Tagger</a>, where players tag what cards do.
+        </p>
+        {fits.length > 0 && (
+          <div>
+            <p className="muted small tag-editor-sub">Fits this card</p>
+            {chips(fits)}
+          </div>
+        )}
+        <div>
+          <p className="muted small tag-editor-sub">{fits.length ? "Others" : "Categories"}</p>
+          {chips(others)}
+        </div>
+        <div className="tag-editor-add">
+          <input value={draft} maxLength={MAX_CARD_TAG_LENGTH} placeholder="New category, e.g. Win condition" aria-label="New category" onChange={(e) => setDraft(e.target.value)} />
+          <button className="btn" disabled={!draft.trim()}>Use</button>
+        </div>
+        <div className="actions new-deck-actions">
+          {card.category && <button type="button" className="btn ghost" onClick={() => pick(undefined)}>Automatic ({props.automatic})</button>}
           <button type="button" className="btn ghost" onClick={() => ref.current?.close()}>Done</button>
         </div>
       </form>

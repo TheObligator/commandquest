@@ -73,3 +73,14 @@ test("merging duplicates", () => {
   ]);
   assert.deepEqual(merged.map((c) => c.quantity), [5, 1]);
 });
+
+test("Archidekt text: the deck's own categories are kept, types and boards aren't categories", () => {
+  const r = parseDecklist("1x Cultivate (m21) 177 [Ramp{top},Green stuff]\n1x Opt [Instant]\n1x Thallid [Maybeboard{noDeck}{noPrice},Tokens matter]\n1x Island");
+  assert.deepEqual(r.cards.map((c) => [c.category, c.tags]), [["Ramp", ["Green stuff"]], [undefined, undefined], ["Tokens matter", undefined], [undefined, undefined]]);
+});
+
+test("mergeDuplicates keeps the first entry's category, or takes the other's", () => {
+  const island = { name: "Island", quantity: 1, board: "main" as const };
+  assert.equal(mergeDuplicates([{ ...island, category: "A" }, { ...island, category: "B" }])[0].category, "A");
+  assert.equal(mergeDuplicates([island, { ...island, category: "B" }])[0].category, "B");
+});

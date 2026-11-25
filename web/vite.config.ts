@@ -1,5 +1,6 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
+import { updateCardCategories } from "./scripts/cardcategories";
 import { updateCardNames } from "./scripts/cardnames";
 
 // Each build gets an id, compiled into the bundle and written to /version.json, so an open tab can
@@ -16,16 +17,16 @@ function versionFile(): Plugin {
   };
 }
 
-/** The card names for the editor's search: there before a build, and brought up to date as the dev server starts. */
-function cardNames(): Plugin {
+/** The card names and categories for the editor: there before a build, and brought up to date as the dev server starts. */
+function cardData(): Plugin {
   let dev = false;
   return {
-    name: "card-names",
+    name: "card-data",
     configResolved(config) {
       dev = config.command === "serve";
     },
     async buildStart() {
-      const updated = updateCardNames();
+      const updated = Promise.all([updateCardNames(), updateCardCategories()]);
       if (!dev) await updated;
     },
   };
@@ -36,7 +37,7 @@ function cardNames(): Plugin {
 const server = process.env.FORGE_SERVER ?? "http://localhost:8080";
 
 export default defineConfig({
-  plugins: [react(), versionFile(), cardNames()],
+  plugins: [react(), versionFile(), cardData()],
   define: { __BUILD_ID__: JSON.stringify(buildId) },
   server: {
     // IPv4 loopback explicitly: Node resolves "localhost" to ::1 on macOS, but

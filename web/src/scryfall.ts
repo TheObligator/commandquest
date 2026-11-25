@@ -31,6 +31,7 @@ export interface ImageUris {
 
 export interface CardFace {
   name: string;
+  oracle_id?: string;
   mana_cost?: string;
   type_line?: string;
   oracle_text?: string;
@@ -58,6 +59,8 @@ export interface ScryCard {
   /** Colors of mana the card can make (W, U, B, R, G, C). */
   produced_mana?: string[];
   name: string;
+  /** The same for every printing of a card. On reversible cards it's on the faces. */
+  oracle_id?: string;
   layout: string;
   mana_cost?: string;
   cmc: number;
@@ -151,7 +154,7 @@ async function getJson<T>(url: string, init?: RequestInit, retries = MAX_429_RET
 // ---- Cache (memory + localStorage, 7 days) ---------------------------------------
 
 // Bump the version when `trim` keeps new fields, so old entries without them are dropped.
-const STORE_KEY = "cq.scryfall.cards.v5"; // v5 keeps game_changer and produced_mana
+const STORE_KEY = "cq.scryfall.cards.v6"; // v6 keeps oracle_id
 // Card data rarely changes (a ban updates legality), and a deck opened again within the week then
 // needs no lookups. The size cap, not the age, is what keeps this within localStorage's ~5 MB.
 const TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -165,12 +168,12 @@ const storedAt = new Map<string, number>();
 function trim(c: ScryCard): ScryCard {
   const pick = <O extends object>(o: O, keys: (keyof O)[]) =>
     Object.fromEntries(keys.filter((k) => o[k] !== undefined).map((k) => [k, o[k]])) as O;
-  const card = pick(c, ["id", "game_changer", "produced_mana", "name", "layout", "mana_cost", "cmc", "type_line", "oracle_text", "flavor_text", "power", "toughness", "loyalty", "defense", "color_identity", "color_indicator", "colors", "keywords", "reserved", "set", "set_name", "collector_number", "rarity", "artist", "released_at", "scryfall_uri", "legalities", "image_uris"]);
+  const card = pick(c, ["id", "oracle_id", "game_changer", "produced_mana", "name", "layout", "mana_cost", "cmc", "type_line", "oracle_text", "flavor_text", "power", "toughness", "loyalty", "defense", "color_identity", "color_indicator", "colors", "keywords", "reserved", "set", "set_name", "collector_number", "rarity", "artist", "released_at", "scryfall_uri", "legalities", "image_uris"]);
   const tokens = c.all_parts?.filter((p) => p.component === "token" && p.id !== c.id);
   if (tokens?.length) card.all_parts = tokens.map((p) => ({ id: p.id, component: p.component, name: p.name, type_line: p.type_line }));
   else delete card.all_parts;
   if (c.card_faces) {
-    card.card_faces = c.card_faces.map((f) => pick(f, ["name", "mana_cost", "type_line", "oracle_text", "flavor_text", "power", "toughness", "loyalty", "defense", "artist", "color_indicator", "image_uris"]));
+    card.card_faces = c.card_faces.map((f) => pick(f, ["name", "oracle_id", "mana_cost", "type_line", "oracle_text", "flavor_text", "power", "toughness", "loyalty", "defense", "artist", "color_indicator", "image_uris"]));
   }
   return card;
 }

@@ -1,13 +1,14 @@
-// How the deck editor splits a board into groups: by type (the default), subtype, the player's own
-// tags, rarity, color, color identity, mana value, set, artist, or not at all. The choice is
-// remembered per browser.
+// How the deck editor splits a board into groups: by type (the default), category (what the card
+// does), subtype, the player's own tags, rarity, color, color identity, mana value, set, artist, or
+// not at all. The choice is remembered with each deck.
 import type { DeckCard } from "../convex/model/deckRules";
 import type { ScryCard } from "./scryfall";
 
-export type GroupBy = "type" | "subtype" | "typeTag" | "tag" | "rarity" | "color" | "identity" | "manaValue" | "set" | "artist" | "none";
+export type GroupBy = "type" | "category" | "subtype" | "typeTag" | "tag" | "rarity" | "color" | "identity" | "manaValue" | "set" | "artist" | "none";
 
 export const GROUPINGS: { id: GroupBy; label: string }[] = [
   { id: "type", label: "Type" },
+  { id: "category", label: "Category" },
   { id: "subtype", label: "Subtype" },
   { id: "typeTag", label: "Type & tag" },
   { id: "tag", label: "Tag" },
@@ -19,6 +20,10 @@ export const GROUPINGS: { id: GroupBy; label: string }[] = [
   { id: "artist", label: "Artist" },
   { id: "none", label: "No grouping" },
 ];
+
+export const DEFAULT_GROUPING: GroupBy = "type";
+
+export const isGroupBy = (v: unknown): v is GroupBy => GROUPINGS.some((g) => g.id === v);
 
 export interface CardGroup {
   key: string;
@@ -46,6 +51,15 @@ export function primaryType(c: ScryCard | undefined): string {
   }
   return "Other";
 }
+
+/** The automatic categories a card fits, best first. */
+export type AutoCategories = (c: ScryCard) => string[];
+
+/** The automatic categories that apply to a deck entry: lands have none, they're all under Land. */
+export const fittingCategories = (c: ScryCard | undefined, auto: AutoCategories): string[] => (c && !isLand(c) ? auto(c) : []);
+
+/** The category a card shows under: its own, else the best automatic one; undefined means its type. */
+export const categoryOf = (entry: DeckCard, c: ScryCard | undefined, auto: AutoCategories): string | undefined => entry.category ?? fittingCategories(c, auto)[0];
 
 const isLand = (c: ScryCard) => primaryType(c) === "Land";
 
@@ -78,9 +92,10 @@ export function byManaValue(cardOf: (c: DeckCard) => ScryCard | undefined) {
 
 /**
  * The cards in groups, in display order, each group sorted by mana value then name (by name when
- * grouped by mana value). A card with several tags shows in each of its tag groups.
+ * grouped by mana value). A card with several tags shows in each of its tag groups, but only under
+ * one category. `auto` is for grouping by category: undefined while the categories load.
  */
-export function groupCards(cards: DeckCard[], by: GroupBy, cardOf: (c: DeckCard) => ScryCard | undefined): CardGroup[] {
+export function groupCards(cards: DeckCard[], by: GroupBy, cardOf: (c: DeckCard) => ScryCard | undefined, auto?: AutoCategories): CardGroup[] {
   // key → [label, rank, cards]; rank orders the groups, ties by label.
   const groups = new Map<string, { label: string; rank: number; cards: DeckCard[] }>();
   const put = (key: string, label: string, rank: number, c: DeckCard) => {
@@ -99,7 +114,7 @@ export function groupCards(cards: DeckCard[], by: GroupBy, cardOf: (c: DeckCard)
 
   for (const c of cards) {
     const s = cardOf(c);
-    if (!s && by !== "none" && !(by === "tag" || by === "typeTag") ) {
+    if (!s && by !== "none" && !(by === "tag" || by === "typeTag" || (by === "category" && c.category))) {
       put("loading", LOADING, LAST + 1, c);
       continue;
     }
@@ -107,6 +122,19 @@ export function groupCards(cards: DeckCard[], by: GroupBy, cardOf: (c: DeckCard)
       case "type":
         byType(c, s!);
         break;
+      case "category": {
+        if (!auto && !c.category && !isLand(s!)) {
+          put("loading", LOADING, LAST + 1, c);
+          break;
+        }
+        const category = categoryOf(c, s, auto ?? (() => []));
+        // A category named after a type is that type's group.
+        const type = category && TYPE_ORDER.find((t) => t.toLowerCase() === category.toLowerCase());
+        if (type) put(`type:${type}`, type, 1000 + TYPE_ORDER.indexOf(type), c);
+        else if (category) put(`cat:${category.toLowerCase()}`, category, 0, c);
+        else byType(c, s!);
+        break;
+      }
       case "subtype": {
         // The first subtype only, so a Human Wizard shows once.
         const sub = subtypes(s!)[0];
@@ -184,22 +212,9 @@ export function deckTags(cards: DeckCard[]): string[] {
   return [...seen.values()];
 }
 
-const KEY = "cq.deckGroupBy";
-
-export function savedGroupBy(): GroupBy {
-  try {
-    const v = localStorage.getItem(KEY);
-    if (GROUPINGS.some((g) => g.id === v)) return v as GroupBy;
-  } catch {
-    // Storage blocked: the default.
-  }
-  return "type";
-}
-
-export function saveGroupBy(by: GroupBy) {
-  try {
-    localStorage.setItem(KEY, by);
-  } catch {
-    // Storage blocked: lasts until the page reloads.
-  }
+/** Every category the player (or an import) put a card of this deck in, in the order first seen (ignoring case). */
+export function deckCategories(cards: DeckCard[]): string[] {
+  const seen = new Map<string, string>();
+  for (const { category } of cards) if (category && !seen.has(category.toLowerCase())) seen.set(category.toLowerCase(), category);
+  return [...seen.values()];
 }
