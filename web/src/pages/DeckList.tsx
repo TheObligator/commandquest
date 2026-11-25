@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "convex/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { MAX_FOLDER_NAME } from "../../convex/model/folderRules";
@@ -11,9 +11,12 @@ import { CardMenu, type MenuItem } from "../components/CardMenu";
 import { DeckTabs } from "../components/DeckTabs";
 import { BusyLabel, CoverWait, DeckSkeletons } from "../components/Spinner";
 import { CARD_LIST, formatLabel } from "../deckFormats";
+import { DEFAULT_SORT, firstDir, pickSort, SORTS, sortDecks, type DeckSort, type SortKey } from "../deckSort";
 import { toast } from "../dom";
 import { artistOf, cachedById, cardsById } from "../scryfall";
+import { useDeckColors } from "../useDeckColors";
 import { useGameChecks } from "../useGameDecks";
+import { DeckTable, type TableFolder } from "./DeckTable";
 import { NewDeckDialog } from "./NewDeckDialog";
 
 /** The deck list's folder filter: every deck, decks in no folder, or one folder. */
@@ -43,6 +46,25 @@ function savedCount(key: string, set?: number): number {
   }
 }
 
+/** How this browser shows the deck list: as a table (with folders, or every deck together) or as covers, and sorted how. */
+interface DeckView {
+  view: "list" | "covers";
+  folders: boolean;
+  sort: DeckSort;
+}
+const VIEW_KEY = "cq.deckView";
+
+function loadView(): DeckView {
+  let v: Partial<DeckView> = {};
+  try {
+    v = (JSON.parse(localStorage.getItem(VIEW_KEY) ?? "{}") as Partial<DeckView> | null) ?? {};
+  } catch {
+    // nothing saved: the defaults
+  }
+  const sort = SORTS.some((s) => s.id === v.sort?.key) ? { key: v.sort!.key, dir: v.sort!.dir === "asc" ? "asc" as const : "desc" as const } : DEFAULT_SORT;
+  return { view: v.view === "covers" ? "covers" : "list", folders: v.folders !== false, sort };
+}
+
 export function DeckList() {
   const { query } = useRoute();
   const decks = useQuery(api.decks.list);
@@ -53,6 +75,19 @@ export function DeckList() {
   const [naming, setNaming] = useState<{ id?: Id<"deckFolders">; name: string; deckId?: Id<"decks"> } | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   // Which decks can start a game: the table's deck picker only offers those, so the rest are marked here.
+  const [how, setHow] = useState(loadView);
+  const change = (c: Partial<DeckView>) => {
+    const next = { ...how, ...c };
+    setHow(next);
+    try {
+      localStorage.setItem(VIEW_KEY, JSON.stringify(next));
+    } catch {
+      // private mode: still used for this visit
+    }
+  };
+  const asList = how.view === "list";
+  const setBracket = useMutation(api.decks.setBracket);
+  const { colors, done: colorsDone } = useDeckColors(decks, asList || how.sort.key === "colors");
   const playDecks = useQuery(api.decks.forPlay);
   const checks = useGameChecks(playDecks);
   /** The covers whose cards have been looked up (found or not). */
@@ -70,10 +105,22 @@ export function DeckList() {
 
   // The folder being shown lives in the URL (#/decks?folder=…), so Back and reloads keep it.
   const param = query.get("folder");
-  const shown: Shown = param === "none" ? "none" : param && folders?.some((f) => f._id === param) ? (param as Id<"deckFolders">) : "all";
+  // "No folder" is one of the covers' buttons; the table has folders beside the decks in none.
+  const shown: Shown = param === "none" ? (asList ? "all" : "none") : param && folders?.some((f) => f._id === param) ? (param as Id<"deckFolders">) : "all";
   const show = (s: Shown) => navigate(s === "all" ? "/decks" : `/decks?folder=${s}`, true);
   const folder = folders?.find((f) => f._id === shown);
-  const visible = (decks ?? []).filter((d) => shown === "all" || (shown === "none" ? !d.folderId : d.folderId === shown));
+  /** The table lists the folders, so decks in one aren't listed beside them. */
+  const folderRows = asList && how.folders && shown === "all";
+  const visible = useMemo(
+    () =>
+      sortDecks(
+        (decks ?? [])
+          .filter((d) => (shown === "none" || folderRows ? !d.folderId : shown === "all" || d.folderId === shown))
+          .map((d) => ({ ...d, colors: colors.get(d._id) })),
+        how.sort,
+      ),
+    [decks, shown, folderRows, colors, how.sort],
+  );
   const countIn = (id: Id<"deckFolders">) => (decks ?? []).filter((d) => d.folderId === id).length;
   const unfiled = (decks ?? []).filter((d) => !d.folderId).length;
 
@@ -93,13 +140,20 @@ export function DeckList() {
     }
   }
 
-  async function deleteFolder() {
-    if (!folder) return;
-    const n = countIn(folder._id);
-    if (!confirm(`Delete the folder "${folder.name}"?${n ? ` Its ${n === 1 ? "deck stays" : `${n} decks stay`} in your deck list, just not in a folder.` : ""}`)) return;
+  async function changeBracket(id: Id<"decks">, bracket: number | undefined) {
     try {
-      await removeFolder({ id: folder._id });
-      show("all");
+      await setBracket({ id, bracket: bracket ?? null });
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+  }
+
+  async function deleteFolder(f: { _id: Id<"deckFolders">; name: string }) {
+    const n = countIn(f._id);
+    if (!confirm(`Delete the folder "${f.name}"?${n ? ` Its ${n === 1 ? "deck stays" : `${n} decks stay`} in your deck list, just not in a folder.` : ""}`)) return;
+    try {
+      await removeFolder({ id: f._id });
+      if (shown === f._id) show("all");
     } catch (e) {
       toast(errorMessage(e), "error");
     }
@@ -125,6 +179,20 @@ export function DeckList() {
           },
         };
 
+  const dragProps = (id: Id<"decks">) => ({
+    onDragStart: (e: React.DragEvent) => {
+      e.dataTransfer.setData(DECK_DRAG, id);
+      e.dataTransfer.effectAllowed = "move";
+    },
+    onDragEnd: () => setDropTarget(null),
+  });
+
+  const moveItems = (d: { _id: Id<"decks">; folderId?: Id<"deckFolders"> }): MenuItem[] => [
+    ...(folders ?? []).filter((f) => f._id !== d.folderId).map((f) => ({ label: `📁 ${f.name}`, onSelect: () => void move(d._id, f._id) })),
+    ...(d.folderId ? [{ label: "Out of the folder", onSelect: () => void move(d._id, null) }] : []),
+    { label: "+ New folder…", onSelect: () => setNaming({ name: "", deckId: d._id }) },
+  ];
+
   const chip = (target: Shown, label: string, count: number) => (
     <button
       key={target}
@@ -136,6 +204,41 @@ export function DeckList() {
       {target !== "all" && target !== "none" && <span aria-hidden="true">📁 </span>}
       {label} <span className="folder-count">{count}</span>
     </button>
+  );
+
+  const folderButtons = (f: { _id: Id<"deckFolders">; name: string }) => (
+    <>
+      <button className="btn ghost small" onClick={() => setNaming({ id: f._id, name: f.name })}>Rename</button>
+      <button className="btn ghost small danger" onClick={() => void deleteFolder(f)}>Delete folder</button>
+    </>
+  );
+
+  const folderInfo: TableFolder[] = (folders ?? []).map((f) => {
+    const inside = (decks ?? []).filter((d) => d.folderId === f._id);
+    return { ...f, count: inside.length, updatedAt: inside.length ? Math.max(...inside.map((d) => d.updatedAt)) : undefined };
+  });
+
+  const viewControls = (
+    <div className="deck-show">
+      {asList && !folder && !!folders?.length && (
+        <label className="inline" title="Off: every deck in one list, whichever folder it's in">
+          <input type="checkbox" checked={how.folders} onChange={(e) => change({ folders: e.target.checked })} /> Folders
+        </label>
+      )}
+      {/* The table's headers sort it, except on a phone, where there's no room for them. */}
+      <div className={`deck-sort${asList ? " narrow-only" : ""}`}>
+        <select aria-label="Sort by" value={how.sort.key} onChange={(e) => change({ sort: { key: e.target.value as SortKey, dir: firstDir(e.target.value as SortKey) } })}>
+          {SORTS.map((s) => <option key={s.id} value={s.id}>Sort: {s.label}</option>)}
+        </select>
+        <button className="btn ghost small" aria-label="Reverse the order" title="Reverse the order" onClick={() => change({ sort: pickSort(how.sort, how.sort.key) })}>
+          {how.sort.dir === "asc" ? "↑" : "↓"}
+        </button>
+      </div>
+      <div className="deck-show-as" role="group" aria-label="Show decks as">
+        <button aria-pressed={asList} onClick={() => change({ view: "list" })}><span aria-hidden="true">☰</span> List</button>
+        <button aria-pressed={!asList} onClick={() => change({ view: "covers" })}><span aria-hidden="true">▦</span> Covers</button>
+      </div>
+    </div>
   );
 
   const actions = (
@@ -153,7 +256,7 @@ export function DeckList() {
         {actions}
       </div>
       {decks === undefined || folders === undefined ? (
-        <DeckSkeletons n={savedCount(countKey)} text="Loading your decks…" />
+        <DeckSkeletons n={savedCount(countKey)} rows={asList} text="Loading your decks…" />
       ) : decks.length === 0 && folders.length === 0 ? (
         <div className="empty card">
           <h3>No decks yet</h3>
@@ -162,21 +265,66 @@ export function DeckList() {
         </div>
       ) : (
         <>
-        <div className="folder-bar" role="toolbar" aria-label="Folders">
-          {chip("all", "All decks", decks.length)}
-          {folders.length > 0 && chip("none", "No folder", unfiled)}
-          {folders.map((f) => chip(f._id, f.name, countIn(f._id)))}
-          <button className="folder-chip add" onClick={() => setNaming({ name: "" })}>+ New folder</button>
-        </div>
-        {folder && (
-          <div className="folder-head">
-            <h2>📁 {folder.name}</h2>
-            <button className="btn ghost small" onClick={() => setNaming({ id: folder._id, name: folder.name })}>Rename</button>
-            <button className="btn ghost small danger" onClick={() => void deleteFolder()}>Delete folder</button>
+        {asList ? (
+          <div className="deck-bar-row">
+            {folder ? (
+              <>
+                <nav className="deck-crumbs" aria-label="Folder">
+                  <a href="#/decks" className={dropTarget === "none" ? "drop" : undefined} {...dropProps("none")}>All decks</a>
+                  <span className="muted" aria-hidden="true">›</span>
+                  <h2>📁 {folder.name}</h2>
+                </nav>
+                {folderButtons(folder)}
+              </>
+            ) : (
+              <>
+                <h2>{decks.length} deck{decks.length === 1 ? "" : "s"}</h2>
+                <button className="btn ghost small" onClick={() => setNaming({ name: "" })}>+ New folder</button>
+              </>
+            )}
+            {viewControls}
           </div>
+        ) : (
+          <>
+            <div className="deck-bar-row">
+              <div className="folder-bar" role="toolbar" aria-label="Folders">
+                {chip("all", "All decks", decks.length)}
+                {folders.length > 0 && chip("none", "No folder", unfiled)}
+                {folders.map((f) => chip(f._id, f.name, countIn(f._id)))}
+                <button className="folder-chip add" onClick={() => setNaming({ name: "" })}>+ New folder</button>
+              </div>
+              {viewControls}
+            </div>
+            {folder && (
+              <div className="folder-head">
+                <h2>📁 {folder.name}</h2>
+                {folderButtons(folder)}
+              </div>
+            )}
+          </>
+        )}
+        {asList && (visible.length > 0 || folderRows) && (folders.length > 0 || decks.length > 0) && (
+          <DeckTable
+            decks={visible}
+            folders={folderRows ? folderInfo : []}
+            sort={how.sort}
+            onSort={(sort) => change({ sort })}
+            colorsDone={colorsDone}
+            checks={checks}
+            folderName={(d) => (shown === "all" ? folders.find((f) => f._id === d.folderId)?.name : undefined)}
+            onBracket={(d, b) => void changeBracket(d._id, b)}
+            moveItems={moveItems}
+            folderItems={(f) => [
+              { label: "Rename…", onSelect: () => setNaming({ id: f._id, name: f.name }) },
+              { label: "Delete folder", danger: true, onSelect: () => void deleteFolder(f) },
+            ]}
+            dragProps={(d) => dragProps(d._id)}
+            dropProps={dropProps}
+            dropTarget={dropTarget}
+          />
         )}
         <div className="deck-grid">
-          {visible.length === 0 &&
+          {visible.length === 0 && !(folderRows && decks.length > 0) &&
             (shown === "all" ? (
               <div className="empty card">
                 <h3>No decks yet</h3>
@@ -191,32 +339,23 @@ export function DeckList() {
             ) : (
               <div className="empty card">
                 <h3>This folder is empty</h3>
-                <p>Make a deck here, or move one in: drag it onto this folder's name above, or use the ⋯ menu on the deck.</p>
+                <p>Make a deck here, or move one in: drag it onto this folder in the deck list, or use the ⋯ menu on the deck.</p>
                 <div className="actions"><button className="btn" onClick={() => setCreating(true)}>+ New deck in {folder?.name}</button></div>
               </div>
             ))}
-          {visible.map((d) => {
+          {!asList && visible.map((d) => {
             const card = d.coverScryfallId ? cachedById(d.coverScryfallId) : undefined;
             const art = card && (card.card_faces?.[0]?.image_uris?.art_crop ?? card.image_uris?.art_crop);
             const check = checks?.get(d._id);
             const inFolder = folders.find((f) => f._id === d.folderId);
-            const moveItems: MenuItem[] = [
-              ...folders.filter((f) => f._id !== d.folderId).map((f) => ({ label: `📁 ${f.name}`, onSelect: () => void move(d._id, f._id) })),
-              ...(d.folderId ? [{ label: "Out of the folder", onSelect: () => void move(d._id, null) }] : []),
-              { label: "+ New folder…", onSelect: () => setNaming({ name: "", deckId: d._id }) },
-            ];
             return (
               <div key={d._id} className="deck-tile-wrap">
-              <CardMenu label={`Move ${d.name} to a folder`} className="deck-tile-menu" sections={[{ title: "Move to folder", items: moveItems }]} />
+              <CardMenu label={`Move ${d.name} to a folder`} className="deck-tile-menu" sections={[{ title: "Move to folder", items: moveItems(d) }]} />
               <a
                 className="deck-tile"
                 href={`#/decks/${d._id}`}
                 draggable
-                onDragStart={(e) => {
-                  e.dataTransfer.setData(DECK_DRAG, d._id);
-                  e.dataTransfer.effectAllowed = "move";
-                }}
-                onDragEnd={() => setDropTarget(null)}
+                {...dragProps(d._id)}
               >
                 <div className="deck-cover" style={art ? { backgroundImage: `url("${art}")` } : undefined}>
                   <CoverWait src={art || undefined} pending={!!d.coverScryfallId && !card && artLoaded !== coverKey} />

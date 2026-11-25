@@ -110,6 +110,14 @@ boards ("Creature", "Maybeboard") aren't kept as categories.
 
 The grouping is saved with each deck (`decks.groupBy`, set by `decks.setGroupBy`); the default is Type.
 
+### The deck list
+
+`web/src/pages/DeckList.tsx` shows decks as a table (`DeckTable.tsx`, the default) or as covers. The view, the
+sort and whether folders are rows of their own are kept per browser (`cq.deckView` in localStorage). Sorting is
+in `web/src/deckSort.ts`. A deck's colors (`web/src/useDeckColors.ts`) are its commanders' color identity, or
+without a commander the colors of its main deck, looked up on Scryfall from the `colorCards` in `decks.list`.
+The bracket in the table is set with `decks.setBracket`, which leaves `updatedAt` alone.
+
 ### Card lists and packages
 
 A **card list** is a deck whose format is `cardlist` (`web/src/deckFormats.ts`): one list of any cards, with

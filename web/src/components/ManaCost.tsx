@@ -1,6 +1,6 @@
 // Mana costs and rules text with Scryfall's symbol images (svgs.scryfall.io has no rate limit).
 
-function Symbol({ sym }: { sym: string }) {
+export function Symbol({ sym }: { sym: string }) {
   return <img className="sym" src={`https://svgs.scryfall.io/card-symbols/${encodeURIComponent(sym.replace(/\//g, ""))}.svg`} alt={`{${sym}}`} title={`{${sym}}`} />;
 }
 

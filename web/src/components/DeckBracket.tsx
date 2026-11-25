@@ -4,10 +4,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DeckCard } from "../../convex/model/deckRules";
 import { MAX_BRACKET_TAG_LENGTH, MAX_BRACKET_TAGS } from "../../convex/model/deckRules";
-import { BRACKETS, GLANCE, REASON_TAGS, bracketFloor, bracketName, glance, total, type GlanceCard } from "../brackets";
+import { GLANCE, REASON_TAGS, bracketFloor, bracketName, glance, total, type GlanceCard } from "../brackets";
 import { knownTags, lookUpTags, pendingQueries } from "../cardtags";
 import { errorMessage } from "../app/errors";
-import { CardMenu } from "./CardMenu";
+import { BracketMenu } from "./BracketMenu";
 import { Spinner, Waiting } from "./Spinner";
 import * as scry from "../scryfall";
 import { useCardPreview } from "../useCardPreview";
@@ -88,9 +88,11 @@ export function DeckBracket(props: {
       <h2>{props.commander ? "Bracket and key cards" : "Key cards"}</h2>
       {props.commander && (
         <div className="bracket-line">
-          <CardMenu
+          <BracketMenu
             label="Set this deck's bracket"
             className="bracket-btn"
+            bracket={props.bracket}
+            onBracket={props.onBracket}
             trigger={
               <>
                 <span className="muted">Bracket</span>
@@ -98,16 +100,6 @@ export function DeckBracket(props: {
                 <span aria-hidden="true" className="caret">▾</span>
               </>
             }
-            sections={[
-              {
-                title: "This deck's bracket",
-                items: BRACKETS.map((b) => ({
-                  label: `${props.bracket === b.n ? "✓ " : ""}${b.n} · ${b.name}: ${b.short}`,
-                  onSelect: () => props.onBracket(b.n),
-                })),
-              },
-              ...(props.bracket ? [{ items: [{ label: "Clear", onSelect: () => props.onBracket(undefined) }] }] : []),
-            ]}
           />
           <FloorIndicator floor={floor} picked={props.bracket} />
           <ReasonTags tags={props.tags} onTags={props.onTags} />

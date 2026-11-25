@@ -2,7 +2,7 @@
 // themselves are smoke-tested against a local Convex deployment; see docs/web-dev.md.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DeckError, summarize, validateDeck } from "../convex/model/deckRules.ts";
+import { checkBracket, colorCards, DeckError, summarize, validateDeck } from "../convex/model/deckRules.ts";
 import { archidektCategories, deckSource, parseArchidekt, parseMoxfield } from "../convex/model/importers.ts";
 import { cleanFolderName, FolderError, MAX_FOLDER_NAME } from "../convex/model/folderRules.ts";
 
@@ -130,4 +130,20 @@ test("parseArchidekt keeps the deck's own categories: the first is the card's, o
   assert.deepEqual(of("F"), ["main", "Ramp", undefined]);
   assert.deepEqual(of("G"), ["main", undefined, undefined]);
   assert.deepEqual(archidektCategories([]), {});
+});
+
+test("checkBracket takes 1 to 5, and nothing as none", () => {
+  for (const b of [1, 2, 3, 4, 5]) assert.equal(checkBracket(b), b);
+  assert.equal(checkBracket(null), undefined);
+  assert.equal(checkBracket(undefined), undefined);
+  for (const b of [0, 6, 2.5, NaN]) assert.throws(() => checkBracket(b), DeckError);
+});
+
+test("colorCards: the commanders, or the main deck without any", () => {
+  const ring = { name: "Sol Ring", quantity: 1, board: "main" as const, tags: ["Ramp"] };
+  const maybe = { name: "Shock", quantity: 1, board: "maybe" as const };
+  const iroh = { name: "Iroh, Grand Lotus", quantity: 1, board: "commander" as const, set: "tla" };
+  assert.deepEqual(colorCards([ring, maybe, iroh]).map((c) => [c.name, c.set]), [["Iroh, Grand Lotus", "tla"]]);
+  assert.deepEqual(colorCards([ring, maybe]).map((c) => c.name), ["Sol Ring"]);
+  assert.ok(!("tags" in colorCards([ring])[0]));
 });

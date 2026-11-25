@@ -70,7 +70,7 @@ const subtypes = (c: ScryCard) => (frontType(c).split("—")[1] ?? "").trim().sp
  * A card's colors. Double-faced cards keep theirs on the faces, so fall back to the front face's
  * mana cost and color indicator.
  */
-function colorsOf(c: ScryCard): string[] {
+export function colorsOf(c: ScryCard): string[] {
   if (c.colors) return c.colors;
   const f = c.card_faces?.[0];
   if (!f) return [];

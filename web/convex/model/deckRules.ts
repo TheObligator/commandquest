@@ -65,8 +65,7 @@ export function validateDeck(input: DeckInput): Required<Pick<DeckInput, "name" 
   if (cards.length > MAX_CARDS) throw new DeckError(`A deck can have at most ${MAX_CARDS} different entries.`);
   const extraColor = input.extraColor || undefined;
   if (extraColor !== undefined && !/^[WUBRG]$/.test(extraColor)) throw new DeckError("Unknown color.");
-  const bracket = input.bracket ?? undefined;
-  if (bracket !== undefined && !(Number.isInteger(bracket) && bracket >= 1 && bracket <= 5)) throw new DeckError("Brackets are 1 to 5.");
+  const bracket = checkBracket(input.bracket);
   if ((input.bracketTags?.length ?? 0) > MAX_BRACKET_TAGS * 2) throw new DeckError(`A deck can have at most ${MAX_BRACKET_TAGS} bracket tags.`);
   const bracketTags = cleanBracketTags(input.bracketTags ?? []);
   return {
@@ -101,13 +100,28 @@ export function validateDeck(input: DeckInput): Required<Pick<DeckInput, "name" 
   };
 }
 
+/** A card by name and printing, to look up. */
+export type CardRef = Pick<DeckCard, "name" | "scryfallId" | "set" | "collectorNumber">;
+
 export interface DeckSummary {
   cardCount: number;
   commanders: string[];
   coverScryfallId?: string;
 }
 
-/** What the deck list shows: main deck + commander count, commander names, cover art id. */
+/** The bracket, or undefined when there's none. Throws DeckError when it isn't one. */
+export function checkBracket(bracket: number | null | undefined): number | undefined {
+  if (bracket === undefined || bracket === null) return undefined;
+  if (!(Number.isInteger(bracket) && bracket >= 1 && bracket <= 5)) throw new DeckError("Brackets are 1 to 5.");
+  return bracket;
+}
+
+/** The cards that give a deck its colors in the deck list: its commanders, or without any, the main deck. */
+export function colorCards(cards: DeckCard[]): CardRef[] {
+  const cmdrs = cards.filter((c) => c.board === "commander");
+  return (cmdrs.length ? cmdrs : cards.filter((c) => c.board === "main")).map(({ name, scryfallId, set, collectorNumber }) => ({ name, scryfallId, set, collectorNumber }));
+}
+
 /** The player's bracket tags tidied: trimmed, no blanks or repeats (ignoring case), capped in length and number. */
 export function cleanBracketTags(tags: string[]): string[] {
   return cleanTags(tags, MAX_BRACKET_TAG_LENGTH, MAX_BRACKET_TAGS);
@@ -135,7 +149,10 @@ function cleanTags(tags: string[], maxLength: number, maxCount: number): string[
   return out.slice(0, maxCount);
 }
 
-/** `anyCover`: without a commander, the first card with a printing is the cover (card lists). */
+/**
+ * What the deck list shows: main deck + commander count, commander names, cover art id.
+ * `anyCover`: without a commander, the first card with a printing is the cover (card lists).
+ */
 export function summarize(cards: DeckCard[], anyCover = false): DeckSummary {
   const cardCount = cards.filter((c) => c.board === "main" || c.board === "commander").reduce((n, c) => n + c.quantity, 0);
   const cmdrs = cards.filter((c) => c.board === "commander");

@@ -2,7 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { DeckError, MAX_DECKS_PER_USER, summarize, validateDeck, type DeckInput } from "./model/deckRules";
+import { checkBracket, colorCards, DeckError, MAX_DECKS_PER_USER, summarize, validateDeck, type DeckInput } from "./model/deckRules";
 import { CARD_LIST } from "../src/deckFormats";
 import { DEFAULT_GROUPING, isGroupBy } from "../src/deckGroups";
 import { withSaved } from "../src/game/abilities";
@@ -16,14 +16,17 @@ async function requireUser(ctx: QueryCtx): Promise<Id<"users">> {
   return userId;
 }
 
-function checked(input: DeckInput) {
+/** Runs a check, passing a DeckError's message on to the player. */
+function rules<T>(check: () => T): T {
   try {
-    return validateDeck(input);
+    return check();
   } catch (e) {
     if (e instanceof DeckError) throw new ConvexError(e.message);
     throw e;
   }
 }
+
+const checked = (input: DeckInput) => rules(() => validateDeck(input));
 
 const deckArgs = {
   name: v.string(),
@@ -44,7 +47,7 @@ export const list = query({
       .withIndex("by_user_updated", (q) => q.eq("userId", userId))
       .order("desc")
       .take(MAX_DECKS_PER_USER);
-    return decks.map((d) => ({ _id: d._id, name: d.name, format: d.format, bracket: d.bracket, folderId: d.folderId, updatedAt: d.updatedAt, ...summarize(d.cards, d.format === CARD_LIST) }));
+    return decks.map((d) => ({ _id: d._id, name: d.name, format: d.format, bracket: d.bracket, folderId: d.folderId, updatedAt: d.updatedAt, extraColor: d.extraColor, colorCards: colorCards(d.cards), ...summarize(d.cards, d.format === CARD_LIST) }));
   },
 });
 
@@ -125,6 +128,19 @@ export const remove = mutation({
     const existing = await ctx.db.get(id);
     if (!existing || existing.userId !== userId) throw new ConvexError("Deck not found.");
     await ctx.db.delete(id);
+  },
+});
+
+/** Sets a Commander deck's bracket from the deck list (`null` clears it). */
+export const setBracket = mutation({
+  args: { id: v.id("decks"), bracket: v.union(v.number(), v.null()) },
+  handler: async (ctx, { id, bracket }) => {
+    const userId = await requireUser(ctx);
+    const deck = await ctx.db.get(id);
+    if (!deck || deck.userId !== userId) throw new ConvexError("Deck not found.");
+    if (deck.format !== "commander") throw new ConvexError("Only Commander decks have a bracket.");
+    // `updatedAt` stays put, so the deck doesn't jump in a list sorted by it.
+    await ctx.db.patch(id, { bracket: rules(() => checkBracket(bracket)) });
   },
 });
 

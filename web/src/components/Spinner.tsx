@@ -86,10 +86,21 @@ export function CardSkeletons({ n }: { n: number }) {
   return <>{Array.from({ length: n }, (_, i) => <div key={i} className="sk-card shimmer" aria-hidden="true" />)}</>;
 }
 
-/** Deck tiles that are loading (the deck list, precons): as many as there were last time, at most. */
-export function DeckSkeletons({ n, text }: { n: number; text: string }) {
+/** Deck tiles (or the deck list's rows) that are loading: as many as there were last time, at most. */
+export function DeckSkeletons({ n, text, rows }: { n: number; text: string; rows?: boolean }) {
   const slow = useSlow();
   if (!n) return <Loading text={text} />;
+  if (rows)
+    return (
+      <div className="deck-table sk-late" role="status">
+        <span className={slow ? "sk-note muted" : "sr-only"}>{slow ? <Waiting text="Still loading… this is taking longer than usual." /> : text}</span>
+        {Array.from({ length: n }, (_, i) => (
+          <div key={i} className="deck-row sk-row" aria-hidden="true">
+            <div className="sk-bar shimmer" style={{ width: `${60 - (i % 3) * 12}%` }} />
+          </div>
+        ))}
+      </div>
+    );
   return (
     <div className="deck-grid sk-late" role="status">
       <span className={slow ? "sk-note muted" : "sr-only"}>{slow ? <Waiting text="Still loading… this is taking longer than usual." /> : text}</span>
