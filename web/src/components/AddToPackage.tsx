@@ -1,4 +1,4 @@
-// "Add to package…" on a card: pick one of your packages, or name a new one.
+// "Add to package…" on a card (or the selected cards): pick one of your packages, or name a new one.
 import { useMutation, useQuery } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
@@ -9,7 +9,7 @@ import { closeOnBackdrop } from "../carddetails";
 import { toast } from "../dom";
 import { Waiting } from "./Spinner";
 
-export function AddToPackage({ card, onClose }: { card: DeckCard; onClose: () => void }) {
+export function AddToPackage({ cards, onClose }: { cards: DeckCard[]; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   const packages = useQuery(api.packages.list);
   const addCard = useMutation(api.packages.addCard);
@@ -19,13 +19,15 @@ export function AddToPackage({ card, onClose }: { card: DeckCard; onClose: () =>
   useEffect(() => ref.current?.showModal(), []);
 
   // One copy: a package says which cards, and basics or a playset can be raised in the package.
-  const entry: DeckCard = { ...card, quantity: 1, board: "main" };
+  // Each card once (the same card can be selected on two boards).
+  const entries: DeckCard[] = [...new Map(cards.map((c) => [c.name.toLowerCase(), { ...c, quantity: 1, board: "main" as const }])).values()];
+  const what = cards.length === 1 ? cards[0].name : `${cards.length} cards`;
 
   async function run(work: () => Promise<unknown>, to: string) {
     setBusy(true);
     try {
       await work();
-      toast(`Added ${card.name} to ${to}`);
+      toast(`Added ${what} to ${to}`);
       ref.current?.close();
     } catch (e) {
       toast(errorMessage(e), "error");
@@ -39,21 +41,24 @@ export function AddToPackage({ card, onClose }: { card: DeckCard; onClose: () =>
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (name.trim()) void run(() => create({ name, cards: [entry] }), name.trim());
+          if (name.trim()) void run(() => create({ name, cards: entries }), name.trim());
         }}
       >
-        <h3>Add {card.name} to a package</h3>
+        <h3>Add {what} to a package</h3>
         {packages === undefined ? (
           <Waiting text="Loading your packages…" />
         ) : packages.length > 0 ? (
           <ul className="package-pick">
             {packages.map((p) => {
-              const has = inPackage(p.cards, card.name);
+              const missing = entries.filter((e) => !inPackage(p.cards, e.name));
+              const has = missing.length === 0;
               return (
                 <li key={p._id}>
-                  <button type="button" disabled={busy || has} onClick={() => void run(() => addCard({ id: p._id, card: entry }), p.name)}>
+                  <button type="button" disabled={busy || has} onClick={() => void run(async () => {
+                      for (const card of missing) await addCard({ id: p._id, card });
+                    }, p.name)}>
                     <strong>{p.name}</strong>
-                    <span className="muted small">{has ? "✓ already in it" : `${p.cards.length} card${p.cards.length === 1 ? "" : "s"}`}</span>
+                    <span className="muted small">{has ? (entries.length === 1 ? "✓ already in it" : "✓ all already in it") : `${p.cards.length} card${p.cards.length === 1 ? "" : "s"}`}</span>
                   </button>
                 </li>
               );

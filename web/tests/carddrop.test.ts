@@ -1,7 +1,7 @@
 // Cards dragged in from EDHREC and Scryfall (src/carddrop.ts).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CARD_TYPE, cardDragData, looksLikeCard, readDrop } from "../src/carddrop.ts";
+import { CARD_TYPE, cardDragData, looksLikeCard, readDeckCards, readDrop } from "../src/carddrop.ts";
 
 /** Just enough of a parsed document for readDrop: img and a elements with attributes and text. */
 function fakeDoc(html: string): Document {
@@ -57,4 +57,18 @@ test("links and text count, files alone don't", () => {
   // Chromium dragging an image inside a link (an EDHREC card).
   assert.equal(looksLikeCard(["text/uri-list", "text/html", "Files", "text/plain"]), true);
   assert.equal(looksLikeCard(["Files"]), false);
+});
+
+test("several selected deck cards drag as a list, each keeping its printing and copies", () => {
+  const data = cardDragData([
+    { name: "Sol Ring", quantity: 1, scryfallId: ID, set: "cmr", collectorNumber: "472" },
+    { name: "Island", quantity: 7 },
+  ]);
+  assert.deepEqual(readDeckCards(data), [
+    { name: "Sol Ring", id: ID, set: "cmr", collectorNumber: "472", exact: true, quantity: 1 },
+    { name: "Island", exact: true, quantity: 7 },
+  ]);
+  assert.deepEqual(readDeckCards(cardDragData({ name: "Plains", quantity: 2 })), [{ name: "Plains", exact: true, quantity: 2 }]);
+  assert.equal(readDeckCards("not json"), null);
+  assert.equal(readDeckCards("[{}]"), null);
 });

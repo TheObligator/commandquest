@@ -3,13 +3,17 @@
 // `loading` shows a placeholder line until then. Closes on outside click, Escape, scroll or resize.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Waiting } from "./Spinner";
-import { AmountRow, type MenuItem, type MenuSection } from "./CardMenu";
+import { AmountRow, Keys, type MenuItem, type MenuSection } from "./CardMenu";
 
 export interface ContextMenuState {
   x: number;
   y: number;
   title?: string;
+  /** A second, muted line under the title (e.g. which cards are selected). */
+  subtitle?: string;
   sections: MenuSection[];
+  /** Two columns side by side: sections marked `second` go on the right. */
+  columns?: boolean;
   loading?: boolean;
   /** Shown in muted text, e.g. why nothing can be done with the card right now. */
   note?: string;
@@ -69,26 +73,42 @@ export function ContextMenu({ menu, onClose }: { menu: ContextMenuState; onClose
   return (
     <div
       ref={ref}
-      className="card-menu context-menu"
+      className={`card-menu context-menu${menu.columns ? " two-col" : ""}`}
       role="menu"
       aria-label={menu.title}
       style={pos ? { top: pos.top, left: pos.left } : { top: -9999, left: -9999 }}
       onContextMenu={(e) => e.preventDefault()}
     >
-      {menu.title && <div className="card-menu-title cm-head">{menu.title}</div>}
-      {menu.sections.map((s, i) =>
-        s.items.length ? (
-          <div key={i} className="card-menu-section">
-            {s.title && <div className="card-menu-title">{s.title}</div>}
-            {s.items.map((item, j) => (
-              <Row key={`${j}-${item.label}`} item={item} onClose={onClose} />
-            ))}
-          </div>
-        ) : null,
+      {menu.title && (menu.subtitle ? (
+        <div className="cm-header">
+          <strong>{menu.title}</strong>
+          <span>{menu.subtitle}</span>
+        </div>
+      ) : <div className="card-menu-title cm-head">{menu.title}</div>)}
+      {menu.columns ? (
+        <div className="cm-cols">
+          <div>{sectionsOf(menu.sections.filter((s) => !s.second), onClose)}</div>
+          <div>{sectionsOf(menu.sections.filter((s) => s.second), onClose)}</div>
+        </div>
+      ) : (
+        sectionsOf(menu.sections, onClose)
       )}
       {menu.loading && <div className="cm-note"><Waiting text="Checking what this card can do…" slow="Still checking… the game server is slow right now." /></div>}
       {menu.note && <div className="cm-note">{menu.note}</div>}
     </div>
+  );
+}
+
+function sectionsOf(sections: MenuSection[], onClose: () => void) {
+  return sections.map((s, i) =>
+    s.items.length ? (
+      <div key={i} className="card-menu-section">
+        {s.title && <div className="card-menu-title">{s.title}</div>}
+        {s.items.map((item, j) => (
+          <Row key={`${j}-${item.label}`} item={item} onClose={onClose} />
+        ))}
+      </div>
+    ) : null,
   );
 }
 
@@ -153,6 +173,7 @@ function Row({ item, onClose }: { item: MenuItem; onClose: () => void }) {
       }}
     >
       {item.label}
+      {item.keys && <Keys keys={item.keys} />}
     </button>
   );
   if (!item.steppers?.length) return button;

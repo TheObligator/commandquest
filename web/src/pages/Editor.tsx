@@ -6,11 +6,11 @@ import { MAX_CARD_TAG_LENGTH, MAX_CARD_TAGS, MAX_QUANTITY, cleanCardTags, cleanC
 import { errorMessage } from "../app/errors";
 import { navigate, replaceQuietly, useLeaveGuard, useRoute } from "../app/router";
 import { closeOnBackdrop, showCardDetails } from "../carddetails";
-import { CARD_TYPE, cardDragData, looksLikeCard, readDrop, type DroppedCard } from "../carddrop";
+import { CARD_TYPE, cardDragData, looksLikeCard, readDeckCards, readDrop, type DroppedCard } from "../carddrop";
 import { useCardSupport, type CardSupport } from "../cardsupport";
 import { mergeDuplicates, parseDecklist, writeDecklist, type ParsedToken } from "../decklist";
 import { dismissToastAction, toast } from "../dom";
-import { CardMenu, type MenuItem, type MenuSection } from "../components/CardMenu";
+import { CardMenu, Keys, type MenuItem, type MenuSection } from "../components/CardMenu";
 import { ContextMenu, type ContextMenuState } from "../components/ContextMenu";
 import { ColorStats } from "../components/ColorStats";
 import { DeckBar, DeckTypeCounts } from "../components/DeckBar";
@@ -18,6 +18,9 @@ import { DeckBracket } from "../components/DeckBracket";
 import { deckAverages, playableLandBack } from "../deckstats";
 import { CARD_LIST, FORMATS, formatLabel, isPlainList, PACKAGE, hasCommander } from "../deckFormats";
 import { AddToPackage } from "../components/AddToPackage";
+import { AddToDeck } from "../components/AddToDeck";
+import { boxBetween, caught, visibleParts, type Box } from "../marquee";
+import { cardLines, DECK_SHORTCUTS, deckShortcut, type DeckShortcut } from "../deckShortcuts";
 import { PackagesPane } from "../components/PackagesPane";
 import { MAX_PACKAGE_NAME, MAX_PACKAGE_NOTE } from "../../convex/model/packageRules";
 import { cardKey, copiesIn, type PackageEntry } from "../packages";
@@ -354,7 +357,41 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
     toast(`Couldn't find ${d.name ?? d.fuzzy ?? "that card"} on Scryfall`, "error");
   }
 
-  const dropTo = useCardDrops((d, b) => void addDropped(d, b));
+  /**
+   * Several cards dragged from another deck: looked up together, then added in one go, each with its
+   * printing and number of copies.
+   */
+  async function addDroppedMany(ds: DroppedCard[], to: Board) {
+    const board: Board = isPlainList(deckRef.current.format) ? "main" : to;
+    const asked: DeckCard[] = ds.map((d) => ({ name: d.name ?? "", quantity: d.quantity ?? 1, board, scryfallId: d.id, set: d.set, collectorNumber: d.collectorNumber }));
+    try {
+      await scry.resolve(asked);
+    } catch (e) {
+      return toast(`Couldn't load card data from Scryfall: ${scry.lookupError(e)}`, "error");
+    }
+    const found = asked.flatMap((c) => {
+      const exact = scry.cachedExact(c);
+      const s = exact ?? scry.cached(c);
+      if (!s) return [];
+      const print = exact ?? s;
+      return [{ name: scry.deckName(s), quantity: c.quantity, board, scryfallId: print.id, set: print.set, collectorNumber: print.collector_number }];
+    });
+    const lost = asked.length - found.length;
+    if (found.length) {
+      change((d) => {
+        for (const f of found) {
+          const existing = d.cards.find((x) => x.board === board && x.name.toLowerCase() === f.name.toLowerCase());
+          if (existing) existing.quantity = Math.min(MAX_QUANTITY, existing.quantity + f.quantity);
+          else d.cards.push({ ...f, quantity: Math.min(MAX_QUANTITY, f.quantity) });
+        }
+        return d;
+      });
+      setCardData((n) => n + 1);
+      toast(`Added ${found.length} cards${board === "main" ? "" : " to " + BOARDS.find((b) => b.id === board)!.label.toLowerCase()}${lost ? ` (${lost} not found on Scryfall)` : ""}`);
+    } else toast("Couldn't find those cards on Scryfall", "error");
+  }
+
+  const dropTo = useCardDrops((ds, b) => void (ds.length === 1 ? addDropped(ds[0], b) : addDroppedMany(ds, b)));
 
   // Entries are found by board and name, not by object: every change copies the cards, so an entry
   // from an earlier render (two quick clicks) would otherwise not be found.
@@ -406,9 +443,16 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
   }
 
   function moveCard(target: DeckCard, board: Board) {
-    const i = deck.cards.indexOf(target);
+    moveCards([target], board);
+  }
+
+  /** Moves deck entries to another board, joining copies already there. */
+  function moveCards(targets: DeckCard[], board: Board) {
     change((d) => {
-      d.cards[i].board = board;
+      for (const t of targets) {
+        const i = entryIndex(d.cards, t);
+        if (i >= 0) d.cards[i].board = board;
+      }
       return { ...d, cards: mergeDuplicates(d.cards) };
     });
   }
@@ -714,6 +758,8 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
       count={count}
       onQty={setQty}
       onMove={moveCard}
+      onMoveMany={moveCards}
+      onRestore={(cards) => change((d) => ({ ...d, cards: mergeDuplicates([...d.cards, ...cards.map((c) => ({ ...c }))]) }))}
       onTags={setTags}
       onCategory={setCategory}
       groupBy={groupBy}
@@ -951,7 +997,7 @@ function dropBoardAt(target: EventTarget | null, y: number): Board {
  * whole page takes the drop, so the browser never opens the dragged link instead. Returns the
  * board the card would land on while one is dragged over, else null.
  */
-function useCardDrops(onDrop: (d: DroppedCard, board: Board) => void): Board | null {
+function useCardDrops(onDrop: (d: DroppedCard[], board: Board) => void): Board | null {
   const [dropTo, setDropTo] = useState<Board | null>(null);
   const onDropRef = useRef(onDrop);
   onDropRef.current = onDrop;
@@ -970,8 +1016,10 @@ function useCardDrops(onDrop: (d: DroppedCard, board: Board) => void): Board | n
       if (!incoming(e)) return;
       e.preventDefault();
       const dt = e.dataTransfer!;
-      const d = readDrop({ card: dt.getData(CARD_TYPE), html: dt.getData("text/html"), uris: dt.getData("text/uri-list"), text: dt.getData("text/plain") }, (h) => new DOMParser().parseFromString(h, "text/html"));
-      if (d) onDropRef.current(d, dropBoardAt(e.target, e.clientY));
+      const fromDeck = readDeckCards(dt.getData(CARD_TYPE));
+      const d = fromDeck ? null : readDrop({ html: dt.getData("text/html"), uris: dt.getData("text/uri-list"), text: dt.getData("text/plain") }, (h) => new DOMParser().parseFromString(h, "text/html"));
+      const cards = fromDeck ?? (d ? [d] : null);
+      if (cards) onDropRef.current(cards, dropBoardAt(e.target, e.clientY));
       else toast("That doesn't look like a card", "error");
     };
     // Safari wants dragenter turned down too before it allows the drop.
@@ -991,6 +1039,38 @@ function useCardDrops(onDrop: (d: DroppedCard, board: Board) => void): Board | n
 
 // ---- The deck -------------------------------------------------------------------------
 
+/** A deck entry's id for the selection: its board and name (as the editor finds entries). */
+const selId = (c: DeckCard) => `${c.board}|${c.name}`;
+
+/** "Sol Ring, Arcane Signet and 3 more · Main deck": under the title of the selection's menu. */
+function selectionSummary(cards: DeckCard[], format: string): string {
+  const names = cards.slice(0, 3).map((c) => c.name).join(", ") + (cards.length > 3 ? ` and ${cards.length - 3} more` : "");
+  const boards = [...new Set(cards.map((c) => c.board))];
+  return `${names} · ${boards.length === 1 ? boardLabel(boards[0], format) : `${boards.length} boards`}`;
+}
+
+/** The picture under the pointer while several cards are dragged: up to three of them fanned, and how many. */
+function dragPile(dt: DataTransfer, cards: DeckCard[]) {
+  const pile = document.createElement("div");
+  pile.className = "drag-pile";
+  cards.slice(0, 3).reverse().forEach((c, i, top) => {
+    const s = scry.cached(c);
+    const url = s && scry.imageUrl(s, "normal", 0); // already loaded for the deck, so it shows in the picture
+    const el = url ? Object.assign(document.createElement("img"), { src: url, alt: "" }) : Object.assign(document.createElement("div"), { className: "drag-blank" });
+    const n = top.length - 1 - i; // 0 for the card on top
+    Object.assign(el.style, { left: `${8 - n * 6}px`, top: `${16 + n * 4}px`, transform: `rotate(${-n * 5}deg)` });
+    pile.append(el);
+  });
+  const count = document.createElement("span");
+  count.className = "drag-count";
+  count.textContent = String(cards.length);
+  pile.append(count);
+  document.body.append(pile);
+  dt.setDragImage(pile, 60, 60);
+  // The browser takes its picture of the pile now; it can go once the drag has started.
+  setTimeout(() => pile.remove());
+}
+
 function DeckView(props: {
   deck: Draft;
   missing: string[];
@@ -998,6 +1078,10 @@ function DeckView(props: {
   count: (b?: Board) => number;
   onQty: (c: DeckCard, q: number) => void;
   onMove: (c: DeckCard, b: Board) => void;
+  /** Several cards at once (the selection). */
+  onMoveMany: (cards: DeckCard[], b: Board) => void;
+  /** Puts removed cards back (Undo). */
+  onRestore: (cards: DeckCard[]) => void;
   onTags: (c: DeckCard, tags: string[]) => void;
   onCategory: (c: DeckCard, category: string | undefined) => void;
   groupBy: GroupBy;
@@ -1016,14 +1100,15 @@ function DeckView(props: {
   const gameChanger = (s: scry.ScryCard | undefined, className: string) =>
     deck.format === "commander" && s?.game_changer ? <span className={className} title="Game Changer: Exhibition and Core decks allow none, Upgraded up to 3">GC</span> : null;
   const noun = nounOf(deck.format);
-  /** The card being added to a package. */
-  const [packaging, setPackaging] = useState<DeckCard | null>(null);
+  /** The cards being added to a package, or to another deck. */
+  const [packaging, setPackaging] = useState<DeckCard[] | null>(null);
+  const [copyingTo, setCopyingTo] = useState<DeckCard[] | null>(null);
   const preview = useCardPreview();
   const flips = useFlips();
   const [printingsFor, setPrintingsFor] = useState<DeckCard | null>(null);
   const [pickingPartner, setPickingPartner] = useState(false);
-  /** The right-clicked card's menu: where it opened and which entry (by `key`), rebuilt each render. */
-  const [menu, setMenu] = useState<{ x: number; y: number; key: string } | null>(null);
+  /** The right-clicked card's menu: where it opened and which entry (by `key`), rebuilt each render; `multi` for the selection's menu. */
+  const [menu, setMenu] = useState<{ x: number; y: number; key: string; multi?: boolean } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
   const [view, setView] = useCardView();
   const stacked = view === "stacked" || view === "spread";
@@ -1031,14 +1116,170 @@ function DeckView(props: {
   const categories = useCardCategories(groupBy === "category");
   /** Undefined while the automatic categories load; without them, cards go by type. */
   const auto: AutoCategories | undefined = categories === undefined ? undefined : (s) => categories?.of(s.oracle_id ?? s.card_faces?.[0]?.oracle_id) ?? [];
-  /** The card whose tags are being edited (by board and name, so it survives edits). */
-  const [tagging, setTagging] = useState<{ board: Board; name: string } | null>(null);
-  /** The card whose category is being chosen. */
-  const [categorizing, setCategorizing] = useState<{ board: Board; name: string } | null>(null);
+  /** The cards whose tags are being edited (by `selId`, so they survive edits). */
+  const [tagging, setTagging] = useState<string[] | null>(null);
+  /** The cards whose category is being chosen. */
+  const [categorizing, setCategorizing] = useState<string[] | null>(null);
   const [measure, stackCols] = useStackColumns();
   const support = useCardSupport();
 
   const { dropTo } = props;
+
+  // ---- Selection: drag a box over the cards, or Ctrl/⌘-click them ----
+  /** The selected entries, by `selId`. Entries that left the deck simply aren't found. */
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+  const selectedCards = deck.cards.filter((c) => selected.has(selId(c)));
+  /** The card under the pointer, for the shortcuts when nothing is selected. */
+  const hovered = useRef<string | null>(null);
+  const root = useRef<HTMLElement>(null);
+  const [band, setBand] = useState<Box | null>(null);
+  const toggle = (c: DeckCard) =>
+    setSelected((was) => {
+      const next = new Set(was);
+      if (!next.delete(selId(c))) next.add(selId(c));
+      return next;
+    });
+
+  /**
+   * Pressing on empty space among the cards and dragging draws a box; the cards whose visible part
+   * it touches are selected (src/marquee.ts). Shift or Ctrl/⌘ adds to what's selected. A click on
+   * empty space clears the selection.
+   */
+  const startMarquee = (e: React.PointerEvent) => {
+    const el = root.current;
+    const t = e.target as Element;
+    if (!el || e.button !== 0 || e.pointerType !== "mouse") return;
+    if (!t.closest(".board") || t.closest("[data-sel], button, a, input, select, textarea, label, summary, .partner-slot")) return;
+    const r0 = el.getBoundingClientRect();
+    // Kept relative to the deck, so it stays put if the page (or the drawer) scrolls during the drag.
+    const sx = e.clientX - r0.left;
+    const sy = e.clientY - r0.top;
+    const base = e.shiftKey || e.ctrlKey || e.metaKey ? new Set(selected) : new Set<string>();
+    let moved = false;
+    document.body.classList.add("marquee-armed");
+    const move = (ev: PointerEvent) => {
+      const r = el.getBoundingClientRect();
+      const x0 = sx + r.left;
+      const y0 = sy + r.top;
+      if (!moved && Math.abs(ev.clientX - x0) < 5 && Math.abs(ev.clientY - y0) < 5) return;
+      if (!moved) {
+        moved = true;
+        document.body.classList.add("marqueeing");
+        preview.hide();
+      }
+      window.getSelection()?.removeAllRanges();
+      // Near the top or bottom of the window, the page scrolls along.
+      if (ev.clientY > innerHeight - 30) scrollBy(0, 24);
+      else if (ev.clientY < 30) scrollBy(0, -24);
+      const box = boxBetween(x0, y0, ev.clientX, ev.clientY);
+      const cards = [...el.querySelectorAll<HTMLElement>("[data-sel]")];
+      const hit = caught(box, visibleParts(cards.map((c) => c.getBoundingClientRect())));
+      setSelected(new Set([...base, ...hit.map((i) => cards[i].dataset.sel!)]));
+      setBand(box);
+    };
+    const end = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      document.body.classList.remove("marquee-armed", "marqueeing");
+      setBand(null);
+      if (!moved && !base.size) setSelected(new Set());
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+  };
+
+  /** Ctrl/⌘-click (or Shift-click) a card to add it to the selection or take it out. */
+  const toggleOnClick = (c: DeckCard) => (e: React.MouseEvent) => {
+    if (!(e.ctrlKey || e.metaKey || e.shiftKey) || (e.target as Element).closest("input, .qty, .menu-btn")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    toggle(c);
+  };
+
+  /** What the shortcuts and the selection's menu act on: the selection, else the card under the pointer. */
+  const targets = (): DeckCard[] => {
+    if (selectedCards.length) return selectedCards;
+    const c = hovered.current && deck.cards.find((x) => selId(x) === hovered.current);
+    return c ? [c] : [];
+  };
+  const named = (cards: DeckCard[]) => (cards.length === 1 ? cards[0].name : `${cards.length} cards`);
+  const canMoveTo = (b: Board) => boardsFor(deck.format).some((x) => x.id === b) && b !== "commander";
+
+  const addEach = (cards: DeckCard[], n: number) => {
+    for (const c of cards) props.onQty(c, Math.min(MAX_QUANTITY, c.quantity + n));
+    toast(cards.length === 1 ? `Added ${n > 1 ? `${n} × ` : "one "}${cards[0].name}` : `Added ${n > 1 ? n : "one"} of each of ${cards.length} cards`);
+  };
+  const removeEach = (cards: DeckCard[]) => {
+    for (const c of cards) props.onQty(c, c.quantity - 1);
+    // Undo puts back the entries that ran out and the copies of the others.
+    const undo = () => {
+      props.onRestore(cards.filter((c) => c.quantity <= 1));
+      for (const c of cards) if (c.quantity > 1) props.onQty(c, c.quantity);
+    };
+    toast(cards.length === 1 ? `Removed one ${cards[0].name}` : `Removed one of each of ${cards.length} cards`, "info", { label: "Undo", run: undo });
+  };
+  const removeAll = (cards: DeckCard[]) => {
+    for (const c of cards) props.onQty(c, 0);
+    setSelected(new Set());
+    toast(`Removed ${named(cards)}`, "info", { label: "Undo", run: () => props.onRestore(cards) });
+  };
+  const moveAll = (cards: DeckCard[], b: Board) => {
+    const moving = cards.filter((c) => c.board !== b);
+    if (!moving.length || !canMoveTo(b)) return;
+    props.onMoveMany(moving, b);
+    // The selection follows the cards to their new board.
+    setSelected((was) => (was.size ? new Set([...was].map((k) => (moving.some((c) => selId(c) === k) ? `${b}|${k.split("|").slice(1).join("|")}` : k))) : was));
+    toast(`Moved ${named(moving)} to ${boardLabel(b, deck.format).toLowerCase()}`);
+  };
+  const copyList = (cards: DeckCard[]) =>
+    void navigator.clipboard.writeText(cardLines(cards)).then(
+      () => toast(`Copied ${named(cards)}`),
+      () => toast("Couldn't copy to the clipboard", "error"),
+    );
+
+  const runShortcut = (k: DeckShortcut, cards: DeckCard[]) => {
+    if (!cards.length) return;
+    if (k === "addOne") addEach(cards, 1);
+    else if (k === "removeOne") removeEach(cards);
+    else if (k === "toSide") moveAll(cards, "side");
+    else if (k === "toMaybe") moveAll(cards, "maybe");
+    else if (k === "toMain") moveAll(cards, "main");
+    else if (k === "tags") setTagging(cards.map(selId));
+  };
+
+  // The keys: Alt+1–5 and Alt+T on the selection or the card under the pointer, Escape clears the
+  // selection, Ctrl/⌘+A selects every card, Ctrl/⌘+C copies the selected ones. Not while typing, in
+  // a dialog, or when the deck isn't showing (the search page with its drawer closed).
+  const keys = useRef<(e: KeyboardEvent) => void>(() => {});
+  keys.current = (e) => {
+    if (e.defaultPrevented || isTextBox(e.target) || document.querySelector("dialog[open]") || !root.current?.getClientRects().length) return;
+    const mod = e.ctrlKey || e.metaKey;
+    if (e.key === "Escape" && selected.size && !document.querySelector(".card-menu")) {
+      setSelected(new Set());
+      return;
+    }
+    if (mod && !e.altKey && !e.shiftKey && e.code === "KeyA" && deck.cards.length) {
+      e.preventDefault();
+      setSelected(new Set(deck.cards.map(selId)));
+      return;
+    }
+    if (mod && !e.altKey && e.code === "KeyC" && selectedCards.length && (window.getSelection()?.isCollapsed ?? true)) {
+      e.preventDefault();
+      copyList(selectedCards);
+      return;
+    }
+    const k = deckShortcut(e);
+    if (!k) return;
+    e.preventDefault();
+    runShortcut(k, targets());
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => keys.current(e);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const warnings = useMemo(() => deckWarnings(deck, missing, support), [deck, missing, support]);
   /** The tile's outline class for a card that won't work: red when it's missing, amber for a known issue. */
@@ -1092,9 +1333,10 @@ function DeckView(props: {
       ...moves.map((m) => ({ label: m.board.id === "commander" ? "Move to commander" : `Move to ${m.board.label.toLowerCase()}`, run: m.run })),
       ...commander,
       { label: "Choose printing…", run: () => setPrintingsFor(c) },
-      ...(deck.format === PACKAGE ? [] : [{ label: "Add to package…", run: () => setPackaging(c) }]),
-      { label: "Add tags…", run: () => setTagging({ board: c.board, name: c.name }) },
-      ...(groupBy === "category" && c.board !== "commander" ? [{ label: "Choose category…", run: () => setCategorizing({ board: c.board, name: c.name }) }] : []),
+      ...(deck.format === PACKAGE ? [] : [{ label: "Add to package…", run: () => setPackaging([c]) }]),
+      { label: "Add to another deck…", run: () => setCopyingTo([c]) },
+      { label: "Add tags…", run: () => setTagging([selId(c)]) },
+      ...(groupBy === "category" && c.board !== "commander" ? [{ label: "Choose category…", run: () => setCategorizing([selId(c)]) }] : []),
       { label: c.quantity > 1 ? `Remove all ${c.quantity}` : `Remove from ${noun}`, run: () => props.onQty(c, 0), danger: true },
     ]);
   };
@@ -1120,7 +1362,7 @@ function DeckView(props: {
         items: [
           ...fits.slice(1, 4).filter((f) => !same(f, now)).map((f) => ({ label: `Move to ${f}`, onSelect: () => props.onCategory(c, f) })),
           ...(c.category ? [{ label: `Automatic (${best})`, onSelect: () => props.onCategory(c, undefined) }] : []),
-          { label: "Choose category…", onSelect: () => setCategorizing({ board: c.board, name: c.name }) },
+          { label: "Choose category…", onSelect: () => setCategorizing([selId(c)]) },
         ],
       },
     ];
@@ -1137,8 +1379,8 @@ function DeckView(props: {
       {
         title: `${c.quantity} × ${c.name} · ${boardLabel(c.board, deck.format)}`,
         items: [
-          { label: "+ Add one", keepOpen: true, onSelect: () => props.onQty(c, c.quantity + 1) },
-          { label: "− Remove one", keepOpen: c.quantity > 1, onSelect: () => props.onQty(c, c.quantity - 1) },
+          { label: "+ Add one", keepOpen: true, keys: DECK_SHORTCUTS.addOne, onSelect: () => props.onQty(c, c.quantity + 1) },
+          { label: "− Remove one", keepOpen: c.quantity > 1, keys: DECK_SHORTCUTS.removeOne, onSelect: () => props.onQty(c, c.quantity - 1) },
           { label: "Add", onSelect: () => {}, amount: { initial: 1, min: 1, max: MAX_QUANTITY - c.quantity, button: "Add", onAmount: (n) => props.onQty(c, c.quantity + n) } },
           { label: "Set to", onSelect: () => {}, amount: { initial: c.quantity, min: 0, max: MAX_QUANTITY, button: "Set", onAmount: (n) => props.onQty(c, n) } },
         ],
@@ -1147,19 +1389,64 @@ function DeckView(props: {
         items: [
           { label: "Card details", disabled: !s, onSelect: () => s && openDetails(c, s) },
           { label: "Choose printing…", onSelect: () => setPrintingsFor(c) },
-          { label: c.tags?.length ? `Tags: ${c.tags.join(", ")}` : "Add tags…", onSelect: () => setTagging({ board: c.board, name: c.name }) },
-          ...(deck.format === PACKAGE ? [] : [{ label: "Add to package…", onSelect: () => setPackaging(c) }]),
+          { label: c.tags?.length ? `Tags: ${c.tags.join(", ")}` : "Add tags…", keys: DECK_SHORTCUTS.tags, onSelect: () => setTagging([selId(c)]) },
+          ...(deck.format === PACKAGE ? [] : [{ label: "Add to package…", onSelect: () => setPackaging([c]) }]),
+          { label: "Add to another deck…", onSelect: () => setCopyingTo([c]) },
         ],
       },
       ...categorySection(c, s),
       { items: commanderItems },
       {
         title: "Move to",
-        items: moves.map((m) => ({ label: m.board.label, onSelect: m.run })),
+        items: moves.map((m) => ({ label: m.board.label, keys: moveKeys(m.board.id), onSelect: m.run })),
       },
       { items: [{ label: c.quantity > 1 ? `Remove all ${c.quantity}` : `Remove from ${noun}`, danger: true, onSelect: () => props.onQty(c, 0) }] },
     ];
     return sections.filter((sec) => sec.items.length);
+  };
+
+  /** The shortcut that moves cards to this board, if there is one. */
+  const moveKeys = (b: Board) => (b === "side" ? DECK_SHORTCUTS.toSide : b === "maybe" ? DECK_SHORTCUTS.toMaybe : b === "main" ? DECK_SHORTCUTS.toMain : undefined);
+
+  /** The menu for several selected cards: what can be done to all of them, in two columns. */
+  const selectionSections = (cards: DeckCard[]): MenuSection[] => {
+    const max = Math.min(...cards.map((c) => MAX_QUANTITY - c.quantity));
+    const boards = boardsFor(deck.format).filter((b) => canMoveTo(b.id));
+    return [
+      {
+        items: [
+          { label: "Add one of each", keepOpen: true, keys: DECK_SHORTCUTS.addOne, onSelect: () => addEach(cards, 1) },
+          ...(max >= 1 ? [{ label: "Add more of each", onSelect: () => {}, amount: { initial: 1, min: 1, max, button: "Add", onAmount: (n: number) => addEach(cards, n) } }] : []),
+          { label: "Remove one of each", danger: true, keys: DECK_SHORTCUTS.removeOne, onSelect: () => removeEach(cards) },
+          { label: "Remove all", danger: true, onSelect: () => removeAll(cards) },
+        ],
+      },
+      ...(boards.length > 1
+        ? [{ title: "Move to", items: boards.map((b) => ({ label: b.label, keys: moveKeys(b.id), disabled: cards.every((c) => c.board === b.id), onSelect: () => moveAll(cards, b.id) })) }]
+        : []),
+      {
+        second: true,
+        items: [
+          { label: "Change tags…", keys: DECK_SHORTCUTS.tags, onSelect: () => setTagging(cards.map(selId)) },
+          ...(groupBy === "category" ? [{ label: "Choose category…", onSelect: () => setCategorizing(cards.filter((c) => c.board !== "commander").map(selId)) }] : []),
+        ],
+      },
+      {
+        second: true,
+        items: [
+          { label: "Add to another deck…", onSelect: () => setCopyingTo(cards) },
+          ...(deck.format === PACKAGE ? [] : [{ label: "Add to package…", onSelect: () => setPackaging(cards) }]),
+          { label: "Copy as a list", keys: ["Ctrl", "C"], onSelect: () => copyList(cards) },
+        ],
+      },
+      {
+        second: true,
+        items: [
+          { label: "Select all", keys: ["Ctrl", "A"], onSelect: () => setSelected(new Set(deck.cards.map(selId))) },
+          { label: "Clear selection", keys: ["Esc"], onSelect: () => setSelected(new Set()) },
+        ],
+      },
+    ];
   };
 
   const cardMenu = (c: DeckCard, s: scry.ScryCard | undefined, className?: string) => (
@@ -1171,28 +1458,54 @@ function DeckView(props: {
     if ((e.target as HTMLElement).closest("input")) return; // the quantity box keeps the browser's menu (paste)
     e.preventDefault();
     preview.hide();
-    setMenu({ x: e.clientX, y: e.clientY, key: key(c, deck.cards.indexOf(c)) });
+    // On one of several selected cards: the selection's menu.
+    setMenu({ x: e.clientX, y: e.clientY, key: key(c, deck.cards.indexOf(c)), multi: selected.size > 1 && selected.has(selId(c)) });
   };
 
   const key = (c: DeckCard, i: number) => `${c.board}|${c.name}|${c.scryfallId ?? i}`;
-  /** Drag a card to another deck (open in another tab) to copy it there, same printing and copies. */
+  /**
+   * Drag a card to another deck (open in another tab) to copy it there, same printing and copies.
+   * Dragging one of several selected cards takes them all, under a pile with their number on it.
+   */
   const dragOut = (c: DeckCard) => ({
     draggable: true,
     onDragStart: (e: React.DragEvent) => {
       // Dragging in the quantity box selects its text instead.
       if (e.target instanceof HTMLInputElement) return e.preventDefault();
-      e.dataTransfer.setData(CARD_TYPE, cardDragData(c));
-      e.dataTransfer.setData("text/plain", c.name);
+      const many = selected.size > 1 && selected.has(selId(c)) ? selectedCards : null;
+      e.dataTransfer.setData(CARD_TYPE, cardDragData(many ?? c));
+      e.dataTransfer.setData("text/plain", many ? cardLines(many) : c.name);
       e.dataTransfer.effectAllowed = "copy";
+      if (many) dragPile(e.dataTransfer, [c, ...many.filter((x) => x !== c)]);
     },
   });
   const menuCard = menu && deck.cards.find((c, i) => key(c, i) === menu.key);
-  const contextMenu: ContextMenuState | null = menuCard ? { x: menu.x, y: menu.y, sections: menuSections(menuCard, scry.cached(menuCard)) } : null;
+  const contextMenu: ContextMenuState | null = !menuCard
+    ? null
+    : menu.multi && selectedCards.length > 1
+      ? {
+          x: menu.x,
+          y: menu.y,
+          title: `${selectedCards.length} cards selected`,
+          subtitle: selectionSummary(selectedCards, deck.format),
+          columns: true,
+          sections: selectionSections(selectedCards),
+        }
+      : { x: menu.x, y: menu.y, sections: menuSections(menuCard, scry.cached(menuCard)) };
+
+  /** Selection on each card: its id for the box, a ring when selected, Ctrl/⌘-click, and the card under the pointer. */
+  const selProps = (c: DeckCard) => ({
+    "data-sel": selId(c),
+    onClickCapture: toggleOnClick(c),
+    onPointerEnter: () => (hovered.current = selId(c)),
+    onPointerLeave: () => hovered.current === selId(c) && (hovered.current = null),
+  });
+  const selClass = (c: DeckCard) => (selected.has(selId(c)) ? " selected" : "");
 
   const row = (c: DeckCard, i: number) => {
     const s = scry.cached(c);
     return (
-      <li key={key(c, i)} className={s ? "card-row" : "card-row unresolved"} {...preview.handlers(s)} onContextMenu={onContextMenu(c)} {...dragOut(c)}>
+      <li key={key(c, i)} className={`${s ? "card-row" : "card-row unresolved"}${selClass(c)}`} {...preview.handlers(s)} onContextMenu={onContextMenu(c)} {...dragOut(c)} {...selProps(c)}>
         {qty(c)}
         {s ? <button className="cname" title="Card details" onClick={() => openDetails(c, s)}>{c.name}</button> : <span className="cname">{c.name}</span>}
         {notWorking(c, s, "nw-badge")}
@@ -1217,7 +1530,7 @@ function DeckView(props: {
     const face = flips.face(s);
     const img = s && scry.imageUrl(s, "normal", face);
     return (
-      <div key={key(c, i)} className={`card-tile${s ? "" : " unresolved"}${brokenClass(c, s)}`} {...preview.handlers(s, face)} onContextMenu={onContextMenu(c)} {...dragOut(c)}>
+      <div key={key(c, i)} className={`card-tile${s ? "" : " unresolved"}${brokenClass(c, s)}${selClass(c)}`} {...preview.handlers(s, face)} onContextMenu={onContextMenu(c)} {...dragOut(c)} {...selProps(c)}>
         <button className="tile-img" title={s ? undefined : c.name} aria-label={`${c.quantity} × ${c.name}: card details`} disabled={!s} onClick={() => s && openDetails(c, s)}>
           {img ? <CardImg src={img} name={c.name} alt={c.name} loading="lazy" draggable={false} /> : s || missing.includes(c.name) || lookupFailed ? <span className="noimg">{c.name}{missing.includes(c.name) ? " (not found)" : ""}</span> : <CardWait name={c.name} />}
         </button>
@@ -1272,7 +1585,7 @@ function DeckView(props: {
   ) : undefined;
 
   return (
-    <section className={`panel deck-view${dropTo ? " dropping" : ""}`}>
+    <section ref={root} className={`panel deck-view${dropTo ? " dropping" : ""}`} onPointerDown={startMarquee}>
       {warnings.length > 0 && <ul className="warnings">{warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
       {deck.format === "conquest" && (
         <p className="format-note muted small">
@@ -1452,31 +1765,51 @@ function DeckView(props: {
       />
       {deck.format !== PACKAGE && <DeckTokens deckId={deck.id} cards={deck.cards} />}
       {deck.format !== PACKAGE && <DeckAbilities deckId={deck.id} />}
+      {selectedCards.length > 0 && (
+        <div className="sel-bar" role="toolbar" aria-label="Selected cards">
+          <span className="sel-count">{selectedCards.length} selected</span>
+          <button onClick={() => addEach(selectedCards, 1)}>+1 each <Keys keys={DECK_SHORTCUTS.addOne} /></button>
+          <button onClick={() => removeEach(selectedCards)}>−1 each <Keys keys={DECK_SHORTCUTS.removeOne} /></button>
+          {(["side", "maybe", "main"] as const).filter((b) => canMoveTo(b) && boardsFor(deck.format).length > 1 && selectedCards.some((c) => c.board !== b)).map((b) => (
+            <button key={b} onClick={() => moveAll(selectedCards, b)}>To {boardLabel(b, deck.format).toLowerCase()} <Keys keys={moveKeys(b)!} /></button>
+          ))}
+          <button onClick={() => setTagging(selectedCards.map(selId))}>Tags… <Keys keys={DECK_SHORTCUTS.tags} /></button>
+          <button onClick={() => setCopyingTo(selectedCards)}>Add to another deck…</button>
+          <button className="sel-clear" title="Clear the selection (Esc)" aria-label="Clear the selection" onClick={() => setSelected(new Set())}>✕</button>
+        </div>
+      )}
+      {band && <div className="marquee" style={{ left: band.left, top: band.top, width: band.right - band.left, height: band.bottom - band.top }} />}
       {preview.element}
       {contextMenu && <ContextMenu menu={contextMenu} onClose={closeMenu} />}
       {tagging && (() => {
-        const c = deck.cards.find((x) => x.board === tagging.board && x.name === tagging.name);
-        return c ? <TagEditor card={c} suggestions={deckTags(deck.cards)} onChange={(t) => props.onTags(c, t)} onClose={() => setTagging(null)} /> : null;
+        const cards = deck.cards.filter((x) => tagging.includes(selId(x)));
+        return cards.length ? <TagEditor cards={cards} suggestions={deckTags(deck.cards)} onChange={(c, t) => props.onTags(c, t)} onClose={() => setTagging(null)} /> : null;
       })()}
       {categorizing && (() => {
-        const c = deck.cards.find((x) => x.board === categorizing.board && x.name === categorizing.name);
-        if (!c) return null;
-        const s = scry.cached(c);
+        const cards = deck.cards.filter((x) => categorizing.includes(selId(x)));
+        if (!cards.length) return null;
         const any = auto ?? (() => []);
+        const one = cards.length === 1 ? cards[0] : undefined;
+        const s = one && scry.cached(one);
+        // Several cards: the categories that fit all of them, and the one they share, if they do.
+        const fitsAll = cards.map((c) => fittingCategories(scry.cached(c), any)).reduce((a, b) => a.filter((k) => b.some((x) => x.toLowerCase() === k.toLowerCase())));
+        const nows = [...new Set(cards.map((c) => (categoryOf(c, scry.cached(c), any) ?? scry.primaryType(scry.cached(c))).toLowerCase()))];
         return (
           <CategoryPicker
-            card={c}
-            now={categoryOf(c, s, any) ?? scry.primaryType(s)}
-            automatic={fittingCategories(s, any)[0] ?? scry.primaryType(s)}
-            fits={fittingCategories(s, any)}
+            name={one ? one.name : `${cards.length} cards`}
+            now={one ? categoryOf(one, s, any) ?? scry.primaryType(s) : nows.length === 1 ? nows[0] : ""}
+            automatic={one ? fittingCategories(s, any)[0] ?? scry.primaryType(s) : undefined}
+            custom={cards.some((c) => c.category)}
+            fits={fitsAll}
             all={categories?.names ?? []}
             used={deckCategories(deck.cards)}
-            onPick={(k) => props.onCategory(c, k)}
+            onPick={(k) => cards.forEach((c) => props.onCategory(c, k))}
             onClose={() => setCategorizing(null)}
           />
         );
       })()}
-      {packaging && <AddToPackage card={packaging} onClose={() => setPackaging(null)} />}
+      {packaging && <AddToPackage cards={packaging} onClose={() => setPackaging(null)} />}
+      {copyingTo && <AddToDeck cards={copyingTo} from={deck.id} onClose={() => setCopyingTo(null)} />}
       {printingsFor && <Printings card={printingsFor} onPick={(p) => props.onPrinting(printingsFor, p)} onClose={() => setPrintingsFor(null)} />}
       {pickingPartner && leadCard && slotLabel && (
         <PartnerPicker commander={leadCard} label={slotLabel} onPick={props.onAddCommander} onClose={() => setPickingPartner(false)} />
@@ -1849,33 +2182,56 @@ function PartnerPicker({ commander, label, onPick, onClose }: { commander: scry.
 }
 
 /** A card's tags: chips to remove, the deck's other tags to add with a click, or a new one typed in. */
-function TagEditor({ card, suggestions, onChange, onClose }: { card: DeckCard; suggestions: string[]; onChange: (tags: string[]) => void; onClose: () => void }) {
+/**
+ * A card's tags, or the tags of several selected cards: a tag on all of them is shown set (click to
+ * take it off all), one on only some shows how many (click to put it on all), and new or used tags
+ * go on all of them.
+ */
+function TagEditor({ cards, suggestions, onChange, onClose }: { cards: DeckCard[]; suggestions: string[]; onChange: (card: DeckCard, tags: string[]) => void; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [draft, setDraft] = useState("");
   useEffect(() => ref.current?.showModal(), []);
-  const tags = card.tags ?? [];
-  const has = (t: string) => tags.some((x) => x.toLowerCase() === t.toLowerCase());
-  const full = tags.length >= MAX_CARD_TAGS;
-  const others = suggestions.filter((t) => !has(t));
+  const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+  const tagsOf = (c: DeckCard) => c.tags ?? [];
+  const hasTag = (c: DeckCard, t: string) => tagsOf(c).some((x) => same(x, t));
+  /** Every tag on any of the cards, each once, with how many cards have it. */
+  const present = [...new Map(cards.flatMap(tagsOf).map((t) => [t.toLowerCase(), t])).values()].map((t) => ({ t, n: cards.filter((c) => hasTag(c, t)).length }));
+  const full = cards.every((c) => tagsOf(c).length >= MAX_CARD_TAGS);
+  const others = suggestions.filter((t) => !present.some((p) => same(p.t, t)));
+  const addAll = (t: string) => {
+    for (const c of cards) if (!hasTag(c, t) && tagsOf(c).length < MAX_CARD_TAGS) onChange(c, [...tagsOf(c), t]);
+  };
+  const removeAll = (t: string) => {
+    for (const c of cards) if (hasTag(c, t)) onChange(c, tagsOf(c).filter((x) => !same(x, t)));
+  };
   function add(e: React.FormEvent) {
     e.preventDefault();
     const t = draft.trim().replace(/\s+/g, " ");
-    if (t && !has(t) && !full) onChange([...tags, t]);
+    if (t && !full) addAll(t);
     setDraft("");
   }
+  const many = cards.length > 1;
   return (
     <dialog ref={ref} className="new-deck tag-editor" onClose={onClose} onClick={(e) => closeOnBackdrop(e.nativeEvent, ref.current)}>
       <button className="dialog-close" aria-label="Close" onClick={() => ref.current?.close()}>×</button>
       <form onSubmit={add}>
-        <h3>Tags for {card.name}</h3>
-        <p className="muted small">Group the deck by your tags with Group by → Tag, or Type &amp; tag. A card can have several.</p>
+        <h3>Tags for {many ? `${cards.length} cards` : cards[0].name}</h3>
+        <p className="muted small">
+          {many ? "Tags you add go on every selected card. " : ""}Group the deck by your tags with Group by → Tag, or Type &amp; tag. A card can have several.
+        </p>
         <div className="reason-tags">
-          {tags.length ? (
-            tags.map((t) => (
-              <button type="button" key={t} className="reason-tag on" title="Remove this tag" onClick={() => onChange(tags.filter((x) => x !== t))}>
-                {t} <span aria-hidden="true">×</span>
-              </button>
-            ))
+          {present.length ? (
+            present.map(({ t, n }) =>
+              n === cards.length ? (
+                <button type="button" key={t} className="reason-tag on" title={many ? "Take this tag off all of them" : "Remove this tag"} onClick={() => removeAll(t)}>
+                  {t} <span aria-hidden="true">×</span>
+                </button>
+              ) : (
+                <button type="button" key={t} className="reason-tag" title={`On ${n} of ${cards.length}: put it on all of them`} onClick={() => addAll(t)}>
+                  + {t} <span className="muted">{n}/{cards.length}</span>
+                </button>
+              ),
+            )
           ) : (
             <span className="muted small">No tags yet.</span>
           )}
@@ -1885,7 +2241,7 @@ function TagEditor({ card, suggestions, onChange, onClose }: { card: DeckCard; s
             <p className="muted small tag-editor-sub">Used in this deck</p>
             <div className="reason-tags">
               {others.map((t) => (
-                <button type="button" key={t} className="reason-tag" disabled={full} onClick={() => onChange([...tags, t])}>+ {t}</button>
+                <button type="button" key={t} className="reason-tag" disabled={full} onClick={() => addAll(t)}>+ {t}</button>
               ))}
             </div>
           </div>
@@ -1912,16 +2268,21 @@ function TagEditor({ card, suggestions, onChange, onClose }: { card: DeckCard; s
 
 /** Choose the one category a card shows under: one it fits, any other, or a new one typed in. */
 function CategoryPicker(props: {
-  card: DeckCard;
+  /** The card's name, or "3 cards". */
+  name: string;
+  /** The category now ("" when several cards differ). */
   now: string;
-  automatic: string;
+  /** The automatic category, for one card. */
+  automatic?: string;
+  /** Some of the cards have a category of the player's own. */
+  custom: boolean;
   fits: string[];
   all: string[];
   used: string[];
   onPick: (category: string | undefined) => void;
   onClose: () => void;
 }) {
-  const { card, now, fits } = props;
+  const { now, fits } = props;
   const ref = useRef<HTMLDialogElement>(null);
   const [draft, setDraft] = useState("");
   useEffect(() => ref.current?.showModal(), []);
@@ -1929,7 +2290,7 @@ function CategoryPicker(props: {
     props.onPick(category);
     ref.current?.close();
   };
-  const isNow = (k: string) => k.toLowerCase() === now.toLowerCase();
+  const isNow = (k: string) => !!now && k.toLowerCase() === now.toLowerCase();
   // Each name once, however it's spelled: the player's own spelling first.
   const others = [...new Map([...props.all, ...props.used].map((k) => [k.toLowerCase(), k])).values()]
     .filter((k) => !fits.some((f) => f.toLowerCase() === k.toLowerCase()))
@@ -1950,13 +2311,13 @@ function CategoryPicker(props: {
           if (draft.trim()) pick(draft);
         }}
       >
-        <h3>Category for {card.name}</h3>
+        <h3>Category for {props.name}</h3>
         <p className="muted small">
           A card shows under one category. Automatic ones come from <a href="https://tagger.scryfall.com/" target="_blank" rel="noopener">Scryfall Tagger</a>, where players tag what cards do.
         </p>
         {fits.length > 0 && (
           <div>
-            <p className="muted small tag-editor-sub">Fits this card</p>
+            <p className="muted small tag-editor-sub">{props.automatic ? "Fits this card" : "Fits all of them"}</p>
             {chips(fits)}
           </div>
         )}
@@ -1969,7 +2330,7 @@ function CategoryPicker(props: {
           <button className="btn" disabled={!draft.trim()}>Use</button>
         </div>
         <div className="actions new-deck-actions">
-          {card.category && <button type="button" className="btn ghost" onClick={() => pick(undefined)}>Automatic ({props.automatic})</button>}
+          {props.custom && <button type="button" className="btn ghost" onClick={() => pick(undefined)}>{props.automatic ? `Automatic (${props.automatic})` : "Automatic"}</button>}
           <button type="button" className="btn ghost" onClick={() => ref.current?.close()}>Done</button>
         </div>
       </form>

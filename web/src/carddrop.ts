@@ -18,19 +18,28 @@ export interface DroppedCard {
 /** The drag type a CommandQuest deck card carries (readable by the editor in another tab). */
 export const CARD_TYPE = "application/x-commandquest-card";
 
-/** What a deck card puts in its drag, as `CARD_TYPE` data. */
-export function cardDragData(c: { name: string; quantity: number; scryfallId?: string; set?: string; collectorNumber?: string }): string {
-  return JSON.stringify({ name: c.name, quantity: c.quantity, id: c.scryfallId, set: c.set, collectorNumber: c.collectorNumber });
+type DragCard = { name: string; quantity: number; scryfallId?: string; set?: string; collectorNumber?: string };
+
+/** What deck cards put in their drag, as `CARD_TYPE` data: one card, or a list of the selected ones. */
+export function cardDragData(c: DragCard | DragCard[]): string {
+  const one = (x: DragCard) => ({ name: x.name, quantity: x.quantity, id: x.scryfallId, set: x.set, collectorNumber: x.collectorNumber });
+  return JSON.stringify(Array.isArray(c) ? c.map(one) : one(c));
 }
 
-/** A card dragged from a CommandQuest deck, or null when the data isn't one. */
-function fromDeckCard(json: string): DroppedCard | null {
+/** The cards dragged from a CommandQuest deck (one, or a list), or null when the data isn't any. */
+export function readDeckCards(json: string): DroppedCard[] | null {
   let v: unknown;
   try {
     v = JSON.parse(json);
   } catch {
     return null;
   }
+  const cards = (Array.isArray(v) ? v : [v]).map(fromDeckCard).filter((c): c is DroppedCard => !!c);
+  return cards.length ? cards : null;
+}
+
+/** One card dragged from a CommandQuest deck, or null when the data isn't one. */
+function fromDeckCard(v: unknown): DroppedCard | null {
   if (!v || typeof v !== "object") return null;
   const o = v as Record<string, unknown>;
   const str = (x: unknown) => (typeof x === "string" && x ? x : undefined);
@@ -38,7 +47,8 @@ function fromDeckCard(json: string): DroppedCard | null {
   if (!name) return null;
   const id = str(o.id);
   const q = typeof o.quantity === "number" && Number.isInteger(o.quantity) && o.quantity > 0 ? o.quantity : 1;
-  return { name, id: id && UUID.test(id) ? id.toLowerCase() : undefined, set: str(o.set), collectorNumber: str(o.collectorNumber), exact: true, quantity: q };
+  const card: DroppedCard = { name, id: id && UUID.test(id) ? id.toLowerCase() : undefined, set: str(o.set), collectorNumber: str(o.collectorNumber), exact: true, quantity: q };
+  return Object.fromEntries(Object.entries(card).filter(([, x]) => x !== undefined)) as DroppedCard;
 }
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
@@ -93,8 +103,8 @@ export function readDrop(
   data: { card?: string; html?: string; uris?: string; text?: string },
   parseHtml?: (html: string) => Document,
 ): DroppedCard | null {
-  const deckCard = data.card ? fromDeckCard(data.card) : null;
-  if (deckCard) return Object.fromEntries(Object.entries(deckCard).filter(([, x]) => x !== undefined)) as DroppedCard;
+  const deckCard = data.card ? readDeckCards(data.card)?.[0] : null;
+  if (deckCard) return deckCard;
   const found: DroppedCard = {};
   const take = (c: DroppedCard | null) => {
     if (!c) return;

@@ -2,6 +2,7 @@
 // so it isn't clipped by the deck's multi-column layout, and flipped upward near the bottom of
 // the window. Closes on outside click, Escape, scroll or resize.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { keyLabel } from "../deckShortcuts";
 
 export interface MenuItem {
   label: string;
@@ -23,11 +24,31 @@ export interface MenuItem {
    * `onSelect` isn't used for these.
    */
   amount?: { initial: number; min: number; max: number; button: string; onAmount: (n: number) => void };
+  /** Its keyboard shortcut, shown at the end of the row: ["Alt", "1"]. */
+  keys?: string[];
 }
 
 export interface MenuSection {
   title?: string;
   items: MenuItem[];
+  /** Right-click menus with `columns`: this section goes in the second column. */
+  second?: boolean;
+}
+
+const MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
+
+/** A shortcut as key caps: Alt + 1 (⌥ + 1 on a Mac). */
+export function Keys({ keys }: { keys: string[] }) {
+  return (
+    <span className="cm-keys" aria-label={`Shortcut: ${keys.map((k) => keyLabel(k, MAC)).join(" ")}`}>
+      {keys.map((k, i) => (
+        <span key={i} aria-hidden="true">
+          {i > 0 && <span className="cm-plus">+</span>}
+          <kbd>{keyLabel(k, MAC)}</kbd>
+        </span>
+      ))}
+    </span>
+  );
 }
 
 export function CardMenu({ label, sections, className = "", trigger }: { label: string; sections: MenuSection[]; className?: string; trigger?: React.ReactNode }) {
@@ -116,6 +137,7 @@ export function CardMenu({ label, sections, className = "", trigger }: { label: 
                   }}
                 >
                   {item.label}
+                  {item.keys && <Keys keys={item.keys} />}
                 </button>
                 ),
               )}

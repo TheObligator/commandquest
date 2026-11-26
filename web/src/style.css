@@ -1072,3 +1072,44 @@ dialog.new-deck.tag-editor { width: min(460px, calc(100vw - 32px)); }
 @media (max-width: 1180px) {
   .deck-bar-types.in-drawer { display: none; }
 }
+
+/* ---- Deck editor: drag select (src/marquee.ts) ---- */
+/* Shortcut key caps at the end of a menu row: Alt + 1. */
+.card-menu button:has(> .cm-keys) { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.cm-keys { display: inline-flex; align-items: center; flex: none; }
+.cm-keys kbd, .sel-bar kbd { font: 600 .7rem/1.4 Inter, system-ui, sans-serif; background: var(--bg); border: 1px solid #3a4258; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; color: var(--muted); }
+.cm-plus { color: var(--muted); font-size: .68rem; margin: 0 2px; }
+.card-menu.two-col { max-width: min(600px, calc(100vw - 16px)); min-width: min(520px, calc(100vw - 16px)); }
+.cm-cols { display: grid; grid-template-columns: 1fr 1fr; }
+.cm-cols > div + div { border-left: 1px solid var(--line); padding-left: 4px; margin-left: 4px; }
+.cm-header { display: grid; gap: 2px; padding: 8px 10px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.cm-header span { color: var(--muted); font-size: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 600px) { .cm-cols { grid-template-columns: 1fr; } .cm-cols > div + div { border-left: 0; border-top: 1px solid var(--line); padding: 4px 0 0; margin: 4px 0 0; } }
+
+/* The box being drawn, and the selected cards. */
+.marquee { position: fixed; z-index: 55; pointer-events: none; border: 1px solid var(--accent); background: rgb(224 168 79 / 14%); border-radius: 2px; }
+body.marquee-armed, body.marquee-armed * { user-select: none; }
+body.marqueeing, body.marqueeing * { cursor: crosshair !important; }
+/* A selected card: an amber ring and tint (no badge, which would cover the name in Stacked). */
+.card-tile.selected .tile-img { position: relative; }
+.card-tile.selected .tile-img img, .card-tile.selected .tile-img .noimg { outline: 3px solid var(--accent) !important; outline-offset: -3px !important; }
+.card-tile.selected .tile-img::after { content: ""; position: absolute; inset: 0; border-radius: 4.75% / 3.5%; background: rgb(224 168 79 / 22%); pointer-events: none; }
+.card-row.selected { background: rgb(224 168 79 / 14%); box-shadow: inset 3px 0 0 var(--accent); }
+
+/* What can be done with the selection, kept at the bottom of the window while there is one. */
+.sel-bar { position: sticky; bottom: 64px; /* above the deck bar */ z-index: 30; margin: 14px auto 0; width: max-content; max-width: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px 6px 14px; background: var(--panel-2); border: 1px solid var(--accent); border-radius: 12px; box-shadow: var(--shadow); font-size: .88rem; }
+.sel-bar .sel-count { font-weight: 700; color: var(--accent-2); margin-right: 4px; }
+.sel-bar > button { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg-2); color: var(--text); cursor: pointer; font-size: .85rem; }
+.sel-bar > button:hover { border-color: var(--accent); }
+.sel-bar > button.sel-clear { border: 0; background: none; color: var(--muted); font-size: 1.05rem; padding: 4px 8px; }
+.sel-bar .cm-keys { margin-left: 2px; }
+@media (max-width: 600px) { .sel-bar .cm-keys { display: none; } }
+
+/* The picture under the pointer while several cards are dragged to another deck. */
+.drag-pile { position: fixed; top: -1000px; left: -1000px; width: 130px; height: 190px; pointer-events: none; }
+.drag-pile img, .drag-pile .drag-blank { position: absolute; width: 110px; aspect-ratio: 488 / 680; border-radius: 6px; box-shadow: 0 2px 8px rgb(0 0 0 / 50%); background: var(--panel-2); }
+.drag-pile .drag-count { position: absolute; top: 0; right: 0; z-index: 5; padding: 1px 9px; border-radius: 99px; background: var(--accent); color: var(--accent-ink); font-weight: 800; font-size: .85rem; }
+
+/* "Add to another deck…": your decks to pick from. */
+.deck-pick-filter { width: 100%; margin: 4px 0 8px; }
+.deck-pick { max-height: min(50vh, 420px); overflow-y: auto; }
