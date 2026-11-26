@@ -2,7 +2,7 @@
 // themselves are smoke-tested against a local Convex deployment; see docs/web-dev.md.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { checkBracket, colorCards, DeckError, summarize, validateDeck } from "../convex/model/deckRules.ts";
+import { checkBracket, colorCards, DeckError, MAX_QUANTITY, summarize, validateDeck, withCardsAdded, type DeckCard } from "../convex/model/deckRules.ts";
 import { archidektCategories, deckSource, parseArchidekt, parseMoxfield } from "../convex/model/importers.ts";
 import { cleanFolderName, FolderError, MAX_FOLDER_NAME } from "../convex/model/folderRules.ts";
 
@@ -146,4 +146,20 @@ test("colorCards: the commanders, or the main deck without any", () => {
   assert.deepEqual(colorCards([ring, maybe, iroh]).map((c) => [c.name, c.set]), [["Iroh, Grand Lotus", "tla"]]);
   assert.deepEqual(colorCards([ring, maybe]).map((c) => c.name), ["Sol Ring"]);
   assert.ok(!("tags" in colorCards([ring])[0]));
+});
+
+test("withCardsAdded merges copies onto the same board and keeps new cards' printing and tags", () => {
+  const deck: DeckCard[] = [{ name: "Sol Ring", quantity: 1, board: "main", set: "c21" }, { name: "Forest", quantity: 248, board: "main" }];
+  const out = withCardsAdded(deck, [
+    { name: "sol ring", quantity: 2, board: "main", set: "lea" },
+    { name: "Forest", quantity: 5, board: "main" },
+    { name: "Counterspell", quantity: 1, board: "side", set: "ice", tags: ["Interaction"] },
+  ]);
+  assert.deepEqual(out, [
+    { name: "Sol Ring", quantity: 3, board: "main", set: "c21" },
+    { name: "Forest", quantity: MAX_QUANTITY, board: "main" },
+    { name: "Counterspell", quantity: 1, board: "side", set: "ice", tags: ["Interaction"] },
+  ]);
+  assert.equal(deck[0].quantity, 1, "the deck it was given isn't changed");
+  assert.deepEqual(withCardsAdded([], [{ name: "Island", quantity: 1, board: "maybe" }], true), [{ name: "Island", quantity: 1, board: "main" }]);
 });

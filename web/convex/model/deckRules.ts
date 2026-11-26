@@ -158,3 +158,20 @@ export function summarize(cards: DeckCard[], anyCover = false): DeckSummary {
   const cmdrs = cards.filter((c) => c.board === "commander");
   return { cardCount, commanders: cmdrs.map((c) => c.name), coverScryfallId: (cmdrs.find((c) => c.scryfallId) ?? (anyCover ? cards.find((c) => c.scryfallId) : undefined))?.scryfallId };
 }
+
+/**
+ * `cards` with `added` put in (from another deck: "Add to another deck…"). A card already on that
+ * board gets the extra copies (up to MAX_QUANTITY) and keeps its own printing; a new one comes in
+ * with the printing, tags and category it had. `oneBoard`: a plain card list, where everything goes
+ * in the main deck.
+ */
+export function withCardsAdded(cards: DeckCard[], added: DeckCard[], oneBoard = false): DeckCard[] {
+  const out = cards.map((c) => ({ ...c }));
+  for (const a of added) {
+    const board: Board = oneBoard ? "main" : a.board;
+    const same = out.find((c) => c.board === board && c.name.toLowerCase() === a.name.toLowerCase());
+    if (same) same.quantity = Math.min(MAX_QUANTITY, same.quantity + a.quantity);
+    else out.push({ ...a, board, quantity: Math.min(MAX_QUANTITY, a.quantity) });
+  }
+  return out;
+}

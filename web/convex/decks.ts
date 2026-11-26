@@ -2,7 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { checkBracket, colorCards, DeckError, MAX_DECKS_PER_USER, summarize, validateDeck, type DeckInput } from "./model/deckRules";
+import { checkBracket, colorCards, DeckError, MAX_DECKS_PER_USER, summarize, validateDeck, withCardsAdded, type DeckInput } from "./model/deckRules";
 import { CARD_LIST } from "../src/deckFormats";
 import { DEFAULT_GROUPING, isGroupBy } from "../src/deckGroups";
 import { withSaved } from "../src/game/abilities";
@@ -119,6 +119,19 @@ export const update = mutation({
     const existing = await ctx.db.get(id);
     if (!existing || existing.userId !== userId) throw new ConvexError("Deck not found.");
     await ctx.db.patch(id, { ...checked(args), updatedAt: Date.now() });
+  },
+});
+
+/** Adds cards to one of your decks (from another deck's "Add to another deck…"), merging copies of the same card. */
+export const addCards = mutation({
+  args: { id: v.id("decks"), cards: v.array(deckCard) },
+  handler: async (ctx, { id, cards }) => {
+    const userId = await requireUser(ctx);
+    const existing = await ctx.db.get(id);
+    if (!existing || existing.userId !== userId) throw new ConvexError("Deck not found.");
+    const merged = withCardsAdded(existing.cards, cards, existing.format === CARD_LIST);
+    const deck = checked({ name: existing.name, format: existing.format, cards: merged, extraColor: existing.extraColor, bracket: existing.bracket, bracketTags: existing.bracketTags });
+    await ctx.db.patch(id, { cards: deck.cards, updatedAt: Date.now() });
   },
 });
 
