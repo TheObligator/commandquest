@@ -1290,6 +1290,7 @@ function DeckView(props: {
         onBracket={props.onBracket}
         onTags={props.onBracketTags}
       />}
+      {hasCommander(deck.format) && <DeckCombos deckId={deck.id} />}
       <div className="deck-controls">
         <CardViewToggle view={view} onChange={setView} />
         <label className="group-by">
@@ -1450,7 +1451,6 @@ function DeckView(props: {
         identity={deck.format === "commander" || deck.format === "conquest" ? [...new Set(deck.cards.filter((c) => c.board === "commander").flatMap((c) => scry.cached(c)?.color_identity ?? []))] : undefined}
       />
       {deck.format !== PACKAGE && <DeckTokens deckId={deck.id} cards={deck.cards} />}
-      {hasCommander(deck.format) && <DeckCombos deckId={deck.id} />}
       {deck.format !== PACKAGE && <DeckAbilities deckId={deck.id} />}
       {preview.element}
       {contextMenu && <ContextMenu menu={contextMenu} onClose={closeMenu} />}
