@@ -762,11 +762,12 @@ option { background: var(--bg-2); color: var(--text); }
 .tile-menu .dots i { box-shadow: 0 0 2px rgb(0 0 0 / 80%); }
 
 /* Invisible card name over the printed one (deck editor, card images), for find-in-page.
-   Sized in container units so it tracks the card at any tile width (card = 488 × 680). */
+   Sized in container units so it tracks the card at any tile width (card = 488 × 680): the printed
+   name's capitals run from about x 43, y 42 to y 61 on a 488-wide Scryfall image. */
 .card-tile { container-type: inline-size; }
 .tile-name {
-  position: absolute; top: 5cqw; left: 7cqw; right: 20cqw; height: 7.5cqw;
-  font-size: 5.6cqw; line-height: 7.5cqw; white-space: nowrap; overflow: hidden;
+  position: absolute; top: 7.4cqw; left: 8.6cqw; right: 20cqw; height: 6.2cqw;
+  font-size: 5.6cqw; line-height: 6.2cqw; white-space: nowrap; overflow: hidden;
   color: transparent; pointer-events: none; user-select: text;
 }
 .tile-name::selection { background: rgb(224 168 79 / 45%); color: transparent; }
