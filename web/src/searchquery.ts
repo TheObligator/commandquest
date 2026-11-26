@@ -98,11 +98,14 @@ export function nameTerms(text: string): string {
 /** Never deck cards: tokens, emblems and art cards, even when a search names them (`t:treasure`). */
 export const NOT_CARDS = "-is:token -t:emblem -layout:art_series";
 
-/** Hidden unless the player asks for them: Alchemy (digital rebalances) and Un-cards (silver border, acorn). */
-export const ODD_CARDS = "-is:alchemy -is:funny";
+/**
+ * Hidden unless the player asks for them: digital-only printings (Alchemy, Arena and MTGO cards) and
+ * Un-cards (silver border, acorn). A card with a paper printing shows that one instead of a digital one.
+ */
+export const ODD_CARDS = "-is:digital -is:funny";
 
-/** Terms that ask for Alchemy or Un-cards, or for a set or set type, which might be one. */
-const ASKS_FOR_ODD = /(^|[\s(])(is:(alchemy|funny|acorn)|(border|st|settype|s|set|e|edition):\S)/i;
+/** Terms that ask for digital or Un-cards, or for a set or set type, which might be one. */
+const ASKS_FOR_ODD = /(^|[\s(])(is:(alchemy|digital|funny|acorn)|(game|in):(arena|mtgo)|(border|st|settype|s|set|e|edition):\S)/i;
 
 /**
  * What every deck search adds to the player's query: no tokens ever, and no Alchemy or Un-cards

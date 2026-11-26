@@ -75,7 +75,7 @@ test("nameTerms quotes each typed word so names aren't read as search syntax", (
   assert.equal(nameTerms("   "), "");
 });
 
-test("deck searches leave out tokens always, Alchemy and Un-cards unless asked", async () => {
+test("deck searches leave out tokens always, digital-only and Un-cards unless asked", async () => {
   const { poolClause, NOT_CARDS, ODD_CARDS } = await import("../src/searchquery.ts");
   assert.equal(poolClause("t:dragon", false), `${NOT_CARDS} ${ODD_CARDS}`);
   assert.equal(poolClause("t:dragon", true), NOT_CARDS);
@@ -83,6 +83,8 @@ test("deck searches leave out tokens always, Alchemy and Un-cards unless asked",
   assert.equal(poolClause("(is:alchemy or t:elf)", false), NOT_CARDS);
   assert.equal(poolClause("set:unf", false), NOT_CARDS);
   assert.equal(poolClause("border:silver", false), NOT_CARDS);
+  assert.equal(poolClause("game:arena", false), NOT_CARDS);
+  assert.match(ODD_CARDS, /-is:digital/);
   assert.equal(poolClause("o:sets", false), `${NOT_CARDS} ${ODD_CARDS}`);
   assert.match(NOT_CARDS, /-is:token/);
 });
