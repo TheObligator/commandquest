@@ -611,7 +611,7 @@ export function SearchResults(props: {
           </select>
         </label>}
       </div>
-      <p className="muted small">
+      <p className="muted small search-status">
         {error ? (
           <span className="form-error">{error} <button className="text-link" onClick={() => (cards.length ? void more() : setAttempt((n) => n + 1))}>Try again</button></span>
         ) : total === null ? (

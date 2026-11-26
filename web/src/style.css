@@ -794,6 +794,8 @@ kbd { font-family: var(--font-mono, ui-monospace, monospace); font-size: .72rem;
 .search-page { padding: 16px 18px 20px; display: grid; gap: 10px; }
 .search-page-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .search-page-box { flex: 1 1 320px; }
+/* The result count, then the search options in one row (wrapping when narrow). */
+.search-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; }
 .search-count strong { color: var(--text); font-size: 1rem; }
 /* The deck drawer along the bottom of the search results (Editor.tsx DeckDrawer). No transform on
    it: the card menus and hover previews inside are position: fixed to the window. */
