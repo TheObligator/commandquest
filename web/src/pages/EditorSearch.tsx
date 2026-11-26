@@ -346,7 +346,7 @@ export function SearchResults(props: {
   const support = useCardSupport();
   const flips = useFlips();
   const [allColors, setAllColors] = useState(false);
-  /** Show digital-only cards (Alchemy, Arena, MTGO) and Un-cards too (hidden by default). */
+  /** Show digital-only cards (Alchemy, Arena, MTGO), Un-cards, planes, schemes and the like too (hidden by default). */
   const [withOdd, setWithOdd] = useState(false);
   /** The player's pick for ranking by the commander's EDHREC list; null = the default. Kept across searches. */
   const [rankChoice, setRankChoice] = useState<boolean | null>(null);
@@ -370,7 +370,7 @@ export function SearchResults(props: {
   const idClause = filtered ? identity.clause : "";
   const additionsOn = !!additions.trim() && !skipAdditions;
   const added = additionsOn ? additions : "";
-  // Never tokens; digital-only printings and Un-cards only when asked for.
+  // Never tokens; digital-only printings, Un-cards, planes and the like only when asked for.
   const pool = poolClause(`${props.query} ${added}`, withOdd);
   // Display keywords (order:, unique:) go last and outside the parentheses.
   const fullQuery = [joinQuery(props.query, idClause, stripDisplay(added), pool), displayTerms(added)].filter(Boolean).join(" ");
@@ -630,9 +630,9 @@ export function SearchResults(props: {
             <input type="checkbox" checked={!allColors} onChange={(e) => setAllColors(!e.target.checked)} /> Only cards your commander allows
           </label>
         )}
-        <label className="inline" title="Digital-only: Alchemy, Arena and MTGO cards and printings. Un-cards: silver-bordered and acorn joke cards. Neither is legal in paper Commander. When this is off, a card shows its paper printing.">
+        <label className="inline" title="Digital-only: Alchemy, Arena and MTGO cards and printings. Un-cards: silver-bordered and acorn joke cards. Other formats’ cards: planes, phenomena, schemes, conspiracies, dungeons and Vanguard. None of them go in a Commander deck. When this is off, a card shows its paper printing.">
           {" "}
-          <input type="checkbox" checked={withOdd} onChange={(e) => setWithOdd(e.target.checked)} /> Include digital-only (Alchemy) and Un-cards
+          <input type="checkbox" checked={withOdd} onChange={(e) => setWithOdd(e.target.checked)} /> Include Alchemy, Un-cards, planes, schemes and the like
         </label>
         {commanderDeck && (
           <>

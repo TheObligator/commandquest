@@ -99,13 +99,16 @@ export function nameTerms(text: string): string {
 export const NOT_CARDS = "-is:token -t:emblem -layout:art_series";
 
 /**
- * Hidden unless the player asks for them: digital-only printings (Alchemy, Arena and MTGO cards) and
- * Un-cards (silver border, acorn). A card with a paper printing shows that one instead of a digital one.
+ * Hidden unless the player asks for them: digital-only printings (Alchemy, Arena and MTGO cards),
+ * Un-cards (silver border, acorn), and other formats' cards that never go in a deck (planes,
+ * phenomena, schemes, conspiracies, dungeons, Vanguard). A card with a paper printing shows that one
+ * instead of a digital one.
  */
-export const ODD_CARDS = "-is:digital -is:funny";
+export const ODD_CARDS = "-is:digital -is:funny -layout:planar -layout:scheme -layout:vanguard -t:conspiracy -t:dungeon";
 
-/** Terms that ask for digital or Un-cards, or for a set or set type, which might be one. */
-const ASKS_FOR_ODD = /(^|[\s(])(is:(alchemy|digital|funny|acorn)|(game|in):(arena|mtgo)|(border|st|settype|s|set|e|edition):\S)/i;
+/** Terms that ask for any of those, or for a set or set type, which might be one. */
+const ASKS_FOR_ODD =
+  /(^|[\s(])(is:(alchemy|digital|funny|acorn)|(game|in):(arena|mtgo)|(t|type):(plane|phenomenon|scheme|conspiracy|dungeon|vanguard)\b|layout:(planar|scheme|vanguard)|(border|st|settype|s|set|e|edition):\S)/i;
 
 /**
  * What every deck search adds to the player's query: no tokens ever, and no Alchemy or Un-cards
