@@ -17,7 +17,7 @@ import { commanderCards } from "../edhrec";
 import { compileQuery } from "../game/scryquery";
 import { localNames, startLocalSearch } from "../localsearch";
 import * as scry from "../scryfall";
-import { displayTerms, forEdhrecCards, hasOrder, joinQuery, locallyReadable, nameTerms, restrictToNames, stripDisplay } from "../searchquery";
+import { displayTerms, forEdhrecCards, hasOrder, joinQuery, locallyReadable, nameTerms, poolClause, restrictToNames, stripDisplay } from "../searchquery";
 import { BOARDS, boardLabel, boardsFor, inDeckParts } from "./boards";
 
 /** The ⓘ button, drawn in CSS (the Unicode glyph renders badly in many fonts). */
@@ -286,7 +286,7 @@ type IdentityFilter = NonNullable<ReturnType<typeof identityFilter>>;
 async function suggestWithin(text: string, identity: IdentityFilter): Promise<string[]> {
   const terms = nameTerms(text);
   if (!terms) return [];
-  const { cards } = await scry.search(`${terms} ${identity.clause} -is:token`);
+  const { cards } = await scry.search(`${terms} ${identity.clause} ${poolClause(text, false)}`);
   const off = identity.offIds(cards);
   const typed = text.trim().toLowerCase();
   const names = [...new Set(cards.filter((c) => !off.has(c.id)).map((c) => c.name))];
@@ -296,7 +296,7 @@ async function suggestWithin(text: string, identity: IdentityFilter): Promise<st
 /** Those of `names` (exact card names) the deck's commanders allow, in the same order. */
 async function keepWithin(names: string[], identity: IdentityFilter): Promise<string[]> {
   const exact = names.map((n) => `!"${n.replace(/"/g, "")}"`).join(" or ");
-  const { cards } = await scry.search(`(${exact}) ${identity.clause} -is:token`);
+  const { cards } = await scry.search(`(${exact}) ${identity.clause} ${poolClause("", false)}`);
   const off = identity.offIds(cards);
   const ok = new Set(cards.filter((c) => !off.has(c.id)).map((c) => c.name));
   return names.filter((n) => ok.has(n));
@@ -346,6 +346,8 @@ export function SearchResults(props: {
   const support = useCardSupport();
   const flips = useFlips();
   const [allColors, setAllColors] = useState(false);
+  /** Show Alchemy and Un-cards too (hidden by default). */
+  const [withOdd, setWithOdd] = useState(false);
   /** The player's pick for ranking by the commander's EDHREC list; null = the default. Kept across searches. */
   const [rankChoice, setRankChoice] = useState<boolean | null>(null);
   const [rankStatus, setRankStatus] = useState("");
@@ -368,9 +370,11 @@ export function SearchResults(props: {
   const idClause = filtered ? identity.clause : "";
   const additionsOn = !!additions.trim() && !skipAdditions;
   const added = additionsOn ? additions : "";
+  // Never tokens; Alchemy and Un-cards only when asked for.
+  const pool = poolClause(`${props.query} ${added}`, withOdd);
   // Display keywords (order:, unique:) go last and outside the parentheses.
-  const fullQuery = [joinQuery(props.query, idClause, stripDisplay(added)), displayTerms(added)].filter(Boolean).join(" ");
-  const queryWithout = joinQuery(props.query, idClause);
+  const fullQuery = [joinQuery(props.query, idClause, stripDisplay(added), pool), displayTerms(added)].filter(Boolean).join(" ");
+  const queryWithout = joinQuery(props.query, idClause, poolClause(props.query, withOdd));
   // A search for printings (unique:prints, set:, prefer:, ...) shows the printing you want; add that one.
   const exact = PRINTING_QUERY.test(fullQuery);
   const additionsFilter = additionsOn && !!stripDisplay(additions).trim();
@@ -385,7 +389,7 @@ export function SearchResults(props: {
   const readable = locallyReadable(localQuery);
   const commanderDeck = !!identity;
   const rankOn = commanderDeck && (rankChoice ?? (readable && !hasOrder(fullQuery)));
-  const filterQuery = joinQuery(props.query, idClause, stripDisplay(added));
+  const filterQuery = joinQuery(props.query, idClause, stripDisplay(added), pool);
   const commanderKey = props.commanders.map((c) => c.name).join("|");
 
   useEffect(() => {
@@ -404,7 +408,7 @@ export function SearchResults(props: {
         await scry.cardsById(list.map((e) => e.id)).catch(() => undefined);
         found = list.flatMap((e) => {
           const card = scry.cachedById(e.id);
-          return card && pred(card) ? [{ card, inclusion: e.inclusion }] : [];
+          return card && pred(card) && !scry.isTokenLike(card) ? [{ card, inclusion: e.inclusion }] : [];
         });
         if (filtered) {
           const outside = new Set(offIdentity(found.map((f) => ({ name: f.card.id, card: f.card })), props.commanders, fits, extraColor).map((e) => e.name));
@@ -435,7 +439,7 @@ export function SearchResults(props: {
   }, [rankOn, readable, localQuery, filterQuery, commanderKey, filtered, extraColor, conquest]);
 
   const rankedNames = new Set(ranked.map((r) => scry.deckName(r.card)));
-  const shown = cards.filter((c) => !off?.has(c.id) && !rankedNames.has(scry.deckName(c)));
+  const shown = cards.filter((c) => !off?.has(c.id) && !rankedNames.has(scry.deckName(c)) && !scry.isTokenLike(c));
 
   useEffect(() => {
     if (settings === undefined) return; // wait for the additions
@@ -626,6 +630,10 @@ export function SearchResults(props: {
             <input type="checkbox" checked={!allColors} onChange={(e) => setAllColors(!e.target.checked)} /> Only cards your commander allows
           </label>
         )}
+        <label className="inline" title="Alchemy: digital-only cards and rebalances. Un-cards: silver-bordered and acorn joke cards. Neither is legal in Commander.">
+          {" "}
+          <input type="checkbox" checked={withOdd} onChange={(e) => setWithOdd(e.target.checked)} /> Include Alchemy and Un-cards
+        </label>
         {commanderDeck && (
           <>
             {" "}
