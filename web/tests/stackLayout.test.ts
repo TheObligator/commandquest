@@ -51,11 +51,23 @@ test("packStacks: small groups share a column when they fit under the tallest gr
   // Commander, 1 planeswalker, 35 creatures, 5 sorceries, 6 instants (Stacked: 15% of a covered card shows).
   const groups = [{ size: 1, whole: true }, { size: 1 }, { size: 35 }, { size: 5 }, { size: 6 }];
   const shape = (cols: number) => packStacks(groups, cols, 0.15).map((s) => `${s.groups.join("+")}${s.span > 1 ? `×${s.span}` : ""}`);
-  // Four columns: the creatures stay one tall column, so everything small stacks beside them.
-  assert.deepEqual(shape(4), ["0+1", "2", "3+4"]);
-  // Six: the creatures split in two for a shorter row; the planeswalker still fits under the commander.
-  assert.deepEqual(shape(6), ["0+1", "2×2", "3", "4"]);
+  // Three columns: the creatures stay one tall column, so everything small stacks beside them.
+  assert.deepEqual(shape(3), ["0+1", "2", "3+4"]);
+  // Four: the creatures split in two; the sorceries and instants stacked are then the row's height.
+  assert.deepEqual(shape(4), ["0+1", "2×2", "3+4"]);
+  // Six: the creatures split in three for a shorter row; the planeswalker still fits under the commander.
+  assert.deepEqual(shape(6), ["0+1", "2×3", "3", "4"]);
   // No room: still one column per tall group, nothing lost.
   const tight = packStacks([{ size: 20 }, { size: 20 }, { size: 2 }], 1, 0.15);
   assert.deepEqual(tight.flatMap((s) => s.groups).sort(), [0, 1, 2]);
+});
+
+test("packStacks: a big group still splits when the small groups set the row height by stacking", async () => {
+  const { packStacks } = await import("../src/stackLayout.ts");
+  // Commander, 53 creatures, 8 instants, 5 sorceries, 3 artifacts, 6 enchantments, 9 lands.
+  const groups = [{ size: 1, whole: true }, { size: 53 }, { size: 8 }, { size: 5 }, { size: 3 }, { size: 6 }, { size: 9 }];
+  const shape = (cols: number) => packStacks(groups, cols, 0.15).map((s) => `${s.groups.join("+")}${s.span > 1 ? `×${s.span}` : ""}`);
+  // Seven columns: the creatures take three while the small types keep sharing columns.
+  assert.deepEqual(shape(7), ["0", "1×3", "2+3", "4+5", "6"]);
+  assert.deepEqual(shape(6), ["0", "1×2", "2+3", "4+5", "6"]);
 });
