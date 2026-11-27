@@ -2,6 +2,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { BusyLabel } from "../components/Spinner";
+import { reloadInto, redeemEmailCode } from "../app/emailSignIn";
 import { clearPending, newPending, normalizeCode, pending as savedPending, type Pending } from "../app/handoff";
 import { useEffect, useState } from "react";
 import { errorMessage } from "../app/errors";
@@ -49,12 +50,12 @@ export function SignIn() {
     setError("");
     setBusy(true);
     try {
-      const r = await signIn("resend", { code, email: waiting.email });
-      if (!r.signingIn) {
+      if (!(await redeemEmailCode(code, waiting.email))) {
         setError("That code didn't work. Check it, or ask for a new email.");
         return;
       }
       clearPending();
+      reloadInto(next.startsWith("/") ? next : "/decks");
     } catch (err) {
       setError("That code didn't work. Check it, or ask for a new email.");
       console.warn(errorMessage(err));

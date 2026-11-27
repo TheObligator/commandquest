@@ -1,10 +1,10 @@
 // The page a sign-in email's link opens (app/handoff.ts). In the browser that asked, it signs in.
 // Anywhere else it hands the code to that browser, which signs itself in; if nobody takes it
 // (that page was closed), it signs in here instead.
-import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvex, useMutation } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
+import { reloadInto, redeemEmailCode } from "../app/emailSignIn";
 import { clearPending, type OpenedLink } from "../app/handoff";
 import { navigate } from "../app/router";
 import { Loading } from "../components/Spinner";
@@ -12,10 +12,9 @@ import { Loading } from "../components/Spinner";
 /** How long the asking page gets to take the code before this device signs in itself. */
 const WAIT_MS = 15_000;
 
-type State = "working" | "elsewhere" | "here" | "failed";
+type State = "working" | "elsewhere" | "failed";
 
 export function SignInLink({ link, onDone }: { link: OpenedLink; onDone: () => void }) {
-  const { signIn } = useAuthActions();
   const convex = useConvex();
   const approve = useMutation(api.signinHandoff.approve);
   const claim = useMutation(api.signinHandoff.claim);
@@ -26,12 +25,9 @@ export function SignInLink({ link, onDone }: { link: OpenedLink; onDone: () => v
     if (started.current) return; // Strict mode runs effects twice; the code works once.
     started.current = true;
     const signInHere = async (code: string) => {
-      const r = await signIn("resend", { code, email: link.email });
-      if (!r.signingIn) throw new Error("code not accepted");
+      if (!(await redeemEmailCode(code, link.email))) throw new Error("code not accepted");
       clearPending();
-      setState("here");
-      onDone();
-      navigate("/decks", true);
+      reloadInto("/decks"); // App then goes on to wherever sign-in started
     };
     void (async () => {
       try {
