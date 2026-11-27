@@ -78,8 +78,9 @@ required reviewer, so nothing reaches the public site without a click.
 
 ## Not covered yet
 
-CI tests the Java game server but doesn't deploy it: it runs on the Mac (docs/game-host.md), which
-deploys a new `web` itself when no game is running (`game-service.sh auto-on`).
+CI tests the Java game server but doesn't deploy it: it runs on the Mac (docs/game-host.md), as two
+servers, one per site. Each deploys a new push of its branch (`web` for staging, `live` for
+production) itself when no game is running (`game-service.sh auto-on`).
 
 ## Nightly card names
 
