@@ -88,7 +88,7 @@ export function ManaCurve({ cards }: { cards: Entry[] }) {
           return (
             <div
               key={i}
-              className={`bar-col${here ? " open" : ""}${picked === i ? " picked" : ""}${sums[i] ? "" : " empty"}`}
+              className={`bar-col${here ? " open" : ""}${picked === i ? " picked" : ""}${sums[i] ? "" : " no-cards"}`}
               onClick={() => sums[i] && pick(i)}
               title={sums[i] ? (picked === i ? "Click to close" : `Click for the cards at mana value ${label(i)} and the chance to cast them on curve`) : undefined}
             >
