@@ -6,6 +6,7 @@
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../convex/_generated/api";
 import { authStorageKeys } from "./authStorage";
+import { setItemMakingRoom } from "./storageRoom";
 
 /**
  * Signs this browser in with an email code: true once the session is saved. The caller then
@@ -24,8 +25,8 @@ export async function redeemEmailCode(code: string, email: string): Promise<bool
   const tokens = result?.tokens;
   if (!tokens) return false;
   const keys = authStorageKeys(url);
-  localStorage.setItem(keys.jwt, tokens.token);
-  localStorage.setItem(keys.refreshToken, tokens.refreshToken);
+  setItemMakingRoom(localStorage, keys.jwt, tokens.token);
+  setItemMakingRoom(localStorage, keys.refreshToken, tokens.refreshToken);
   return true;
 }
 

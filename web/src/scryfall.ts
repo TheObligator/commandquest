@@ -9,6 +9,7 @@
 //  - The browser's own User-Agent is left intact and an Accept header is sent.
 //  - Card data is cached in localStorage for 7 days (Scryfall asks for at least 24h).
 
+import { capJson } from "./app/storageRoom";
 import type { DeckCard } from "../convex/model/deckRules";
 import { probes, rank } from "./didyoumean";
 import { choosePrinting, type Print, type PrintingPref } from "./printings";
@@ -156,9 +157,12 @@ async function getJson<T>(url: string, init?: RequestInit, retries = MAX_429_RET
 // Bump the version when `trim` keeps new fields, so old entries without them are dropped.
 const STORE_KEY = "cq.scryfall.cards.v6"; // v6 keeps oracle_id
 // Card data rarely changes (a ban updates legality), and a deck opened again within the week then
-// needs no lookups. The size cap, not the age, is what keeps this within localStorage's ~5 MB.
+// needs no lookups. The size caps, not the age, keep this well within localStorage's limit (about
+// 5.2 million characters in Chrome), which the signed-in session shares: a full one broke sign-in.
 const TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_STORED = 1500;
+/** Most characters the card cache may take (a card is about 2,600). */
+export const MAX_STORED_CHARS = 1_500_000;
 
 const byId = new Map<string, ScryCard>();
 const byName = new Map<string, ScryCard>();
@@ -209,6 +213,7 @@ function loadStore() {
         storedAt.set(card.id, at);
       }
     }
+    if (raw.length > MAX_STORED_CHARS) saveStore(); // saved before the cap: shrink it now
   } catch {
     // Storage blocked or corrupt: just use the network.
   }
@@ -224,7 +229,7 @@ function saveStore() {
       .map(([id, at]) => [at, byId.get(id)] as const)
       .filter(([, c]) => c);
     try {
-      localStorage.setItem(STORE_KEY, JSON.stringify(entries));
+      localStorage.setItem(STORE_KEY, capJson(entries, MAX_STORED_CHARS));
     } catch {
       // Over quota or blocked: the memory cache still works for this visit.
     }
