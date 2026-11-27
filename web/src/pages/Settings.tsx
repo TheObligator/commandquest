@@ -317,6 +317,15 @@ function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
 
   useEffect(() => ref.current?.showModal(), []);
 
+  async function copyWord() {
+    try {
+      await navigator.clipboard.writeText(DELETE_WORD);
+      toast(`Copied “${DELETE_WORD}”`);
+    } catch {
+      toast("Couldn't copy to the clipboard", "error");
+    }
+  }
+
   async function confirm(e: React.FormEvent) {
     e.preventDefault();
     if (!confirmsDeletion(typed)) return;
@@ -344,10 +353,19 @@ function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
             : "All your decks, packages and replays go with it. "}
           Export any deck you want to keep first.
         </p>
-        <label>
-          Type <strong>{DELETE_WORD}</strong> to confirm
-          <input value={typed} onChange={(e) => setTyped(e.target.value)} autoFocus autoComplete="off" spellCheck={false} disabled={busy} />
-        </label>
+        <div className="field">
+          <span className="field-label delete-confirm-prompt" id="delete-confirm-label">
+            Type <strong>{DELETE_WORD}</strong>
+            <button type="button" className="copy-word" onClick={copyWord} title={`Copy “${DELETE_WORD}”`} aria-label={`Copy “${DELETE_WORD}”`}>
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
+                <path d="M10.5 3.5v-.5A1.5 1.5 0 0 0 9 1.5H3A1.5 1.5 0 0 0 1.5 3v6A1.5 1.5 0 0 0 3 10.5h.5" />
+              </svg>
+            </button>
+            to confirm
+          </span>
+          <input aria-labelledby="delete-confirm-label" value={typed} onChange={(e) => setTyped(e.target.value)} autoFocus autoComplete="off" spellCheck={false} disabled={busy} />
+        </div>
         <p className="form-error" role="alert">{error}</p>
         <div className="actions new-deck-actions">
           <button type="button" className="btn ghost" disabled={busy} onClick={() => ref.current?.close()}>Cancel</button>
