@@ -6,6 +6,7 @@ import { navigate, useRoute } from "./router";
 import { UpdateNotice } from "./UpdateNotice";
 import { CreateMenu } from "../components/CreateMenu";
 import { BrandMark } from "../components/BrandMark";
+import { CONTACT_EMAIL } from "../pages/Legal";
 
 /** `full`: the page uses the whole window width (the game table). */
 export function Layout({ children, full }: { children: React.ReactNode; full?: boolean }) {
@@ -30,6 +31,12 @@ export function Layout({ children, full }: { children: React.ReactNode; full?: b
         {children}
       </main>
       <footer className="footer">
+        <nav className="footer-links" aria-label="About this site">
+          <a href="#/about">About</a>
+          <a href="#/privacy">Privacy</a>
+          <a href="#/terms">Terms</a>
+          <a href={`mailto:${CONTACT_EMAIL}`}>Contact</a>
+        </nav>
         Rules engine by <a href="https://github.com/Card-Forge/forge" target="_blank" rel="noopener">Forge</a>. Card data and images from{" "}
         <a href="https://scryfall.com" target="_blank" rel="noopener">Scryfall</a> (not endorsed by Scryfall).
         <br />

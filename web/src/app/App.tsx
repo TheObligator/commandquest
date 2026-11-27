@@ -5,6 +5,7 @@ import { SignInLink } from "../pages/SignInLink";
 import { DeckList } from "../pages/DeckList";
 import { Editor, PackageEditor } from "../pages/Editor";
 import { Landing } from "../pages/Landing";
+import { About, Privacy, Terms } from "../pages/Legal";
 import { Packages } from "../pages/Packages";
 import { Play } from "../pages/Play";
 import { Precons } from "../pages/Precons";
@@ -61,6 +62,9 @@ export function App() {
   if (link) page = <SignInLink link={link} onDone={() => (tidyUrl(true), setLink(null))} />;
   else if (route.path === "/") page = <Landing />;
   else if (route.path === "/signin") page = <SignIn />;
+  else if (route.path === "/about") page = <About />;
+  else if (route.path === "/privacy") page = <Privacy />;
+  else if (route.path === "/terms") page = <Terms />;
   else if (route.path === "/play") page = <Play />;
   else if (route.path === "/table") page = <Table />;
   else if (route.path === "/settings") page = <Settings />;

@@ -109,6 +109,20 @@ label.inline select { width: auto; padding: 5px 8px; }
 .account .user { color: var(--muted); font-weight: 500; }
 
 .footer { text-align: center; color: var(--muted); font-size: .8rem; padding: 20px 16px 28px; border-top: 1px solid var(--line); }
+.footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 18px; margin-bottom: 8px; font-size: .85rem; }
+.footer-links a { color: var(--text); }
+
+/* ---- About, Privacy, Terms (pages/Legal.tsx) ---- */
+.legal { max-width: 720px; margin: 0 auto; }
+.legal h1 { margin-bottom: 4px; }
+.legal .legal-sub { color: var(--muted); font-size: .85rem; margin: 0 0 18px; }
+.legal h2 { font-size: 1.1rem; color: var(--accent-2); margin: 26px 0 6px; }
+.legal p, .legal li { color: #cfd2d9; }
+.legal p { margin: 0 0 10px; }
+.legal ul { padding-left: 22px; margin: 6px 0 10px; }
+.legal li { line-height: 1.55; margin-bottom: 4px; }
+.legal-box { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin: 0 0 6px; }
+.legal-box p { margin: 0; }
 
 /* ---- Landing ---- */
 .hero {

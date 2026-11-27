@@ -143,6 +143,9 @@ export function SignIn() {
           <button className="btn ghost wide" onClick={() => void oauth("discord")}>Continue with Discord</button>
         </div>
         {error && <p className="form-error" role="alert">{error}</p>}
+        <p className="muted small">
+          By signing in you agree to the <a href="#/terms">Terms</a> and <a href="#/privacy">Privacy Policy</a>.
+        </p>
       </div>
     </div>
   );
