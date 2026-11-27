@@ -3,7 +3,7 @@
 
 import { h, manaCost, rulesText } from "./dom";
 import { cardLegality } from "./formats/conquest";
-import { artistOf, hasBackImage, imageUrl, rulings, type CardFace, type ScryCard } from "./scryfall";
+import { artistOf, hasBackImage, imageUrl, isSideways, rulings, type CardFace, type ScryCard } from "./scryfall";
 
 const LEGALITY_FORMATS: [string, string][] = [
   ["commander", "Commander"], ["standard", "Standard"], ["pioneer", "Pioneer"], ["modern", "Modern"],
@@ -23,23 +23,21 @@ const spinner = () => h("span", { class: "spin", "aria-hidden": "true" });
 export function showCardDetails(card: ScryCard, actions: CardDetailAction[] = []) {
   // A double-faced card shows both faces side by side: front on the left, back on the right.
   const twoFaces = hasBackImage(card);
-  // A battle's front is printed sideways; turn it so it reads like a normal card.
-  const sideways = (face: number) => face === 0 && /\bBattle\b/.test(card.card_faces?.[0]?.type_line ?? card.type_line ?? "");
   const faceImage = (face: number) => {
     const img = h("img", { class: "detail-img big-img-full", alt: card.card_faces?.[face]?.name ?? card.name });
     // The small image (usually loaded already), enlarged under a spinner, until the large one is here.
     const small = imageUrl(card, "normal", face);
-    const kind = sideways(face) ? "big-img landscape" : "big-img";
-    const box = h("span", { class: `${kind} loading` }, small && h("img", { class: "big-img-small detail-img", src: small, alt: "" }), img, h("span", { class: "big-img-spin" }, spinner()));
-    const done = (state: string) => (box.className = `${kind} ${state}`);
+    const box = h("span", { class: "big-img loading" }, small && h("img", { class: "big-img-small detail-img", src: small, alt: "" }), img, h("span", { class: "big-img-spin" }, spinner()));
+    const done = (state: string) => (box.className = `big-img ${state}`);
     img.onload = () => done("here");
     img.onerror = () => done("failed");
     img.src = imageUrl(card, "large", face) ?? "";
     if (img.complete && img.naturalWidth) done("here");
-    return box;
+    // Printed sideways (a battle's front, split cards): turned so it reads like a normal card.
+    return isSideways(card, face) ? h("span", { class: "sideways" }, h("span", { class: "sideways-turn" }, box)) : box;
   };
   const image = twoFaces
-    ? h("div", { class: sideways(0) ? "detail-image faces battle" : "detail-image faces" },
+    ? h("div", { class: isSideways(card, 0) ? "detail-image faces battle" : "detail-image faces" },
         ...[0, 1].map((face) => h("figure", { class: "detail-face" }, faceImage(face), h("figcaption", null, face ? "Back" : "Front"))))
     : h("div", { class: "detail-image" }, faceImage(0));
 

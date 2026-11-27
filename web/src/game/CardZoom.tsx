@@ -5,7 +5,7 @@
 //   Scryfall oracle text next to it (every face), plus what's on it in this game.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { manaCost, rulesText } from "../dom";
-import { cached, imageUrl, rulings, type CardFace, type Ruling } from "../scryfall";
+import { cached, imageUrl, isSideways, rulings, type CardFace, type Ruling } from "../scryfall";
 import { NoPicture } from "../components/CardImg";
 import { Spinner, Waiting } from "../components/Spinner";
 import { CardBack, cardImage, tokenImage, useCardLookup, type Preview } from "./cards";
@@ -22,6 +22,17 @@ function bigImage(card: CardView): string | undefined {
   if (card.token) return tokenImage(card);
   const sc = card.name ? cached({ name: card.name, quantity: 1, board: "main" }) : undefined;
   return sc && imageUrl(sc, "large");
+}
+
+/** Printed sideways (a battle, a split card): shown turned so it reads like a normal card. */
+function sideways(card: CardView): boolean {
+  if (card.hidden || card.token || !card.name) return false;
+  const sc = cached({ name: card.name, quantity: 1, board: "main" });
+  return !!sc && isSideways(sc);
+}
+/** The image, turned a quarter clockwise in a landscape box when the card is printed sideways. */
+function Turned({ on, children }: { on: boolean; children: React.ReactNode }) {
+  return on ? <span className="sideways"><span className="sideways-turn">{children}</span></span> : <>{children}</>;
 }
 
 /** Large images already asked for in this tab, so each is fetched once. */
@@ -124,11 +135,11 @@ export function HoverZoom({ preview }: { preview: Preview | null }) {
   const card = shown.card;
   const src = bigImage(card);
   return (
-    <div ref={ref} className="hover-zoom" style={pos ?? { left: -9999, top: 0 }} aria-hidden>
+    <div ref={ref} className={`hover-zoom${src && sideways(card) ? " is-sideways" : ""}`} style={pos ?? { left: -9999, top: 0 }} aria-hidden>
       {card.hidden ? (
         <CardBack />
       ) : src ? (
-        <BigImage src={src} small={smallImage(card)} alt="" />
+        <Turned on={sideways(card)}><BigImage src={src} small={smallImage(card)} alt="" /></Turned>
       ) : (
         <div className="hz-tile">
           <strong>{card.name}</strong>
@@ -250,7 +261,7 @@ export function CardInspect({ card, loadDetails, ownerName, onClose }: {
     >
       <button className="dialog-close" aria-label="Close" onClick={() => ref.current?.close()}>×</button>
       <div className="ci-grid">
-        <div className="ci-image">{src ? <BigImage src={src} small={smallImage(card)} alt={card.name ?? ""} /> : card.hidden ? <CardBack /> : <div className="hz-tile"><strong>{card.name}</strong><ImageWait card={card} /></div>}</div>
+        <div className="ci-image">{src ? <Turned on={sideways(card)}><BigImage src={src} small={smallImage(card)} alt={card.name ?? ""} /></Turned> : card.hidden ? <CardBack /> : <div className="hz-tile"><strong>{card.name}</strong><ImageWait card={card} /></div>}</div>
         <div className="ci-text">
           <div className="ci-head">
             <h2>{card.hidden ? "Face-down card" : card.name}</h2>

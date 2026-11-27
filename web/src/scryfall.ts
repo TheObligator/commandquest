@@ -634,6 +634,15 @@ export function imageUrl(c: ScryCard, size: keyof ImageUris = "normal", face = 0
 }
 
 /** True when the card has a separate image for its back face. */
+/**
+ * Whether this face is printed sideways, so it reads turned a quarter clockwise: a battle's front,
+ * split cards and Rooms (one image for both halves). Not Aftermath, whose top half reads upright.
+ */
+export function isSideways(c: ScryCard, face = 0): boolean {
+  if (c.layout === "split") return !c.keywords?.includes("Aftermath");
+  return face === 0 && /\bBattle\b/.test(c.card_faces?.[0]?.type_line ?? c.type_line ?? "");
+}
+
 export function hasBackImage(c: ScryCard): boolean {
   return Boolean(c.card_faces?.[1]?.image_uris);
 }

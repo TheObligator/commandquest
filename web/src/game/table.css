@@ -359,6 +359,8 @@ dialog.zone-viewer { width: min(980px, calc(100vw - 32px)); max-height: 86vh; ba
 .hover-zoom { position: fixed; z-index: 80; width: min(320px, 40vw, calc((100dvh - 64px) * 0.7176)); pointer-events: none; filter: drop-shadow(0 14px 30px rgb(0 0 0 / 65%)); }
 .hover-zoom img, .hover-zoom .card-back { display: block; width: 100%; aspect-ratio: 488 / 680; border-radius: 4.75% / 3.5%; }
 .hover-zoom .card-back { --cw: 320px; }
+/* Printed sideways (a battle, a split card): as tall as the upright zoom is wide. */
+.hover-zoom.is-sideways { width: min(446px, 56vw, calc((100dvh - 64px) * 1.3934)); }
 .hz-tile { aspect-ratio: 488 / 680; display: grid; place-content: center; gap: 8px; text-align: center; padding: 16px; border-radius: 4.75% / 3.5%; background: linear-gradient(160deg, #2a2f3c, #171a22); border: 1px solid var(--line); }
 .hz-tile strong { font-size: 1.2rem; }
 .hz-tile span { color: var(--muted); }
