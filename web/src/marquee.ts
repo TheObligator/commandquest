@@ -21,7 +21,8 @@ export function visibleParts(boxes: Box[]): Box[] {
       const o = boxes[j];
       if (o.left < b.right && o.right > b.left && o.top > b.top && o.top < bottom) bottom = o.top;
     }
-    return { ...b, bottom };
+    // Copied field by field: a browser's DOMRect keeps these as getters, which `...b` would drop.
+    return { left: b.left, top: b.top, right: b.right, bottom };
   });
 }
 

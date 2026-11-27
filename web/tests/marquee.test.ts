@@ -29,3 +29,21 @@ test("cards side by side, or in another column, don't hide each other", () => {
 test("touching an edge isn't catching", () => {
   assert.deepEqual(caught(boxBetween(150, 0, 160, 10), visibleParts([card(0, 0)])), []);
 });
+
+test("works on boxes whose sides are getters, like the browser's DOMRect", () => {
+  class Rect {
+    x: number;
+    y: number;
+    constructor(x: number, y: number) {
+      this.x = x;
+      this.y = y;
+    }
+    get left() { return this.x; }
+    get top() { return this.y; }
+    get right() { return this.x + 150; }
+    get bottom() { return this.y + 209; }
+  }
+  const vis = visibleParts([new Rect(0, 0), new Rect(0, 22)]);
+  assert.deepEqual(vis[0], { left: 0, top: 0, right: 150, bottom: 22 });
+  assert.deepEqual(caught(boxBetween(-10, 5, 40, 300), vis), [0, 1]);
+});
