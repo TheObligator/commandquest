@@ -8,6 +8,8 @@ import { mutation, query } from "./_generated/server";
 import { confirmsDeletion } from "./model/account";
 import { unlink } from "./replays";
 import { leaveCurrent } from "./tables";
+import { internal } from "./_generated/api";
+import { purgeUserSocial } from "./social";
 
 /** What deleting your account would take with it, for the confirm dialog. */
 export const summary = query({
@@ -23,7 +25,8 @@ export const summary = query({
 });
 
 /**
- * Deletes the signed-in user and everything that's theirs: decks (with their combos), folders,
+ * Deletes the signed-in user and everything that's theirs: decks (with their combos, and later their
+ * comments, likes and changelog), their likes, favorites and comments on others' decks, folders,
  * packages, settings, stop presets, their hold on replays (a replay goes once nobody keeps it), their
  * seat at a table (as if they left: the host passes on, an empty table goes), and their sign-in
  * accounts and sessions. The client signs out afterwards.
@@ -40,7 +43,9 @@ export const deleteAccount = mutation({
         await ctx.db.delete(c._id);
       }
       await ctx.db.delete(deck._id);
+      await ctx.scheduler.runAfter(0, internal.social.purgeDeck, { deckId: deck._id });
     }
+    await purgeUserSocial(ctx, userId);
     for (const p of await ctx.db.query("packages").withIndex("by_user_updated", (q) => q.eq("userId", userId)).collect()) {
       await ctx.db.delete(p._id);
     }

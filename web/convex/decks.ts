@@ -9,6 +9,10 @@ import { DEFAULT_GROUPING, isGroupBy } from "../src/deckGroups";
 import { withSaved } from "../src/game/abilities";
 import { canSaveLater, withSavedLater, type LaterSpec } from "../src/game/later";
 import { deckCard, laterSpec } from "./schema";
+import { internal } from "./_generated/api";
+import { recordChange } from "./changelog";
+import { newShareKey, refreshSharing } from "./sharing";
+import { cleanColors, NEW_DECK_VISIBILITY, visibilityOf } from "./model/sharing";
 
 // Every function is scoped to the signed-in user: nobody can read or change another user's decks.
 
@@ -41,6 +45,14 @@ const deckArgs = {
   bracketTags: v.optional(v.array(v.string())),
   /** The owner's description of the deck: Tiptap JSON (model/richText.ts). */
   description: v.optional(v.string()),
+  /** The deck's colors as the editor works them out (WUBRG, "" colorless), for the deck search; absent = unknown, keep what's saved. */
+  colors: v.optional(v.string()),
+};
+
+/** `colors` to store, when the client knows them. */
+const colorsPatch = (colors: string | undefined) => {
+  const c = cleanColors(colors);
+  return c === undefined ? {} : { colors: c };
 };
 
 export const list = query({
@@ -53,7 +65,22 @@ export const list = query({
       .withIndex("by_user_updated", (q) => q.eq("userId", userId))
       .order("desc")
       .take(MAX_DECKS_PER_USER);
-    return decks.map((d) => ({ _id: d._id, name: d.name, format: d.format, bracket: d.bracket, folderId: d.folderId, updatedAt: d.updatedAt, extraColor: d.extraColor, colorCards: colorCards(d.cards), ...summarize(d.cards, d.format === CARD_LIST) }));
+    return decks.map((d) => ({
+      _id: d._id,
+      name: d.name,
+      format: d.format,
+      bracket: d.bracket,
+      folderId: d.folderId,
+      updatedAt: d.updatedAt,
+      extraColor: d.extraColor,
+      colorCards: colorCards(d.cards),
+      visibility: visibilityOf(d.visibility),
+      shareKey: d.shareKey,
+      commentsOff: d.commentsOff,
+      likes: d.likes ?? 0,
+      views: d.views ?? 0,
+      ...summarize(d.cards, d.format === CARD_LIST),
+    }));
   },
 });
 
@@ -94,13 +121,25 @@ async function checkFolder(ctx: QueryCtx, userId: Id<"users">, folderId: Id<"dec
 
 export const create = mutation({
   args: { ...deckArgs, folderId: v.optional(v.id("deckFolders")) },
-  handler: async (ctx, { folderId, ...args }) => {
+  handler: async (ctx, { folderId, colors, ...args }) => {
     const userId = await requireUser(ctx);
     const deck = checked(args);
     if (folderId) await checkFolder(ctx, userId, folderId);
     const count = (await ctx.db.query("decks").withIndex("by_user_updated", (q) => q.eq("userId", userId)).take(MAX_DECKS_PER_USER)).length;
     if (count >= MAX_DECKS_PER_USER) throw new ConvexError(`You can save up to ${MAX_DECKS_PER_USER} decks.`);
-    return await ctx.db.insert("decks", { userId, ...deck, ...(folderId ? { folderId } : {}), updatedAt: Date.now() });
+    const now = Date.now();
+    const id = await ctx.db.insert("decks", {
+      userId,
+      ...deck,
+      ...(folderId ? { folderId } : {}),
+      ...colorsPatch(colors),
+      visibility: NEW_DECK_VISIBILITY,
+      shareKey: newShareKey(),
+      updatedAt: now,
+    });
+    await recordChange(ctx, id, null, deck, now);
+    await refreshSharing(ctx, id);
+    return id;
   },
 });
 
@@ -119,11 +158,15 @@ export const move = mutation({
 
 export const update = mutation({
   args: { id: v.id("decks"), ...deckArgs },
-  handler: async (ctx, { id, ...args }) => {
+  handler: async (ctx, { id, colors, ...args }) => {
     const userId = await requireUser(ctx);
     const existing = await ctx.db.get(id);
     if (!existing || existing.userId !== userId) throw new ConvexError("Deck not found.");
-    await ctx.db.patch(id, { ...checked(args), updatedAt: Date.now() });
+    const deck = checked(args);
+    const now = Date.now();
+    await ctx.db.patch(id, { ...deck, ...colorsPatch(colors), updatedAt: now });
+    await recordChange(ctx, id, existing, deck, now);
+    await refreshSharing(ctx, id);
   },
 });
 
@@ -136,7 +179,10 @@ export const addCards = mutation({
     if (!existing || existing.userId !== userId) throw new ConvexError("Deck not found.");
     const merged = withCardsAdded(existing.cards, cards, existing.format === CARD_LIST);
     const deck = rules(() => validateDeck({ name: existing.name, format: existing.format, cards: merged, extraColor: existing.extraColor, bracket: existing.bracket, bracketTags: existing.bracketTags }));
-    await ctx.db.patch(id, { cards: deck.cards, updatedAt: Date.now() });
+    const now = Date.now();
+    await ctx.db.patch(id, { cards: deck.cards, updatedAt: now });
+    await recordChange(ctx, id, existing, { ...existing, cards: deck.cards }, now);
+    await refreshSharing(ctx, id);
   },
 });
 
@@ -149,6 +195,8 @@ export const remove = mutation({
     await ctx.db.delete(id);
     const combos = await ctx.db.query("deckCombos").withIndex("by_deck", (q) => q.eq("deckId", id)).unique();
     if (combos) await ctx.db.delete(combos._id);
+    // Its card index, likes, favorites, views, comments and changelog.
+    await ctx.scheduler.runAfter(0, internal.social.purgeDeck, { deckId: id });
   },
 });
 

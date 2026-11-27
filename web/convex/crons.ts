@@ -6,4 +6,7 @@ const crons = cronJobs();
 // Tables everyone walked away from without leaving (closed the tab) are closed (convex/tables.ts).
 crons.interval("close idle tables", { hours: 1 }, internal.tables.cleanup, {});
 
+// Views are only remembered long enough to count each viewer once a day (convex/social.ts).
+crons.interval("forget old deck views", { hours: 6 }, internal.social.forgetViews, {});
+
 export default crons;

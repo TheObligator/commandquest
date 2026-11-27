@@ -4,6 +4,8 @@ import { v } from "convex/values";
 
 export const board = v.union(v.literal("commander"), v.literal("main"), v.literal("side"), v.literal("maybe"));
 
+export const visibility = v.union(v.literal("public"), v.literal("unlisted"), v.literal("private"));
+
 export const deckCard = v.object({
   name: v.string(),
   quantity: v.number(),
@@ -82,7 +84,104 @@ export default defineSchema({
     /** The folder the player filed this deck in (convex/folders.ts); absent = not in a folder. */
     folderId: v.optional(v.id("deckFolders")),
     updatedAt: v.number(),
-  }).index("by_user_updated", ["userId", "updatedAt"]),
+    // ---- Sharing (convex/sharing.ts, convex/model/sharing.ts) ----
+    /** public, unlisted or private; absent = private (decks saved before sharing existed). */
+    visibility: v.optional(visibility),
+    /** The deck's share link, `#/d/<shareKey>`: made the first time it's shared, then kept. */
+    shareKey: v.optional(v.string()),
+    /** The deck's colors as the owner's client worked them out (WUBRG letters, "" colorless), for the color filter. */
+    colors: v.optional(v.string()),
+    /** Public decks: name and author, for the deck search's name box. */
+    searchText: v.optional(v.string()),
+    /** Public decks: the commanders' names, for the deck search's commander box. */
+    commanderText: v.optional(v.string()),
+    /** The author's username when the deck was last saved or shared, shown on it. */
+    author: v.optional(v.string()),
+    likes: v.optional(v.number()),
+    views: v.optional(v.number()),
+    comments: v.optional(v.number()),
+    /** The owner turned comments off: none can be added, and the ones there are hidden. */
+    commentsOff: v.optional(v.boolean()),
+  })
+    .index("by_user_updated", ["userId", "updatedAt"])
+    .index("by_share_key", ["shareKey"])
+    .index("by_visibility_updated", ["visibility", "updatedAt"])
+    .index("by_visibility_likes", ["visibility", "likes"])
+    .index("by_visibility_views", ["visibility", "views"])
+    .searchIndex("search_text", { searchField: "searchText", filterFields: ["visibility"] })
+    .searchIndex("search_commander", { searchField: "commanderText", filterFields: ["visibility"] }),
+
+  /** Public decks' cards, one row per card name (convex/sharing.ts), for searching decks by card. */
+  deckCardIndex: defineTable({
+    deckId: v.id("decks"),
+    key: v.string(),
+  })
+    .index("by_key", ["key", "deckId"])
+    .index("by_deck", ["deckId"]),
+
+  /** Who liked which shared deck (convex/social.ts). The deck keeps the count. */
+  deckLikes: defineTable({
+    deckId: v.id("decks"),
+    userId: v.id("users"),
+  })
+    .index("by_deck_user", ["deckId", "userId"])
+    .index("by_user", ["userId"]),
+
+  /** Shared decks players keep in their favorites (convex/social.ts). */
+  deckFavorites: defineTable({
+    deckId: v.id("decks"),
+    userId: v.id("users"),
+    at: v.number(),
+  })
+    .index("by_user_at", ["userId", "at"])
+    .index("by_deck_user", ["deckId", "userId"]),
+
+  /** Recent views of shared decks, so each viewer counts once a day (convex/social.ts). Forgotten after two days. */
+  deckViews: defineTable({
+    deckId: v.id("decks"),
+    /** The signed-in viewer's user id, or the browser's own random id. */
+    viewer: v.string(),
+    day: v.number(),
+    at: v.number(),
+  })
+    .index("by_deck_viewer_day", ["deckId", "viewer", "day"])
+    .index("by_deck", ["deckId"])
+    .index("by_at", ["at"]),
+
+  /**
+   * A deck's changelog (convex/changelog.ts): each entry is one sitting's edits, kept open while
+   * they keep coming and closed after an hour without one. Card changes are net: a card added and
+   * taken out again in the same sitting doesn't show.
+   */
+  deckChanges: defineTable({
+    deckId: v.id("decks"),
+    startedAt: v.number(),
+    /** The last edit in this entry. */
+    at: v.number(),
+    /** Net copies added (+) or taken out (-), by card and board. */
+    cards: v.array(v.object({ name: v.string(), board, delta: v.number() })),
+    /** Other changes: name, format, bracket, as "from → to" by what changed. */
+    fields: v.optional(v.array(v.object({ field: v.string(), from: v.string(), to: v.string() }))),
+    /** The deck was made in this entry (with these cards). */
+    created: v.optional(v.boolean()),
+  }).index("by_deck_at", ["deckId", "at"]),
+
+  /** Comments on shared decks, and replies to them (convex/social.ts). */
+  deckComments: defineTable({
+    deckId: v.id("decks"),
+    /** Absent once the comment is deleted but kept for the replies under it. */
+    userId: v.optional(v.id("users")),
+    /** The comment this one replies to; absent for a comment on the deck itself. */
+    parentId: v.optional(v.id("deckComments")),
+    body: v.string(),
+    createdAt: v.number(),
+    editedAt: v.optional(v.number()),
+    /** Deleted, but replies hang off it, so it stays as "deleted". */
+    deleted: v.optional(v.boolean()),
+  })
+    .index("by_deck_created", ["deckId", "createdAt"])
+    .index("by_parent", ["parentId"])
+    .index("by_user_created", ["userId", "createdAt"]),
 
   /** Folders players sort their decks into (convex/folders.ts). Deleting one leaves its decks unfiled. */
   deckFolders: defineTable({

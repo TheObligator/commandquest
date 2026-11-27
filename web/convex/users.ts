@@ -2,6 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { checkUsername, displayName } from "../src/username";
 import { mutation, query } from "./_generated/server";
+import { refreshAuthor } from "./sharing";
 
 /**
  * The signed-in user, or null. `name` is what other players see: the username, else the sign-in
@@ -39,6 +40,7 @@ export const setUsername = mutation({
       .first();
     if (taken && taken._id !== userId) throw new ConvexError("That username is taken.");
     await ctx.db.patch(userId, { username: check.username, usernameKey: check.key });
+    await refreshAuthor(ctx, userId);
     return check.username;
   },
 });
