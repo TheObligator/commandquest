@@ -3,19 +3,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import type { DeckCard } from "../../convex/model/deckRules";
 import { errorMessage } from "../app/errors";
-import { closeOnBackdrop, showCardDetails } from "../carddetails";
-import { CardViewToggle, useCardView, useStackColumns } from "../cardView";
-import { columnSpans, columnsOf, stackColClass } from "../stackLayout";
+import { closeOnBackdrop } from "../carddetails";
+import { CardViewToggle, useCardView } from "../cardView";
 import { mergeDuplicates } from "../decklist";
 import { toast } from "../dom";
-import { ManaCost } from "../components/ManaCost";
-import { CardImg } from "../components/CardImg";
-import { BusyLabel, CoverWait, DeckSkeletons, Loading, Waiting } from "../components/Spinner";
+import { ReadOnlyDeck, type Lookup } from "../components/ReadOnlyDeck";
+import { BusyLabel, CoverWait, DeckSkeletons } from "../components/Spinner";
 import { cardCount, cardImage, cardKey, deckCards, loadPreconCards, loadPrecons, matches, releaseLabel, type Precon, type PreconCardData } from "../precons";
 import * as scry from "../scryfall";
-import { useCardPreview } from "../useCardPreview";
-import { FlipButton, useFlips } from "../components/FlipButton";
-import { TYPE_ORDER } from "../deckGroups";
 
 type Kind = Precon["kind"];
 
@@ -167,14 +162,6 @@ export function Precons() {
   );
 }
 
-interface Group {
-  key: string;
-  label: string;
-  cards: DeckCard[];
-}
-
-type Lookup = (c: DeckCard) => scry.ScryCard | undefined;
-
 /** Enough of a Scryfall card to show and sort it, from the deck's baked data (no rules text). */
 function bakedCard(name: string, [id, set, collectorNumber, cmc, typeLine, manaCost, back]: PreconCardData): scry.ScryCard {
   const uris = (b: boolean) => ({ small: cardImage(id, "small", b), normal: cardImage(id, "normal", b), large: cardImage(id, "large", b), art_crop: cardImage(id, "art_crop", b) });
@@ -183,50 +170,13 @@ function bakedCard(name: string, [id, set, collectorNumber, cmc, typeLine, manaC
   else card.image_uris = uris(false);
   return card;
 }
-const total = (cards: DeckCard[]) => cards.reduce((n, c) => n + c.quantity, 0);
-
-/** One entry per name (Forge lists basic lands once per art), keeping the first printing. */
-function byName(cards: DeckCard[]): DeckCard[] {
-  const merged = new Map<string, DeckCard>();
-  for (const c of cards) {
-    const had = merged.get(c.name);
-    merged.set(c.name, had ? { ...had, quantity: had.quantity + c.quantity } : c);
-  }
-  return [...merged.values()];
-}
-
-/** Commander, then the main deck by card type (cheapest first), then the sideboard. */
-function groupsOf(p: Precon, lookup: Lookup, resolved: boolean): { deck: Group[]; side: Group[] } {
-  const all = deckCards(p);
-  const board = (b: DeckCard["board"]) => byName(all.filter((c) => c.board === b));
-  const sorted = (g: DeckCard[]) => g.sort((a, z) => (lookup(a)?.cmc ?? 0) - (lookup(z)?.cmc ?? 0) || a.name.localeCompare(z.name));
-  const byType = (cards: DeckCard[], prefix: string): Group[] => {
-    if (!resolved) return cards.length ? [{ key: `${prefix}cards`, label: "Cards", cards: sorted(cards) }] : [];
-    const types = new Map<string, DeckCard[]>();
-    for (const c of cards) {
-      const t = scry.primaryType(lookup(c));
-      types.set(t, [...(types.get(t) ?? []), c]);
-    }
-    return TYPE_ORDER.filter((t) => types.has(t)).map((t) => ({ key: prefix + t, label: t, cards: sorted(types.get(t)!) }));
-  };
-  const commander = board("commander");
-  const side = board("side");
-  return {
-    deck: [...(commander.length ? [{ key: "commander", label: "Commander", cards: commander }] : []), ...byType(board("main"), "main-")],
-    side: side.length ? [{ key: "side", label: "Sideboard", cards: sorted(side) }] : [],
-  };
-}
-
 function PreconList({ precon, addButton, onClose }: { precon: Precon; addButton: React.ReactNode; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [view, setView] = useCardView();
-  const [measure, stackCols] = useStackColumns();
   // undefined while the cards load; false if they couldn't (names only).
   const [resolved, setResolved] = useState<boolean | undefined>(undefined);
   const [baked, setBaked] = useState<Map<string, scry.ScryCard> | null>(null);
   const [opening, setOpening] = useState(false);
-  const preview = useCardPreview();
-  const flips = useFlips();
   useEffect(() => ref.current?.showModal(), []);
   useEffect(() => {
     let live = true;
@@ -245,91 +195,7 @@ function PreconList({ precon, addButton, onClose }: { precon: Precon; addButton:
   }, [precon]);
 
   const lookup = useCallback<Lookup>((c) => baked?.get(cardKey(c.name, c.set, c.collectorNumber)) ?? scry.cachedExact(c) ?? scry.cached(c), [baked]);
-  const { deck, side } = useMemo(() => groupsOf(precon, lookup, resolved === true), [precon, lookup, resolved]);
-
-  /** Card details need the full card (rules text, legality), from Scryfall's cache or one lookup. */
-  const details = async (c: DeckCard) => {
-    preview.hide();
-    const id = lookup(c)?.id;
-    const asked: DeckCard = id ? { ...c, scryfallId: id } : c;
-    let full = scry.cachedExact(asked);
-    if (!full) {
-      setOpening(true);
-      try {
-        await scry.resolve([asked]);
-      } catch {
-        // Handled below.
-      } finally {
-        setOpening(false);
-      }
-      full = scry.cachedExact(asked) ?? scry.cached(c);
-    }
-    if (full) showCardDetails(full);
-    else toast(`Couldn't load ${c.name} from Scryfall`, "error");
-  };
-
-  /** A column of overlapping cards (two or three for a big type when there's room; in the grid, whole cards). Hover shows a card, click opens details. */
-  const stack = (g: Group, span = 1) => (
-    <div key={g.key} className={view === "grid" ? "grid-group" : stackColClass(span)}>
-      <h4>{g.label}<span className="muted"> {total(g.cards)}</span></h4>
-      <div className="stack-pair">
-        {columnsOf(g.cards, span).map((cards, i) => (
-          <div key={i} className={`stack ${view}`}>
-            {cards.map((c) => {
-              const s = lookup(c);
-              const face = flips.face(s);
-              const img = s && scry.imageUrl(s, "normal", face);
-              return (
-                <div key={c.name} className="flip-host">
-                  <button className="stack-card" title={s ? undefined : c.name} disabled={!s} onClick={() => void details(c)} aria-label={`${c.quantity} × ${c.name}: card details`} {...preview.handlers(s, face)}>
-                    {img ? <CardImg src={img} name={c.name} alt="" loading="lazy" /> : <span className="noimg">{c.name}</span>}
-                    {img && <span className="tile-name" aria-hidden="true">{c.name}</span>}
-                    {c.quantity > 1 && <span className="stack-qty">×{c.quantity}</span>}
-                  </button>
-                  <FlipButton card={s} face={face} onFlip={flips.toggle} />
-                </div>
-              );
-            })}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-
-  const list = (g: Group) => (
-    <div key={g.key} className="type-group">
-      <h4>{g.label}<span className="muted"> {total(g.cards)}</span></h4>
-      <ul className="flat">
-        {g.cards.map((c) => {
-          const s = lookup(c);
-          return (
-            <li key={c.name} className="card-row" {...preview.handlers(s)}>
-              <span className="qty">{c.quantity}</span>
-              {s ? <button className="cname" title="Card details" onClick={() => void details(c)}>{c.name}</button> : <span className="cname">{c.name}</span>}
-              {s && <ManaCost cost={s.mana_cost ?? s.card_faces?.map((f) => f.mana_cost).filter(Boolean).join(" // ")} />}
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-
-  const section = (title: string, groups: Group[]) =>
-    groups.length > 0 && (
-      <section className="board">
-        <h2>{title}<span className="muted"> {groups.reduce((n, g) => n + total(g.cards), 0)}</span></h2>
-        {view === "list" ? (
-          <div className="type-groups">{groups.map(list)}</div>
-        ) : view === "grid" ? (
-          <div className="grid-groups">{groups.map((g) => stack(g))}</div>
-        ) : (
-          (() => {
-            const spans = columnSpans(groups.map((g) => g.cards.length), stackCols);
-            return <div className="stack-groups" ref={measure}>{groups.map((g, i) => stack(g, spans[i]))}</div>;
-          })()
-        )}
-      </section>
-    );
+  const cards = useMemo(() => deckCards(precon), [precon]);
 
   return (
     <dialog ref={ref} className={opening ? "printings precon-dialog opening" : "printings precon-dialog"} onClose={onClose} onClick={(e) => closeOnBackdrop(e.nativeEvent, ref.current)}>
@@ -344,20 +210,9 @@ function PreconList({ precon, addButton, onClose }: { precon: Precon; addButton:
           {addButton}
         </div>
       </div>
-      <div className="precon-list" onScroll={preview.hide}>
+      <ReadOnlyDeck className="precon-list" cards={cards} lookup={lookup} resolved={resolved} view={view} onOpening={setOpening}>
         {precon.description && <p className="muted">{precon.description}</p>}
-        {resolved === undefined ? (
-          <Loading text="Loading the cards…" slow="Still loading the cards… Scryfall is slow right now." />
-        ) : (
-          <>
-            {resolved === false && <p className="muted small">Couldn't reach Scryfall, so only card names are shown.</p>}
-            {section("Deck", deck)}
-            {section("Sideboard", side)}
-          </>
-        )}
-      </div>
-      {opening && <div className="game-wait"><Waiting text="Loading the card…" className="" /></div>}
-      {preview.element}
+      </ReadOnlyDeck>
     </dialog>
   );
 }
