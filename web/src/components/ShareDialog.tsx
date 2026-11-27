@@ -75,7 +75,7 @@ export function ShareDialog({ deck, colors, onClose }: {
         <input type="checkbox" checked={!commentsOff} onChange={(e) => void toggleComments(!e.target.checked)} /> Allow comments
       </label>
       <p className="muted small share-note">
-        Shared decks show your username (not your sign-in name), the cards, tags, bracket and changelog. Game settings saved with the
+        Shared decks show your username (not your sign-in name), the cards, description, tags, bracket and changelog. Game settings saved with the
         deck (auto-yields, use later) and its folder stay private.
       </p>
     </dialog>

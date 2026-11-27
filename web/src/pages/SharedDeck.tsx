@@ -14,6 +14,8 @@ import { DeckComments } from "../components/DeckComments";
 import { Symbol } from "../components/ManaCost";
 import { ManaCurve } from "../components/ManaCurve";
 import { ReadOnlyDeck, type Lookup } from "../components/ReadOnlyDeck";
+import { RichText } from "../components/RichText";
+import { parseDescription } from "../../convex/model/richText";
 import { ShareDialog } from "../components/ShareDialog";
 import { BusyLabel, CoverWait, Loading } from "../components/Spinner";
 import { CARD_LIST, formatLabel } from "../deckFormats";
@@ -56,6 +58,14 @@ export function SharedDeck({ shareKey }: { shareKey: string }) {
     () => (cards && resolved ? cards.filter((c) => c.board === "main" || c.board === "commander").flatMap((c) => (lookup(c) ? [{ name: c.name, quantity: c.quantity, card: lookup(c)! }] : [])) : []),
     [cards, resolved, lookup],
   );
+
+  const description = useMemo(() => {
+    try {
+      return parseDescription(deck?.description);
+    } catch {
+      return undefined;
+    }
+  }, [deck?.description]);
 
   if (deck === undefined) return <Loading text="Opening the deck…" />;
   if (deck === null) {
@@ -175,6 +185,7 @@ export function SharedDeck({ shareKey }: { shareKey: string }) {
         </div>
       </header>
 
+      {description && <RichText doc={description} className="shared-description" />}
       <div className="row shared-tabs">
         <div className="tabs">
           <button className={`tab${tab === "deck" ? " active" : ""}`} onClick={() => setTab("deck")}>Deck</button>

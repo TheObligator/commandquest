@@ -120,6 +120,7 @@ export const get = query({
       extraColor: d.extraColor,
       bracket: d.bracket,
       bracketTags: d.bracketTags,
+      description: d.description,
       tokenArt: d.tokenArt,
       groupBy: d.groupBy,
       colors: d.colors,
@@ -158,6 +159,7 @@ export const copy = mutation({
     const id = await ctx.db.insert("decks", {
       userId,
       ...checked,
+      ...(d.description ? { description: d.description } : {}),
       ...(d.tokenArt ? { tokenArt: d.tokenArt } : {}),
       ...(d.groupBy ? { groupBy: d.groupBy } : {}),
       ...(d.colors !== undefined ? { colors: d.colors } : {}),

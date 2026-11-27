@@ -1221,6 +1221,7 @@ dialog.share-dialog { width: min(440px, calc(100vw - 32px)); display: grid; gap:
 .stat-btn.fav:hover, .stat-btn.fav.on { border-color: #6a5326; color: var(--accent); }
 .stat-btn.like.on span, .stat-btn.fav.on span { animation: pop .25s ease-out; }
 @keyframes pop { 50% { transform: scale(1.35); } }
+.shared-description { margin: 0 0 20px; max-width: 75ch; }
 .shared-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; justify-content: space-between; margin-bottom: 12px; }
 .shared-tabs .tabs { flex: 0 1 260px; }
 .shared-curve, .shared-history, .deck-comments { margin-top: 28px; }

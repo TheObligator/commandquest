@@ -88,7 +88,7 @@ export function Privacy() {
         Your username (or your name, until you pick a username) at tables, in games and in replays, and the cards you play.
       </p>
       <p>
-        Decks you share: new decks start <strong>public</strong>, so anyone can find them in Browse decks, with your username,
+        Decks you share: new decks start <strong>public</strong>, so anyone can find them in Browse decks, with your username, their description,
         the cards, tags, bracket and changelog. Make a deck <strong>unlisted</strong> (only people with its link) or{" "}
         <strong>private</strong> (only you) with its Share button. Decks made before sharing existed stay private until you share
         them. Comments you post on shared decks show your username. Likes show only as a count, and your favorites are only
