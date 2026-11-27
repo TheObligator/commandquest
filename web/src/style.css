@@ -119,7 +119,8 @@ label.inline select { width: auto; padding: 5px 8px; }
 .legal { max-width: 720px; margin: 0 auto; }
 .legal h1 { margin-bottom: 4px; }
 .legal .legal-sub { color: var(--muted); font-size: .85rem; margin: 0 0 18px; }
-.legal h2 { font-size: 1.1rem; color: var(--accent-2); margin: 26px 0 6px; }
+/* A line between sections. */
+.legal h2 { font-size: 1.1rem; color: var(--accent-2); margin: 24px 0 8px; padding-top: 22px; border-top: 1px solid var(--line); }
 .legal p, .legal li { color: #cfd2d9; }
 .legal p { margin: 0 0 10px; }
 .legal ul { padding-left: 22px; margin: 6px 0 10px; }
