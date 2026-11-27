@@ -48,6 +48,11 @@ import { tokenPicks } from "../tokens";
 import { useCardPreview } from "../useCardPreview";
 import { printingPref, usePrintingPref } from "../usePrintingPref";
 import { BOARDS, boardLabel, boardsFor } from "./boards";
+import { deckColorsNow } from "../useDeckColors";
+import { ShareDialog } from "../components/ShareDialog";
+import { ChangelogDialog } from "../components/Changelog";
+import { visibilityOf } from "../../convex/model/sharing";
+import { VISIBILITY } from "../sharing";
 import { canCommand, identityFilter, SearchBox, SearchResults } from "./EditorSearch";
 
 /** Up to this many main-deck planeswalkers are shown beside the commander(s). */
@@ -92,7 +97,7 @@ const nounOf = (format: string) => (format === PACKAGE ? "package" : format === 
 function useStore(isPackage: boolean) {
   const deck = { create: useMutation(api.decks.create), update: useMutation(api.decks.update), remove: useMutation(api.decks.remove), groupBy: useMutation(api.decks.setGroupBy) };
   const pkg = { create: useMutation(api.packages.create), update: useMutation(api.packages.update), remove: useMutation(api.packages.remove), groupBy: useMutation(api.packages.setGroupBy) };
-  const deckBody = (d: Draft) => ({ name: d.name, format: d.format, cards: d.cards, extraColor: d.extraColor, bracket: d.bracket, bracketTags: d.bracketTags, description: d.description });
+  const deckBody = (d: Draft) => ({ name: d.name, format: d.format, cards: d.cards, extraColor: d.extraColor, bracket: d.bracket, bracketTags: d.bracketTags, description: d.description, colors: deckColorsNow(d.cards, d.extraColor) });
   const packageBody = (d: Draft) => ({ name: d.name, note: d.note, cards: d.cards });
   return {
     create: async (d: Draft): Promise<string> => (isPackage ? pkg.create(packageBody(d)) : deck.create(deckBody(d))),
@@ -843,6 +848,7 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
         <span className="count-badge" data-ok={String(badgeOk)}>{badge}</span>
         <div className="spacer" />
         <span className={`save-state small ${saveError ? "error" : "muted"}`} role="status">{saving && <Spinner />} {saveState}</span>
+        {!isPackage && <ShareButtons deckId={deck.id as Id<"decks"> | undefined} name={deck.name} colors={deckColorsNow(deck.cards, deck.extraColor)} />}
         <details className="menu">
           <summary className="btn ghost">Export</summary>
           <div className="menu-list" onClick={(e) => (e.currentTarget.parentElement as HTMLDetailsElement).removeAttribute("open")}>
@@ -2066,6 +2072,26 @@ function Printings({ card, onPick, onClose }: { card: DeckCard; onPick: (p: scry
 }
 
 /** Which folder the deck is in. Moves straight away (not part of autosave); a deck not saved yet can't be filed. */
+/** The editor's Share button (with who can see the deck) and its History button. Not until the deck is saved. */
+function ShareButtons({ deckId, name, colors }: { deckId?: Id<"decks">; name: string; colors?: string }) {
+  const saved = useQuery(api.decks.get, deckId ? { id: deckId } : "skip");
+  const [open, setOpen] = useState<"share" | "history" | null>(null);
+  if (!deckId || !saved) return null;
+  const vis = visibilityOf(saved.visibility);
+  return (
+    <>
+      <button className="btn share-btn" onClick={() => setOpen("share")} title={`${VISIBILITY[vis].label}: ${VISIBILITY[vis].hint}`}>
+        <span aria-hidden="true">{VISIBILITY[vis].icon}</span> Share
+      </button>
+      <button className="btn ghost" onClick={() => setOpen("history")} title="What changed in this deck, and when">History</button>
+      {open === "share" && (
+        <ShareDialog deck={{ _id: deckId, name, visibility: vis, shareKey: saved.shareKey, commentsOff: saved.commentsOff }} colors={colors} onClose={() => setOpen(null)} />
+      )}
+      {open === "history" && <ChangelogDialog id={deckId} name={name} onClose={() => setOpen(null)} />}
+    </>
+  );
+}
+
 function FolderSelect({ deckId }: { deckId?: Id<"decks"> }) {
   const folders = useQuery(api.folders.list);
   const saved = useQuery(api.decks.get, deckId ? { id: deckId } : "skip");

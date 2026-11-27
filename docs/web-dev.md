@@ -268,3 +268,28 @@ while the Mac is down. The functions are in `web/convex/`. The pure logic behind
   that `name` is what games show. Signed-in players without one see a prompt linking to Settings.
 - Staging (`robust-barracuda-45`) is a dev-type deployment. Its `SITE_URL` is currently the tailnet
   dev URL, and needs updating once staging has its own address.
+
+### Sharing decks, Browse, comments and the changelog
+
+- **Visibility** (`decks.visibility`, rules in `convex/model/sharing.ts`): `public` (in Decks → Browse and open by link),
+  `unlisted` (link only) or `private` (owner only). New decks, copies and precons start public. Decks saved before sharing
+  existed have no `visibility`, which means private. Each deck gets a random `shareKey` the first time it's shared, kept
+  for good; its page is `#/d/<shareKey>` (`src/pages/SharedDeck.tsx`). Signed-out visitors can open it.
+- Shared decks show the owner's **username** only (`decks.author`, refreshed on every save and on a username change), never
+  their sign-in name. Saved ability settings, use-later and the folder aren't sent.
+- **Search** (`sharing.search`, `src/pages/Browse.tsx`): only public decks. Public decks keep `searchText` (name + author)
+  and `commanderText` for Convex search indexes, and one `deckCardIndex` row per card name (both faces of a two-faced card)
+  for the card filter; `refreshSharing` keeps them in step after every write and clears them when a deck stops being
+  public. A query starts from the most selective filter (cards, then commander, then name), reads at most 300 decks and
+  filters the rest in `deckMatches`. Colors come from the owner's client (`colors` on save, worked out like the deck
+  list's), so a deck never opened since sharing launched has none and won't match a color filter.
+- **Likes** (`deckLikes`, counted on `decks.likes`; not your own deck), **favorites** (`deckFavorites`, Browse → My
+  favorites), **views** (`deckViews`: once a day per signed-in player or per browser id, the owner's own don't count; rows
+  are forgotten after two days by a cron) and **comments** (`deckComments`, `convex/social.ts`). Comments need a username,
+  thread under the comment they answer (six levels deep, then they stay at that depth), and can be edited by their author
+  and deleted by their author or the deck's owner. One with replies stays as "deleted". The owner can turn comments off in
+  Share. Deleting a deck schedules `social.purgeDeck` for all of these; deleting an account takes back its likes.
+- **Changelog** (`deckChanges`, `convex/changelog.ts`): recorded by the server on every save. Edits go into the deck's
+  latest entry while they keep coming, and a new entry starts after an hour without one, so a sitting is one entry however
+  often autosave runs, and it doesn't depend on the page saying when you leave. Card changes are net per sitting. The
+  editor's History button and the shared page's History tab show it.

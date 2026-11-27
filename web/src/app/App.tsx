@@ -9,6 +9,8 @@ import { About, Privacy, Terms } from "../pages/Legal";
 import { Packages } from "../pages/Packages";
 import { Play } from "../pages/Play";
 import { Precons } from "../pages/Precons";
+import { Browse } from "../pages/Browse";
+import { SharedDeck } from "../pages/SharedDeck";
 import { Settings } from "../pages/Settings";
 import { HotkeysSync } from "../game/useHotkeys";
 import { PrintingPrefSync } from "../usePrintingPref";
@@ -74,6 +76,8 @@ export function App() {
   else if ((params = match("/tables/:id", route.path))) page = <RequireAuth><TableLobby key={params.id} id={params.id} /></RequireAuth>;
   else if ((params = match("/join/:code", route.path))) page = <RequireAuth><JoinTable key={params.code} code={params.code} /></RequireAuth>;
   else if (route.path === "/decks") page = <RequireAuth><DeckList /></RequireAuth>;
+  else if (route.path === "/decks/browse") page = <Browse />;
+  else if ((params = match("/d/:key", route.path))) page = <SharedDeck key={params.key} shareKey={params.key} />;
   else if (route.path === "/decks/precons") page = <RequireAuth><Precons /></RequireAuth>;
   else if (route.path === "/decks/packages") page = <RequireAuth><Packages /></RequireAuth>;
   else if (route.path === "/decks/packages/new") page = <RequireAuth><PackageEditor key="new-package" /></RequireAuth>;

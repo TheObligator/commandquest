@@ -18,6 +18,8 @@ import { useDeckColors } from "../useDeckColors";
 import { useGameChecks } from "../useGameDecks";
 import { DeckTable, type TableFolder } from "./DeckTable";
 import { NewDeckDialog } from "./NewDeckDialog";
+import { ShareDialog } from "../components/ShareDialog";
+import { sharePath, VISIBILITY } from "../sharing";
 
 /** The deck list's folder filter: every deck, decks in no folder, or one folder. */
 type Shown = "all" | "none" | Id<"deckFolders">;
@@ -72,6 +74,7 @@ export function DeckList() {
   const moveDeck = useMutation(api.decks.move);
   const removeFolder = useMutation(api.folders.remove);
   const [creating, setCreating] = useState(false);
+  const [sharing, setSharing] = useState<Id<"decks"> | null>(null);
   const [naming, setNaming] = useState<{ id?: Id<"deckFolders">; name: string; deckId?: Id<"decks"> } | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   // Which decks can start a game: the table's deck picker only offers those, so the rest are marked here.
@@ -191,6 +194,11 @@ export function DeckList() {
     ...(folders ?? []).filter((f) => f._id !== d.folderId).map((f) => ({ label: `📁 ${f.name}`, onSelect: () => void move(d._id, f._id) })),
     ...(d.folderId ? [{ label: "Out of the folder", onSelect: () => void move(d._id, null) }] : []),
     { label: "+ New folder…", onSelect: () => setNaming({ name: "", deckId: d._id }) },
+  ];
+
+  const deckItems = (d: { _id: Id<"decks">; visibility: string; shareKey?: string }): MenuItem[] => [
+    { label: "Share…", onSelect: () => setSharing(d._id) },
+    ...(d.visibility !== "private" && d.shareKey ? [{ label: "View shared page", onSelect: () => navigate(sharePath(d.shareKey!)) }] : []),
   ];
 
   const chip = (target: Shown, label: string, count: number) => (
@@ -314,6 +322,7 @@ export function DeckList() {
             folderName={(d) => (shown === "all" ? folders.find((f) => f._id === d.folderId)?.name : undefined)}
             onBracket={(d, b) => void changeBracket(d._id, b)}
             moveItems={moveItems}
+            deckItems={deckItems}
             folderItems={(f) => [
               { label: "Rename…", onSelect: () => setNaming({ id: f._id, name: f.name }) },
               { label: "Delete folder", danger: true, onSelect: () => void deleteFolder(f) },
@@ -350,7 +359,7 @@ export function DeckList() {
             const inFolder = folders.find((f) => f._id === d.folderId);
             return (
               <div key={d._id} className="deck-tile-wrap">
-              <CardMenu label={`Move ${d.name} to a folder`} className="deck-tile-menu" sections={[{ title: "Move to folder", items: moveItems(d) }]} />
+              <CardMenu label={`${d.name}: deck options`} className="deck-tile-menu" sections={[{ title: d.name, items: deckItems(d) }, { title: "Move to folder", items: moveItems(d) }]} />
               <a
                 className="deck-tile"
                 href={`#/decks/${d._id}`}
@@ -362,7 +371,7 @@ export function DeckList() {
                   {art && <span className="art-credit">Art by {artistOf(card!) ?? "unknown"} · © Wizards of the Coast</span>}
                 </div>
                 <div className="deck-meta">
-                  <h3>{d.name}</h3>
+                  <h3>{d.name} <span className="vis-mark" title={`${VISIBILITY[d.visibility].label}: ${VISIBILITY[d.visibility].hint}`} aria-label={VISIBILITY[d.visibility].label}>{VISIBILITY[d.visibility].icon}</span></h3>
                   {d.format !== CARD_LIST && <p>{d.commanders.length ? d.commanders.join(" & ") : "No commander"}</p>}
                   <p className="muted small">
                     {formatLabel(d.format)}
@@ -385,6 +394,10 @@ export function DeckList() {
         </div>
         </>
       )}
+      {sharing && (() => {
+        const d = decks?.find((x) => x._id === sharing);
+        return d ? <ShareDialog deck={d} colors={colors.get(d._id)} onClose={() => setSharing(null)} /> : null;
+      })()}
       {creating && <NewDeckDialog folderId={folder?._id} onClose={() => setCreating(false)} />}
       {naming && (
         <FolderNameDialog

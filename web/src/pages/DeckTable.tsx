@@ -8,6 +8,8 @@ import { Symbol } from "../components/ManaCost";
 import { formatLabel, hasCommander } from "../deckFormats";
 import type { GameCheck } from "../deckcheck";
 import { pickSort, SORTS, sortFolders, type DeckSort } from "../deckSort";
+import type { Visibility } from "../../convex/model/sharing";
+import { VISIBILITY } from "../sharing";
 
 export interface TableDeck {
   _id: Id<"decks">;
@@ -18,6 +20,7 @@ export interface TableDeck {
   commanders: string[];
   updatedAt: number;
   colors?: string;
+  visibility?: Visibility;
 }
 
 export interface TableFolder {
@@ -55,6 +58,8 @@ export function DeckTable<D extends TableDeck>(props: {
   folderName: (d: D) => string | undefined;
   onBracket: (d: D, bracket: number | undefined) => void;
   moveItems: (d: D) => MenuItem[];
+  /** "Share…", and the like: the deck menu's first section. */
+  deckItems: (d: D) => MenuItem[];
   folderItems: (f: TableFolder) => MenuItem[];
   dragProps: (d: D) => React.HTMLAttributes<HTMLElement>;
   dropProps: (folder: Id<"deckFolders">) => DropProps;
@@ -95,6 +100,7 @@ export function DeckTable<D extends TableDeck>(props: {
           <div key={d._id} className="deck-row" role="row" draggable {...props.dragProps(d)}>
             <div className="dt-name" role="cell">
               <a className="row-link" href={`#/decks/${d._id}`} draggable={false} title={d.name}>{d.name}</a>
+              {d.visibility && <span className="vis-mark" title={`${VISIBILITY[d.visibility].label}: ${VISIBILITY[d.visibility].hint}`} aria-label={VISIBILITY[d.visibility].label}>{VISIBILITY[d.visibility].icon}</span>}
               <div className="muted dt-sub">{[commanders, folder && `📁 ${folder}`].filter(Boolean).join(" · ")}</div>
             </div>
             <div className="dt-colors" role="cell"><Colors colors={d.colors} done={props.colorsDone} /></div>
@@ -126,7 +132,7 @@ export function DeckTable<D extends TableDeck>(props: {
               ) : check?.needsFreePlay.length ? (
                 <Note mark="✋" title="Needs free play" lines={[`Not in the rules engine yet: ${check.needsFreePlay.join(", ")}`]} />
               ) : null}
-              <CardMenu label={`Move ${d.name} to a folder`} className="row-menu" sections={[{ title: "Move to folder", items: props.moveItems(d) }]} />
+              <CardMenu label={`${d.name}: deck options`} className="row-menu" sections={[{ title: d.name, items: props.deckItems(d) }, { title: "Move to folder", items: props.moveItems(d) }]} />
             </div>
           </div>
         );

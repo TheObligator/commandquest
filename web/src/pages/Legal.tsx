@@ -74,8 +74,8 @@ export function Privacy() {
           picture they share with us. The username you pick.
         </li>
         <li>
-          <strong>What you make:</strong> decks, folders, packages, settings, stop presets, recorded combos, and the tables you
-          create or join.
+          <strong>What you make:</strong> decks (with a changelog of their edits), folders, packages, settings, stop presets,
+          recorded combos, the tables you create or join, and the comments, likes and favorites you leave on shared decks.
         </li>
         <li>
           <strong>Games:</strong> live games run on our game server. A finished game is saved as a replay for the people who
@@ -85,12 +85,22 @@ export function Privacy() {
 
       <h2>What other players see</h2>
       <p>
-        Your username (or your name, until you pick a username) at tables, in games and in replays, and the cards you play. Your
-        decks and email stay private.
+        Your username (or your name, until you pick a username) at tables, in games and in replays, and the cards you play.
+      </p>
+      <p>
+        Decks you share: new decks start <strong>public</strong>, so anyone can find them in Browse decks, with your username,
+        the cards, tags, bracket and changelog. Make a deck <strong>unlisted</strong> (only people with its link) or{" "}
+        <strong>private</strong> (only you) with its Share button. Decks made before sharing existed stay private until you share
+        them. Comments you post on shared decks show your username. Likes show only as a count, and your favorites are only
+        yours. Game settings saved with a deck, your folders and your email stay private.
       </p>
 
       <h2>Your browser</h2>
-      <p>The site keeps your sign-in and some preferences in your browser's storage. There are no advertising or tracking cookies.</p>
+      <p>
+        The site keeps your sign-in and some preferences in your browser's storage. When you open a shared deck without signing
+        in, a random id kept there lets us count you once a day in the deck's views; we forget it within two days. There are no
+        advertising or tracking cookies.
+      </p>
 
       <h2>Do Not Track</h2>
       <p>
@@ -168,7 +178,8 @@ export function Terms() {
       <h2>Your stuff</h2>
       <p>
         Your decks are yours. You let us store them and show them as needed to run the site, for example the cards you play in a
-        game.
+        game, and decks and comments you share to the people you share them with. Anyone can copy a deck you share publicly or by
+        link into their own account.
       </p>
 
       <h2>Ending your account</h2>

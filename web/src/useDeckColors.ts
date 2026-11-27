@@ -1,6 +1,6 @@
 // The colors of the decks in the deck list (src/deckSort.ts), with Scryfall data loaded for their cards.
 import { useEffect, useMemo, useState } from "react";
-import type { CardRef, DeckCard } from "../convex/model/deckRules";
+import { colorCards, type CardRef, type DeckCard } from "../convex/model/deckRules";
 import { colorsOf } from "./deckGroups";
 import { deckColors } from "./deckSort";
 import * as scry from "./scryfall";
@@ -13,6 +13,16 @@ interface ColoredDeck {
 }
 
 const entry = (c: CardRef): DeckCard => ({ ...c, quantity: 1, board: "main" });
+
+/** A deck's colors from the Scryfall data already loaded ("" = colorless); undefined while some aren't known. */
+export function deckColorsNow(cards: DeckCard[], extraColor?: string): string | undefined {
+  const led = cards.some((c) => c.board === "commander");
+  const known = colorCards(cards).map((x) => {
+    const card = scry.cachedExact(entry(x)) ?? scry.cached(entry(x));
+    return card && (led ? card.color_identity : colorsOf(card));
+  });
+  return deckColors(known, led, extraColor);
+}
 
 /** Each deck's colors by id ("" = colorless); decks whose cards aren't known yet are missing. `done`: nothing more is coming. */
 export function useDeckColors(decks: ColoredDeck[] | undefined, enabled: boolean): { colors: Map<string, string>; done: boolean } {

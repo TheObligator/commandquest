@@ -66,7 +66,7 @@ export function identityFilter(format: string, deck: DeckCard[], commanders: scr
  * Enter on the typed text opens the full results page. With `identity` (a commander deck), only
  * names of cards the commanders allow are suggested.
  */
-export function SearchBox(props: { onPick: (name: string) => void; onSubmit: (query: string) => void; autoFocus?: boolean; initial?: string; identity?: IdentityFilter | null }) {
+export function SearchBox(props: { onPick: (name: string) => void; onSubmit: (query: string) => void; autoFocus?: boolean; initial?: string; identity?: IdentityFilter | null; placeholder?: string; label?: string }) {
   const [q, setQ] = useState(props.initial ?? "");
   const [names, setNames] = useState<string[]>([]);
   /** Whether `names` are spelling guesses because nothing matched the text as typed. */
@@ -211,8 +211,8 @@ export function SearchBox(props: { onPick: (name: string) => void; onSubmit: (qu
     <div className="suggest" ref={box}>
       <input
         type="search"
-        placeholder='Card name, or Scryfall search like "t:dragon c:r". Enter for all results'
-        aria-label="Search cards"
+        placeholder={props.placeholder ?? 'Card name, or Scryfall search like "t:dragon c:r". Enter for all results'}
+        aria-label={props.label ?? "Search cards"}
         role="combobox"
         aria-expanded={listOpen}
         aria-busy={state === "searching"}
