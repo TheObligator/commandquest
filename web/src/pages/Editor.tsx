@@ -1039,6 +1039,22 @@ function useCardDrops(onDrop: (d: DroppedCard[], board: Board) => void): Board |
 
 // ---- The deck -------------------------------------------------------------------------
 
+/** Where pressing doesn't start drag select: cards, things you click, type in or drag, menus, dialogs and bars. */
+const NO_MARQUEE = [
+  "[data-sel]", "button", "a", "input", "select", "textarea", "label", "summary", "details", "dialog", "img", "svg", "video",
+  "[draggable='true']", "[contenteditable]", "[role='menu']", "[role='slider']", ".card-menu", ".sel-bar", ".partner-slot", ".deck-bar", ".deck-drawer-bar", "#toast",
+].join(", ");
+
+/** The press is on a scrollbar (the page's or a scrolling box's), which drags to scroll. */
+function onScrollbar(t: Element, e: PointerEvent): boolean {
+  if (e.clientX >= document.documentElement.clientWidth || e.clientY >= document.documentElement.clientHeight) return true;
+  if (t === document.documentElement || t === document.body) return false;
+  // Only boxes that scroll have scrollbars (an inline element's clientWidth is 0).
+  if (!t.clientWidth || (t.scrollHeight <= t.clientHeight && t.scrollWidth <= t.clientWidth)) return false;
+  const r = t.getBoundingClientRect();
+  return e.clientX > r.left + t.clientLeft + t.clientWidth || e.clientY > r.top + t.clientTop + t.clientHeight;
+}
+
 /** A deck entry's id for the selection: its board and name (as the editor finds entries). */
 const selId = (c: DeckCard) => `${c.board}|${c.name}`;
 
@@ -1141,15 +1157,18 @@ function DeckView(props: {
     });
 
   /**
-   * Pressing on empty space among the cards and dragging draws a box; the cards whose visible part
-   * it touches are selected (src/marquee.ts). Shift or Ctrl/⌘ adds to what's selected. A click on
-   * empty space clears the selection.
+   * Pressing on empty space anywhere on the page (beside the deck too) and dragging draws a box; the
+   * cards whose visible part it touches are selected (src/marquee.ts). Shift or Ctrl/⌘ adds to
+   * what's selected. A click on empty space clears the selection. On the search page, only inside
+   * the deck drawer.
    */
-  const startMarquee = (e: React.PointerEvent) => {
+  const startMarquee = (e: PointerEvent) => {
     const el = root.current;
-    const t = e.target as Element;
-    if (!el || e.button !== 0 || e.pointerType !== "mouse") return;
-    if (!t.closest(".board") || t.closest("[data-sel], button, a, input, select, textarea, label, summary, .partner-slot")) return;
+    const t = e.target instanceof Element ? e.target : null;
+    if (!el || !t || e.button !== 0 || e.pointerType !== "mouse" || !el.getClientRects().length) return;
+    const drawer = el.closest(".deck-drawer-body");
+    if (drawer && !drawer.contains(t)) return;
+    if (t.closest(NO_MARQUEE) || onScrollbar(t, e)) return;
     const r0 = el.getBoundingClientRect();
     // Kept relative to the deck, so it stays put if the page (or the drawer) scrolls during the drag.
     const sx = e.clientX - r0.left;
@@ -1275,6 +1294,13 @@ function DeckView(props: {
     e.preventDefault();
     runShortcut(k, targets());
   };
+  const marquee = useRef(startMarquee);
+  marquee.current = startMarquee;
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => marquee.current(e);
+    window.addEventListener("pointerdown", onDown);
+    return () => window.removeEventListener("pointerdown", onDown);
+  }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => keys.current(e);
     window.addEventListener("keydown", onKey);
@@ -1585,7 +1611,7 @@ function DeckView(props: {
   ) : undefined;
 
   return (
-    <section ref={root} className={`panel deck-view${dropTo ? " dropping" : ""}`} onPointerDown={startMarquee}>
+    <section ref={root} className={`panel deck-view${dropTo ? " dropping" : ""}`}>
       {warnings.length > 0 && <ul className="warnings">{warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
       {deck.format === "conquest" && (
         <p className="format-note muted small">
