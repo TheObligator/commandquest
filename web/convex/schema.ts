@@ -61,6 +61,8 @@ export default defineSchema({
     /** The Commander bracket (1-5) the player puts this deck in, and their reasons (web/src/brackets.ts). */
     bracket: v.optional(v.number()),
     bracketTags: v.optional(v.array(v.string())),
+    /** The owner's description of the deck: rich text as Tiptap JSON, cleaned by convex/model/richText.ts. */
+    description: v.optional(v.string()),
     tokenArt: v.optional(v.array(v.object({ identity: v.string(), scryfallId: v.string() }))),
     /** Auto-yield and always yes / no settings saved with the deck from games, by ability text (src/game/abilities.ts). */
     abilities: v.optional(

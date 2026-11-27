@@ -3,6 +3,7 @@ import { ConvexError, v } from "convex/values";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { checkBracket, colorCards, DeckError, MAX_DECKS_PER_USER, summarize, validateDeck, withCardsAdded, type DeckInput } from "./model/deckRules";
+import { cleanDescription } from "./model/richText";
 import { CARD_LIST } from "../src/deckFormats";
 import { DEFAULT_GROUPING, isGroupBy } from "../src/deckGroups";
 import { withSaved } from "../src/game/abilities";
@@ -27,7 +28,9 @@ function rules<T>(check: () => T): T {
   }
 }
 
-const checked = (input: DeckInput) => rules(() => validateDeck(input));
+/** A deck checked and tidied, with its description (always present, so an update that empties it clears it). */
+const checked = ({ description, ...input }: DeckInput & { description?: string }) =>
+  rules(() => ({ ...validateDeck(input), description: cleanDescription(description) }));
 
 const deckArgs = {
   name: v.string(),
@@ -36,6 +39,8 @@ const deckArgs = {
   extraColor: v.optional(v.string()),
   bracket: v.optional(v.number()),
   bracketTags: v.optional(v.array(v.string())),
+  /** The owner's description of the deck: Tiptap JSON (model/richText.ts). */
+  description: v.optional(v.string()),
 };
 
 export const list = query({
@@ -130,7 +135,7 @@ export const addCards = mutation({
     const existing = await ctx.db.get(id);
     if (!existing || existing.userId !== userId) throw new ConvexError("Deck not found.");
     const merged = withCardsAdded(existing.cards, cards, existing.format === CARD_LIST);
-    const deck = checked({ name: existing.name, format: existing.format, cards: merged, extraColor: existing.extraColor, bracket: existing.bracket, bracketTags: existing.bracketTags });
+    const deck = rules(() => validateDeck({ name: existing.name, format: existing.format, cards: merged, extraColor: existing.extraColor, bracket: existing.bracket, bracketTags: existing.bracketTags }));
     await ctx.db.patch(id, { cards: deck.cards, updatedAt: Date.now() });
   },
 });

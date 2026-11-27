@@ -15,6 +15,7 @@ import { ContextMenu, type ContextMenuState } from "../components/ContextMenu";
 import { ColorStats } from "../components/ColorStats";
 import { DeckBar, DeckTypeCounts } from "../components/DeckBar";
 import { DeckBracket } from "../components/DeckBracket";
+import { DeckDescription } from "../components/DeckDescription";
 import { deckAverages, playableLandBack } from "../deckstats";
 import { CARD_LIST, FORMATS, formatLabel, isPlainList, PACKAGE, hasCommander } from "../deckFormats";
 import { AddToPackage } from "../components/AddToPackage";
@@ -75,6 +76,8 @@ interface Draft {
   /** The Commander bracket the player gives the deck, and their reasons (src/brackets.ts). */
   bracket?: number;
   bracketTags?: string[];
+  /** The owner's description of a deck, as rich text (convex/model/richText.ts). */
+  description?: string;
 }
 
 /** The editor's URL: the deck (or a new one) and the search open in it, if any. */
@@ -89,7 +92,7 @@ const nounOf = (format: string) => (format === PACKAGE ? "package" : format === 
 function useStore(isPackage: boolean) {
   const deck = { create: useMutation(api.decks.create), update: useMutation(api.decks.update), remove: useMutation(api.decks.remove), groupBy: useMutation(api.decks.setGroupBy) };
   const pkg = { create: useMutation(api.packages.create), update: useMutation(api.packages.update), remove: useMutation(api.packages.remove), groupBy: useMutation(api.packages.setGroupBy) };
-  const deckBody = (d: Draft) => ({ name: d.name, format: d.format, cards: d.cards, extraColor: d.extraColor, bracket: d.bracket, bracketTags: d.bracketTags });
+  const deckBody = (d: Draft) => ({ name: d.name, format: d.format, cards: d.cards, extraColor: d.extraColor, bracket: d.bracket, bracketTags: d.bracketTags, description: d.description });
   const packageBody = (d: Draft) => ({ name: d.name, note: d.note, cards: d.cards });
   return {
     create: async (d: Draft): Promise<string> => (isPackage ? pkg.create(packageBody(d)) : deck.create(deckBody(d))),
@@ -129,7 +132,7 @@ export function Editor({ id }: { id?: string }) {
       </>
     );
   }
-  const initial: Draft = saved ? { id: saved._id, name: saved.name, format: saved.format, cards: saved.cards, extraColor: saved.extraColor, bracket: saved.bracket, bracketTags: saved.bracketTags } : { name: UNTITLED, format: "commander", cards: [] };
+  const initial: Draft = saved ? { id: saved._id, name: saved.name, format: saved.format, cards: saved.cards, extraColor: saved.extraColor, bracket: saved.bracket, bracketTags: saved.bracketTags, description: saved.description } : { name: UNTITLED, format: "commander", cards: [] };
   return <DeckEditor initial={initial} initialGroupBy={saved && isGroupBy(saved.groupBy) ? saved.groupBy : DEFAULT_GROUPING} />;
 }
 
@@ -817,6 +820,7 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
       onExtraColor={(c) => change((d) => ({ ...d, extraColor: c }))}
       onBracket={(b) => change((d) => ({ ...d, bracket: b }))}
       onBracketTags={(t) => change((d) => ({ ...d, bracketTags: t.length ? t : undefined }))}
+      onDescription={(json) => change((d) => ({ ...d, description: json }))}
     />
   );
 
@@ -1102,7 +1106,7 @@ function useCardDrops(onDrop: (d: DroppedCard[], board: Board) => void): Board |
 /** Where pressing doesn't start drag select: cards, things you click, type in or drag, menus, dialogs and bars. */
 const NO_MARQUEE = [
   "[data-sel]", "button", "a", "input", "select", "textarea", "label", "summary", "details", "dialog", "img", "svg", "video",
-  "[draggable='true']", "[contenteditable]", "[role='menu']", "[role='slider']", ".card-menu", ".sel-bar", ".partner-slot", ".deck-bar", ".deck-drawer-bar", "#toast",
+  "[draggable='true']", "[contenteditable]", "[role='menu']", "[role='slider']", ".card-menu", ".sel-bar", ".partner-slot", ".deck-bar", ".deck-drawer-bar", ".deck-description", "#toast",
 ].join(", ");
 
 /** The press is on a scrollbar (the page's or a scrolling box's), which drags to scroll. */
@@ -1170,6 +1174,7 @@ function DeckView(props: {
   onExtraColor: (color: string | undefined) => void;
   onBracket: (b: number | undefined) => void;
   onBracketTags: (tags: string[]) => void;
+  onDescription: (json: string | undefined) => void;
 }) {
   const { deck, missing, lookupFailed, count } = props;
   /** "GC" on Game Changers in Commander decks (Commander Brackets). */
@@ -1672,6 +1677,7 @@ function DeckView(props: {
 
   return (
     <section ref={root} className={`panel deck-view${dropTo ? " dropping" : ""}`}>
+      {deck.format !== PACKAGE && <DeckDescription value={deck.description} onChange={props.onDescription} />}
       {warnings.length > 0 && <ul className="warnings">{warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
       {deck.format === "conquest" && (
         <p className="format-note muted small">
