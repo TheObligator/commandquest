@@ -628,8 +628,12 @@ dialog.card-detail { width: min(860px, calc(100vw - 32px)); max-height: 90vh; ba
 /* Double-faced cards: front and back side by side, then the text. */
 dialog.card-detail.two-faces { width: min(1180px, calc(100vw - 32px)); }
 .two-faces .detail-grid { grid-template-columns: minmax(0, 560px) 1fr; }
+.two-faces .detail-grid:has(.battle) { grid-template-columns: minmax(0, 720px) 1fr; }
 .detail-image.faces { grid-template-columns: 1fr 1fr; align-items: start; }
-.detail-face { display: grid; gap: 4px; justify-items: center; margin: 0; min-width: 0; }
+/* Stretch to the column: a centered, shrink-to-fit figure collapses the 100%-wide image inside it. */
+.detail-face { display: grid; gap: 4px; justify-items: stretch; justify-self: stretch; margin: 0; min-width: 0; }
+/* A battle's sideways front gets a column as tall as the upright back. */
+.detail-image.faces.battle { grid-template-columns: 680fr 488fr; align-items: center; }
 .detail-face figcaption { font-size: .8rem; color: var(--muted); text-align: center; }
 .detail-image { display: grid; gap: 8px; justify-items: center; }
 .detail-img { width: 100%; aspect-ratio: 488 / 680; border-radius: 4.75% / 3.5%; background: var(--panel-2); display: block; }
@@ -666,7 +670,7 @@ dialog.card-detail.two-faces { width: min(1180px, calc(100vw - 32px)); }
 .printings .result-img:hover img { transform: none; outline: 2px solid var(--accent-2); }
 
 @media (max-width: 900px) {
-  .two-faces .detail-grid { grid-template-columns: 1fr; }
+  .two-faces .detail-grid, .two-faces .detail-grid:has(.battle) { grid-template-columns: 1fr; }
   .detail-image.faces { max-width: 560px; width: 100%; margin: 0 auto; }
 }
 @media (max-width: 640px) {
