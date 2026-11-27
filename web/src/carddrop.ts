@@ -13,16 +13,18 @@ export interface DroppedCard {
   /** From another CommandQuest deck: keep its printing and number of copies. */
   exact?: boolean;
   quantity?: number;
+  /** It was a commander in the deck it came from (the deck it's dropped on offers to make it one). */
+  commander?: boolean;
 }
 
 /** The drag type a CommandQuest deck card carries (readable by the editor in another tab). */
 export const CARD_TYPE = "application/x-commandquest-card";
 
-type DragCard = { name: string; quantity: number; scryfallId?: string; set?: string; collectorNumber?: string };
+type DragCard = { name: string; quantity: number; board?: string; scryfallId?: string; set?: string; collectorNumber?: string };
 
 /** What deck cards put in their drag, as `CARD_TYPE` data: one card, or a list of the selected ones. */
 export function cardDragData(c: DragCard | DragCard[]): string {
-  const one = (x: DragCard) => ({ name: x.name, quantity: x.quantity, id: x.scryfallId, set: x.set, collectorNumber: x.collectorNumber });
+  const one = (x: DragCard) => ({ name: x.name, quantity: x.quantity, id: x.scryfallId, set: x.set, collectorNumber: x.collectorNumber, ...(x.board === "commander" ? { commander: true } : {}) });
   return JSON.stringify(Array.isArray(c) ? c.map(one) : one(c));
 }
 
@@ -47,7 +49,7 @@ function fromDeckCard(v: unknown): DroppedCard | null {
   if (!name) return null;
   const id = str(o.id);
   const q = typeof o.quantity === "number" && Number.isInteger(o.quantity) && o.quantity > 0 ? o.quantity : 1;
-  const card: DroppedCard = { name, id: id && UUID.test(id) ? id.toLowerCase() : undefined, set: str(o.set), collectorNumber: str(o.collectorNumber), exact: true, quantity: q };
+  const card: DroppedCard = { name, id: id && UUID.test(id) ? id.toLowerCase() : undefined, set: str(o.set), collectorNumber: str(o.collectorNumber), exact: true, quantity: q, commander: o.commander === true || undefined };
   return Object.fromEntries(Object.entries(card).filter(([, x]) => x !== undefined)) as DroppedCard;
 }
 

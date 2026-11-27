@@ -283,6 +283,7 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
       return d;
     });
     toast(`Added ${copies > 1 ? `${copies} × ` : ""}${name}${board === "main" ? "" : " to " + BOARDS.find((b) => b.id === board)!.label.toLowerCase()}`);
+    return { name, board };
   }
 
   /**
@@ -350,8 +351,9 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
         continue;
       }
       // From another deck: the same printing and number of copies.
-      await addCard(c, board, d.exact && c.id === d.id, d.quantity ?? 1);
+      const added = await addCard(c, board, d.exact && c.id === d.id, d.quantity ?? 1);
       setCardData((n) => n + 1);
+      if (d.commander) offerCommanders([added.name], added.board);
       return;
     }
     toast(`Couldn't find ${d.name ?? d.fuzzy ?? "that card"} on Scryfall`, "error");
@@ -376,6 +378,11 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
       const print = exact ?? s;
       return [{ name: scry.deckName(s), quantity: c.quantity, board, scryfallId: print.id, set: print.set, collectorNumber: print.collector_number }];
     });
+    /** The cards that were commanders in the deck they came from. */
+    const wereCommanders = asked.flatMap((c, i) => {
+      const s = scry.cachedExact(c) ?? scry.cached(c);
+      return ds[i].commander && s ? [scry.deckName(s)] : [];
+    });
     const lost = asked.length - found.length;
     if (found.length) {
       change((d) => {
@@ -388,7 +395,46 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
       });
       setCardData((n) => n + 1);
       toast(`Added ${found.length} cards${board === "main" ? "" : " to " + BOARDS.find((b) => b.id === board)!.label.toLowerCase()}${lost ? ` (${lost} not found on Scryfall)` : ""}`);
+      if (wereCommanders.length) offerCommanders(wereCommanders, board);
     } else toast("Couldn't find those cards on Scryfall", "error");
+  }
+
+  /** Commanders dragged in from another deck: asked whether to make them this deck's commander(s). */
+  const [commanderOffer, setCommanderOffer] = useState<{ names: string[]; board: Board } | null>(null);
+  function offerCommanders(names: string[], board: Board) {
+    const format = deckRef.current.format;
+    if (!hasCommander(format)) return;
+    const leading = deckRef.current.cards.filter((c) => c.board === "commander").map((c) => c.name.toLowerCase());
+    const able = names.filter((n) => {
+      if (leading.includes(n.toLowerCase())) return false; // already this deck's commander
+      const s = scry.cached({ name: n, quantity: 1, board });
+      return !!s && canCommand(s, format);
+    });
+    // Two partners only when they can pair; otherwise just the first.
+    const pair = able.length >= 2 && canPair(scry.cached({ name: able[0], quantity: 1, board })!, scry.cached({ name: able[1], quantity: 1, board })!);
+    if (able.length) setCommanderOffer({ names: pair ? able.slice(0, 2) : able.slice(0, 1), board });
+  }
+
+  /**
+   * Makes one copy of each named card (from `board`) a commander. Unless `partner`, the deck's
+   * commander(s) go to the main deck.
+   */
+  function makeCommanders(names: string[], board: Board, partner: boolean) {
+    const replaced = partner ? [] : deckRef.current.cards.filter((c) => c.board === "commander").map((c) => c.name);
+    change((d) => {
+      if (!partner) for (const c of d.cards) if (c.board === "commander") c.board = "main";
+      for (const n of names) {
+        const t = d.cards.find((c) => c.board === board && c.name.toLowerCase() === n.toLowerCase()) ?? d.cards.find((c) => c.board !== "commander" && c.name.toLowerCase() === n.toLowerCase());
+        if (!t) continue;
+        if (t.quantity > 1) {
+          t.quantity--;
+          d.cards.push({ ...t, quantity: 1, board: "commander" });
+        } else t.board = "commander";
+      }
+      return { ...d, cards: mergeDuplicates(d.cards) };
+    });
+    const who = names.join(" and ");
+    toast(`${who} ${names.length > 1 ? "are now your commanders" : `is now ${partner ? "a" : "your"} commander`}${replaced.length ? `. ${replaced.join(" and ")} moved to the main deck` : ""}`);
   }
 
   const dropTo = useCardDrops((ds, b) => void (ds.length === 1 ? addDropped(ds[0], b) : addDroppedMany(ds, b)));
@@ -843,6 +889,20 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
           </aside>
           {deckView}
         </div>
+      )}
+      {commanderOffer && (
+        <CommanderOffer
+          names={commanderOffer.names}
+          board={boardLabel(commanderOffer.board, deck.format).toLowerCase()}
+          current={commanders.map((c) => scry.deckName(c))}
+          canPartner={commanderOffer.names.length === 1 && commanders.length === 1 && (() => {
+            const a = commanders[0];
+            const b = scry.cached({ name: commanderOffer.names[0], quantity: 1, board: commanderOffer.board });
+            return !!a && !!b && canPair(a, b);
+          })()}
+          onPick={(partner) => makeCommanders(commanderOffer.names, commanderOffer.board, partner)}
+          onClose={() => setCommanderOffer(null)}
+        />
       )}
       {searchQuery === null && deck.cards.length > 0 && (
         <DeckBar cards={deck.cards} count={badge} countOk={badgeOk} bracket={deck.bracket} commander={deck.format === "commander"} />
@@ -2045,6 +2105,36 @@ function savedDrawerHeight(): number | null {
  * it). The height you leave it at is remembered in this browser.
  */
 /** `side`: shown over the right end of the bar (the deck's type counts). */
+/** A commander dragged in from another deck: make it this deck's commander, add it beside the one here, or leave it where it landed. */
+function CommanderOffer(props: { names: string[]; board: string; current: string[]; canPartner: boolean; onPick: (partner: boolean) => void; onClose: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => ref.current?.showModal(), []);
+  const { names, current } = props;
+  const two = names.length > 1;
+  const who = names.join(" and ");
+  const pick = (partner: boolean) => {
+    props.onPick(partner);
+    ref.current?.close();
+  };
+  return (
+    <dialog ref={ref} className="new-deck tag-editor" onClose={props.onClose} onClick={(e) => closeOnBackdrop(e.nativeEvent, ref.current)}>
+      <button className="dialog-close" aria-label="Close" onClick={() => ref.current?.close()}>×</button>
+      <h3>Make {two ? "them the commanders" : `${who} the commander`}?</h3>
+      <p className="muted small">
+        {who} {two ? "were the commanders" : "was a commander"} in the deck {two ? "they" : "it"} came from. {two ? "They're" : "It's"} in the {props.board} for now.
+        {current.length > 0 && !props.canPartner && ` Making ${two ? "them" : "it"} the commander moves ${current.join(" and ")} to the main deck.`}
+      </p>
+      <div className="actions new-deck-actions">
+        <button type="button" className="btn ghost" onClick={() => ref.current?.close()}>Keep in the {props.board}</button>
+        {props.canPartner && <button type="button" className="btn ghost" onClick={() => pick(true)}>Add beside {current[0]}</button>}
+        <button type="button" className="btn" autoFocus onClick={() => pick(false)}>
+          {current.length ? `Replace ${current.join(" and ")}` : two ? "Make them commanders" : "Make commander"}
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
 function DeckDrawer({ open, onToggle, name, badge, badgeOk, side, children }: { open: boolean; onToggle: () => void; name: string; badge: string; badgeOk: boolean; side?: React.ReactNode; children: React.ReactNode }) {
   const [height, setHeight] = useState<number | null>(savedDrawerHeight);
   /** While dragging: the live height. */

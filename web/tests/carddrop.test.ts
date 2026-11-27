@@ -72,3 +72,11 @@ test("several selected deck cards drag as a list, each keeping its printing and 
   assert.equal(readDeckCards("not json"), null);
   assert.equal(readDeckCards("[{}]"), null);
 });
+
+test("a commander says so in its drag, so the deck it lands in can offer to make it one", () => {
+  const data = cardDragData([{ name: "Atraxa, Praetors' Voice", quantity: 1, board: "commander" }, { name: "Sol Ring", quantity: 1, board: "main" }]);
+  assert.deepEqual(readDeckCards(data), [
+    { name: "Atraxa, Praetors' Voice", exact: true, quantity: 1, commander: true },
+    { name: "Sol Ring", exact: true, quantity: 1 },
+  ]);
+});
