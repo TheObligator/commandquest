@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as account from "../account.js";
 import type * as auth from "../auth.js";
 import type * as combos from "../combos.js";
 import type * as crons from "../crons.js";
@@ -15,6 +16,7 @@ import type * as decks from "../decks.js";
 import type * as folders from "../folders.js";
 import type * as http from "../http.js";
 import type * as importDeck from "../importDeck.js";
+import type * as model_account from "../model/account.js";
 import type * as model_deckRules from "../model/deckRules.js";
 import type * as model_folderRules from "../model/folderRules.js";
 import type * as model_importers from "../model/importers.js";
@@ -37,6 +39,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  account: typeof account;
   auth: typeof auth;
   combos: typeof combos;
   crons: typeof crons;
@@ -44,6 +47,7 @@ declare const fullApi: ApiFromModules<{
   folders: typeof folders;
   http: typeof http;
   importDeck: typeof importDeck;
+  "model/account": typeof model_account;
   "model/deckRules": typeof model_deckRules;
   "model/folderRules": typeof model_folderRules;
   "model/importers": typeof model_importers;

@@ -52,8 +52,8 @@ async function trimRecent(ctx: MutationCtx, userId: Id<"users">) {
   for (const link of recentToDrop(recent)) await unlink(ctx, link._id, link.replayId);
 }
 
-/** Removes one player's hold on a replay, and the replay once nobody holds it. */
-async function unlink(ctx: MutationCtx, linkId: Id<"replayLinks">, replayId: Id<"replays">) {
+/** Removes one player's hold on a replay, and the replay once nobody holds it. Also used by account.ts. */
+export async function unlink(ctx: MutationCtx, linkId: Id<"replayLinks">, replayId: Id<"replays">) {
   await ctx.db.delete(linkId);
   const other = await ctx.db.query("replayLinks").withIndex("by_replay", (q) => q.eq("replayId", replayId)).first();
   if (other) return;

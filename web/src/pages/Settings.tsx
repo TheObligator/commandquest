@@ -1,9 +1,14 @@
 // Settings (#/settings): your username, deck search additions, default printing and the game hotkeys. Changes apply right away, are kept in this browser, and
 // are saved to your account when you're signed in, so they follow you to other devices.
+// Signed in, it also has Delete account (convex/account.ts).
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../convex/_generated/api";
+import { confirmsDeletion, DELETE_WORD } from "../../convex/model/account";
 import { errorMessage } from "../app/errors";
+import { navigate } from "../app/router";
+import { closeOnBackdrop } from "../carddetails";
 import { BusyLabel, Waiting } from "../components/Spinner";
 import { toast } from "../dom";
 import { bind, changedKeys, DEFAULT_HOTKEYS, HOTKEY_ACTIONS, keyLabel, keyName, MODIFIER_KEYS, RESERVED_KEYS, type HotkeyAction, type Hotkeys } from "../game/hotkeys";
@@ -113,6 +118,7 @@ export function Settings() {
         </button>
         <p className="muted small">Escape always closes an enlarged board or dialog.</p>
       </section>
+      <DeleteAccountSection />
     </div>
   );
 }
@@ -277,5 +283,79 @@ function PrintingSection() {
         ))}
       </div>
     </section>
+  );
+}
+
+/** Deletes the account and everything in it (convex/account.ts), after typing "delete" to confirm. */
+function DeleteAccountSection() {
+  const { isAuthenticated } = useConvexAuth();
+  const [open, setOpen] = useState(false);
+  if (!isAuthenticated) return null;
+  return (
+    <section className="card settings-section" id="delete-account">
+      <h2>Delete account</h2>
+      <p className="muted small">
+        Deletes your account, decks, folders, packages, settings, presets, combos and replays, and leaves any table you're at.
+        This can't be undone.
+      </p>
+      <button className="btn ghost danger" onClick={() => setOpen(true)}>Delete account…</button>
+      {open && <DeleteAccountDialog onClose={() => setOpen(false)} />}
+    </section>
+  );
+}
+
+const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
+
+function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const summary = useQuery(api.account.summary);
+  const deleteAccount = useMutation(api.account.deleteAccount);
+  const { signOut } = useAuthActions();
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => ref.current?.showModal(), []);
+
+  async function confirm(e: React.FormEvent) {
+    e.preventDefault();
+    if (!confirmsDeletion(typed)) return;
+    setBusy(true);
+    setError("");
+    try {
+      await deleteAccount({ confirm: typed });
+    } catch (err) {
+      setError(errorMessage(err));
+      setBusy(false);
+      return;
+    }
+    await signOut();
+    navigate("/");
+    toast("Your account was deleted.");
+  }
+
+  return (
+    <dialog ref={ref} className="new-deck folder-dialog" onClose={onClose} onClick={(e) => busy || closeOnBackdrop(e.nativeEvent, ref.current)}>
+      <form onSubmit={confirm}>
+        <h3>Delete your account?</h3>
+        <p className="muted small" style={{ margin: 0 }}>
+          {summary
+            ? `Your ${plural(summary.decks, "deck")}, ${plural(summary.packages, "package")} and ${plural(summary.replays, "replay")} go with it. `
+            : "All your decks, packages and replays go with it. "}
+          Export any deck you want to keep first.
+        </p>
+        <label>
+          Type <strong>{DELETE_WORD}</strong> to confirm
+          <input value={typed} onChange={(e) => setTyped(e.target.value)} autoFocus autoComplete="off" spellCheck={false} disabled={busy} />
+        </label>
+        <p className="form-error" role="alert">{error}</p>
+        <div className="actions new-deck-actions">
+          <button type="button" className="btn ghost" disabled={busy} onClick={() => ref.current?.close()}>Cancel</button>
+          <button className="btn delete-account" disabled={busy || !confirmsDeletion(typed)}>
+            <BusyLabel busy={busy} working="Deleting…">Delete account</BusyLabel>
+          </button>
+        </div>
+      </form>
+    </dialog>
   );
 }

@@ -84,6 +84,9 @@ label.inline select { width: auto; padding: 5px 8px; }
 .btn.ghost { background: transparent; color: var(--text); border-color: var(--line); }
 .btn.ghost:hover { background: var(--panel-2); }
 .btn.danger { color: var(--danger); }
+.btn.ghost.danger { border-color: var(--danger); }
+.btn.delete-account { background: var(--danger); color: #1b0606; }
+.btn.delete-account:hover { background: #f58c8c; }
 .btn.small { padding: 5px 10px; font-size: .85rem; }
 .btn.big { padding: 13px 26px; font-size: 1.05rem; }
 .btn.wide { width: 100%; }

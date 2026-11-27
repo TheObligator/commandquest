@@ -14,7 +14,7 @@ Each player who took part keeps the game:
 - **Saved games**: up to 5 more, chosen with Save. They're never replaced. To save a sixth, delete
   one first.
 
-A replay file is shared by everyone who played in that game, and deleted once nobody keeps it.
+A replay file is shared by everyone who played in that game, and deleted once nobody keeps it. Deleting an account (Settings, `convex/account.ts`) drops that player's hold on their replays the same way.
 Games shorter than 2 turns aren't kept.
 
 ## Recording

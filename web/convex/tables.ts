@@ -112,8 +112,8 @@ async function sweepAway(ctx: MutationCtx, table: Doc<"tables">, except?: Id<"us
   }
 }
 
-/** Leaves whatever table you're at (you sit at one at a time). */
-async function leaveCurrent(ctx: MutationCtx, userId: Id<"users">) {
+/** Leaves whatever table you're at (you sit at one at a time). Also used by account.ts. */
+export async function leaveCurrent(ctx: MutationCtx, userId: Id<"users">) {
   const seat = await mySeat(ctx, userId);
   if (seat) await removeSeat(ctx, seat);
 }
