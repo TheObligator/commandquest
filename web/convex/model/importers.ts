@@ -2,11 +2,12 @@
 // Ported from the old Java server's DeckUrlImporter. The fetching happens in ../importDeck.ts.
 
 import { cleanCardTags, type Board, type DeckCard } from "./deckRules.ts";
+import { SHARE_KEY_RE } from "./sharing.ts";
 
 export interface ImportedDeck {
   name: string;
   format: string;
-  source: "moxfield" | "archidekt";
+  source: "moxfield" | "archidekt" | "commandquest";
   cards: DeckCard[];
   /** Token printings the deck lists (Moxfield's Tokens board, Archidekt token cards): its token art. */
   tokens: ImportedToken[];
@@ -35,6 +36,19 @@ export function deckSource(url: string): DeckSource | null {
   m = ARCHIDEKT.exec(u);
   if (m) return { site: "archidekt", id: m[1], apiUrl: `https://archidekt.com/api/decks/${m[1]}/` };
   return null;
+}
+
+/** A CommandQuest share link (`…/#/d/<key>`, on any of our sites) or a bare share key. */
+const SHARE_LINK = /^https?:\/\/[^/#?\s]+\/?(?:\?[^#]*)?#\/d\/([^/?#\s]+)\/?(?:[?#].*)?$/;
+
+/**
+ * The share key in a CommandQuest deck link, else null. The deck is read from our own database
+ * (with the share page's visibility rules), so the link's host doesn't matter and nothing is fetched.
+ */
+export function shareKeyFromLink(url: string): string | null {
+  const u = url.trim();
+  const key = SHARE_LINK.exec(u)?.[1] ?? u;
+  return SHARE_KEY_RE.test(key) ? key : null;
 }
 
 const ORDER: Board[] = ["commander", "main", "side", "maybe"];

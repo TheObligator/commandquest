@@ -2,7 +2,7 @@
 // search (Decks → Browse). Rules in convex/model/sharing.ts.
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
-import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { DeckError, MAX_DECKS_PER_USER, summarize, validateDeck } from "./model/deckRules";
 import {
@@ -134,6 +134,26 @@ export const get = query({
       liked: await mark("deckLikes"),
       favorited: await mark("deckFavorites"),
       signedIn: !!userId,
+    };
+  },
+});
+
+/**
+ * A shared deck as the editor's link import takes it (convex/importDeck.ts): public, unlisted or
+ * yours, else null. Like the share page, its game settings and folder stay private.
+ */
+export const forImport = internalQuery({
+  args: { key: v.string() },
+  handler: async (ctx, { key }) => {
+    const found = await sharedDeck(ctx, key);
+    if (!found) return null;
+    const d = found.deck;
+    return {
+      name: d.name,
+      format: d.format,
+      source: "commandquest" as const,
+      cards: d.cards,
+      tokens: (d.tokenArt ?? []).map((t) => ({ name: t.identity, scryfallId: t.scryfallId })),
     };
   },
 });

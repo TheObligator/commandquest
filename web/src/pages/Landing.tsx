@@ -24,7 +24,7 @@ export function Landing() {
         <Feature icon="✋" title="Free play" href="#/play" text="Like a paper table: tap, move or copy your cards by hand, add counters, search your library, cast a card free. Logged as “by hand”." />
         <Feature icon="↶" title="Rewind" href="#/play" text="Misclicked or forgot a blocker? Take the game back to an earlier moment once everyone agrees." />
         <Feature icon="🗂" title="Deck builder" href="#/decks" text="Search every card on Scryfall, sort by type, check your curve and color identity. Start from any Commander precon." />
-        <Feature icon="⇩" title="Import anywhere" href="#/decks/new?import=1" text="Paste a Moxfield or Archidekt link, a text export, or upload a .txt file." />
+        <Feature icon="⇩" title="Import anywhere" href="#/decks/new?import=1" text="Paste a CommandQuest, Moxfield or Archidekt link, a text export, or upload a .txt file." />
         <Feature icon="☁" title="Saved to your account" href={isAuthenticated ? "#/decks" : "#/signin"} text="Your decks follow you to any device once you sign in." />
       </section>
     </>

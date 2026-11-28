@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { checkBracket, colorCards, DeckError, MAX_QUANTITY, summarize, validateDeck, withCardsAdded, type DeckCard } from "../convex/model/deckRules.ts";
-import { archidektCategories, deckSource, parseArchidekt, parseMoxfield } from "../convex/model/importers.ts";
+import { archidektCategories, deckSource, parseArchidekt, parseMoxfield, shareKeyFromLink } from "../convex/model/importers.ts";
 import { cleanFolderName, FolderError, MAX_FOLDER_NAME } from "../convex/model/folderRules.ts";
 
 test("validateDeck trims, defaults the format and board, and clips printing fields", () => {
@@ -51,6 +51,17 @@ test("summarize counts main + commander and picks the commander's art", () => {
     { name: "Pyroblast", quantity: 2, board: "side" },
   ]);
   assert.deepEqual(s, { cardCount: 11, commanders: ["Atraxa"], coverScryfallId: "d0d33d52-3d28-4635-b985-51e126289259" });
+});
+
+test("shareKeyFromLink reads CommandQuest share links and bare keys", () => {
+  assert.equal(shareKeyFromLink("https://commandquest.app/#/d/aB3dE5gH7k"), "aB3dE5gH7k");
+  assert.equal(shareKeyFromLink("  https://staging.commandquest.app/#/d/aB3dE5gH7k/ "), "aB3dE5gH7k");
+  assert.equal(shareKeyFromLink("http://localhost:5173/?x=1#/d/aB3dE5gH7k?tab=list"), "aB3dE5gH7k");
+  assert.equal(shareKeyFromLink("aB3dE5gH7k"), "aB3dE5gH7k");
+  assert.equal(shareKeyFromLink("https://commandquest.app/#/d/short"), null);
+  assert.equal(shareKeyFromLink("https://commandquest.app/#/decks/aB3dE5gH7k"), null);
+  assert.equal(shareKeyFromLink("https://moxfield.com/decks/aB3dE5gH7k"), null);
+  assert.equal(shareKeyFromLink("aB3dE5gH70"), null); // 0 isn't in share keys
 });
 
 test("deckSource only accepts Moxfield and Archidekt deck links", () => {

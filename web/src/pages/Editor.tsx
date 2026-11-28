@@ -1015,7 +1015,7 @@ function ImportPane(props: {
       </label>
       <section className="import-block">
         <h3>From a link</h3>
-        <p className="muted small">Public Moxfield or Archidekt decks.</p>
+        <p className="muted small">Shared CommandQuest decks, or public Moxfield or Archidekt decks.</p>
         <div className="search-row">
           <input type="url" placeholder="https://moxfield.com/decks/…" aria-label="Deck link" value={url} autoFocus={props.autoFocus} onChange={(e) => setUrl(e.target.value)} />
           <button className="btn" disabled={!!busy} onClick={() => void fromLink()}><BusyLabel busy={busy === "link"} working="Importing…">Import link</BusyLabel></button>
