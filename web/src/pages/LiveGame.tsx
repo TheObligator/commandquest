@@ -590,9 +590,10 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
   // attacks whichever defender was clicked last, so a drag clicks the defender, then each creature
   // that isn't attacking it yet (a click on one attacking it would take it back out).
   const attacking = !!game.prompt && !game.ask && isAttackPrompt(game.prompt) && view.active === view.viewer;
-  // Your untapped creatures, and ones attacking (to move or call back). Forge says why if one can't attack.
+  // Your untapped creatures that aren't summoning sick (`sick` already allows for haste), and ones
+  // attacking (to move or call back). Forge says why if one can't attack.
   const attackCandidates = useMemo(
-    () => new Set(attacking ? view.players[0].battlefield.filter((c) => c.types?.includes("Creature") && (!c.tapped || c.attacking)).map((c) => c.id) : []),
+    () => new Set(attacking ? view.players[0].battlefield.filter((c) => c.types?.includes("Creature") && (c.attacking || (!c.tapped && !c.sick))).map((c) => c.id) : []),
     [attacking, view.players],
   );
   const declareAttack = (ids: number[], to: AttackTarget) => {
