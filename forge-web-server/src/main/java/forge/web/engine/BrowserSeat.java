@@ -1081,7 +1081,7 @@ public final class BrowserSeat implements IRemote {
             for (ManaTaps.Pick p : picks) {
                 if (p.source() == card.getId() && p.ability() == index && p.via() == null) {
                     any = true;
-                    String harm = p.damage() > 0 ? p.damage() + " damage to you" : p.life() > 0 ? "Pay " + p.life() + " life" : null;
+                    String harm = p.damage() > 0 ? p.damage() + " damage" : p.life() > 0 ? p.life() + " life" : null;
                     out.add(new ManaOpt(items.get(i), sa, p.choice(), p.mana(), "Add " + p.mana(), harm));
                 }
             }

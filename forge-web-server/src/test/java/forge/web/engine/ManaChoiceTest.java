@@ -113,7 +113,7 @@ public class ManaChoiceTest {
             waitFor("which mana", () -> seat.openAsk() != null);
             ask = seat.openAsk();
             Assert.assertEquals(costs(ask), List.of("{W}", "{U}", "{C}"), ask.toString());
-            Assert.assertEquals(ask.path("options").get(0).path("note").asText(), "1 damage to you");
+            Assert.assertEquals(ask.path("options").get(0).path("note").asText(), "1 damage");
             Assert.assertFalse(ask.path("options").get(2).has("note"), "{C} doesn't hurt");
             seat.answer(ask.path("id").asInt(), pick(ask, "{W}"), null);
             waitFor("white floating", () -> me.getManaPool().getAmountOfColor(MagicColor.WHITE) == 1);

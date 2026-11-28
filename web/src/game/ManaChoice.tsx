@@ -51,8 +51,8 @@ export function ManaChoice({ choice, anchorId, onPick, onCancel }: {
       <div className="mana-choice-btns">
         {choice.choices.map((c, i) => (
           <button key={i} className={`mana-choice-btn${c.cost ? "" : " text"}`} autoFocus={i === 0}
-            title={`${c.cost ? `Add ${c.cost}` : c.label}${c.note ? ` (${c.note})` : ""}`} onClick={() => onPick(c.answer)}>
-            {c.cost ? <ManaCost cost={c.cost} font /> : <SymText text={c.label ?? ""} />}
+            title={`${c.cost ? `Add ${c.cost}` : c.label}${c.note ? ` (costs you ${c.note})` : ""}`} onClick={() => onPick(c.answer)}>
+            {c.cost ? <ManaCost cost={c.cost} font /> : <span><SymText text={c.label ?? ""} /></span>}
             {c.note && <small className="mana-choice-note">{c.note}</small>}
           </button>
         ))}
