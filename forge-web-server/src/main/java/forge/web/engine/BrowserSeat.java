@@ -1024,9 +1024,11 @@ public final class BrowserSeat implements IRemote {
 
     /**
      * Cards shown to this player ({@code shown}): a window with them that the player closes; the
-     * game doesn't wait. {@code note} says why there are none ("no cards in X's hand").
+     * game doesn't wait. {@code note} says why there are none ("no cards in X's hand"). {@code owner}
+     * and {@code zone}: whose cards and where from. {@code group}: reveals with the same group came from
+     * one stack item resolving ({@code source} names its card) and share a window, a section per owner.
      */
-    public void showCards(String title, List<CardView> cards, String note) {
+    public void showCards(String title, List<CardView> cards, String note, PlayerView owner, String zone, String group, String source) {
         if (closed) {
             return;
         }
@@ -1036,6 +1038,16 @@ public final class BrowserSeat implements IRemote {
         o.put("title", title);
         if (note != null) {
             o.put("note", note);
+        }
+        if (owner != null) {
+            o.put("owner", ViewJson.id(owner));
+        }
+        if (zone != null) {
+            o.put("zone", zone);
+        }
+        if (group != null) {
+            o.put("group", group);
+            o.put("source", source);
         }
         ArrayNode a = o.putArray("cards");
         cards.forEach(c -> a.add(views.card(gv, c, me, true)));

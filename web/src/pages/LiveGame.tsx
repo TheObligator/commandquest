@@ -1192,10 +1192,11 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
       <ShownWindow
         key={game.shown[0].n}
         title={game.shown[0].title}
-        note={game.shown[0].note}
-        cards={game.shown[0].cards}
+        sections={game.shown[0].sections}
         more={game.shown.length - 1}
         onClose={game.dismissShown}
+        nameOf={nameOf}
+        colorOf={colorOf}
       />
     )}
     {game.prompt?.pay && !game.ask && <PayPrompt prompt={game.prompt} pool={view.players[0].mana} game={{ ok, cancel, payFree: game.payFree, payPool: game.payPool, sent: game.sent }} />}

@@ -6,6 +6,7 @@ import { useAuthToken } from "@convex-dev/auth/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { setGameInProgress } from "../app/busy";
 import { Sending, type Sent } from "./sending";
+import { addShown, type LiveShown } from "./shownQueue";
 import type { LaterSpec, SavedLater } from "./later";
 import type { AutoPassMode, StepId } from "./phases";
 import type { CardView, GameView, RewindLevel } from "./view";
@@ -59,13 +60,7 @@ export interface AskOption {
   card?: CardView;
 }
 
-/** Cards revealed to you, in a window you close; the game doesn't wait. `note` says why there are none. */
-export interface LiveShown {
-  n: number;
-  title: string;
-  note?: string;
-  cards: CardView[];
-}
+export type { LiveShown, ShownSection } from "./shownQueue";
 
 /** A question that blocks the game until answered. */
 export interface LiveAsk {
@@ -417,7 +412,7 @@ export function useLiveGame() {
             setNotice((n) => ({ message: m.message, n: (n?.n ?? 0) + 1 }));
             break;
           case "shown":
-            setShown((q) => [...q, { n: ++shownCount.current, title: m.title ?? "", note: m.note, cards: m.cards ?? [] }].slice(-20));
+            setShown((q) => addShown(q, m, ++shownCount.current));
             break;
           case "actions": {
             const waiters = actionWaiters.current.get(m.id) ?? [];

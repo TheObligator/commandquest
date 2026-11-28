@@ -606,6 +606,18 @@ public class WebPlayerController extends PlayerControllerHuman {
         String note = views.isEmpty()
                 ? MessageUtil.formatMessage(loc.getMessage("lblThereNoCardInPlayerZone", "{player's}", zoneName), getLocalPlayerView(), owner)
                 : null;
-        seat.showCards(title, views, note);
+        // Reveals made while one stack item resolves (each player revealing the top of their library,
+        // say) share a group, so the browser shows them in one window with a section per player.
+        String group = null;
+        String source = null;
+        try {
+            if (getGame().getStack().isResolving() && getGame().getStack().peek() != null) {
+                group = "s" + getGame().getStack().peek().getId();
+                source = getGame().getStack().getResolvingAbility().getHostCard().getTranslatedName();
+            }
+        } catch (RuntimeException e) {
+            group = null; // no grouping: the reveal still shows in its own window
+        }
+        seat.showCards(title, views, note, owner, zoneName, group, source);
     }
 }
