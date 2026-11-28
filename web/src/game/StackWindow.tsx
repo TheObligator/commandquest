@@ -1,6 +1,7 @@
 // The stack as a floating window over the table: one tile per spell or ability, top first, with
 // its art, kind, rules text and targets. Drag it by its title bar and resize it from the corner;
-// both are remembered in this browser. Click a tile, its "⋯" or right-click it for the full text
+// both are remembered in this browser. Whichever way it's longer, its tiles run that way: a window
+// wider than it is tall lays them out left to right (top of the stack first), otherwise top to bottom. Click a tile, its "⋯" or right-click it for the full text
 // and (live games) its auto-yield settings. Lines run from each item to what it targets.
 // While you're choosing targets (a counterspell), spells you can target glow, and clicking one
 // targets it; "⋯" and right-click still open it.
@@ -68,6 +69,16 @@ export function StackWindow(props: {
   const { box, ref, startDrag, onResizeEnd } = useFloatingBox(KEY, defaultBox);
   const [open, setOpen] = useState<{ id: number; x: number; y: number } | null>(null);
   const setPreview = usePreview();
+  // Tiles run along the window's longer side, following it live while it's resized.
+  const [row, setRow] = useState(box.w > box.h);
+  const shown = view.stack.length > 0;
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setRow(el.offsetWidth > el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref, shown]);
 
   const openItem = (e: React.MouseEvent, s: StackItemView) => {
     e.preventDefault();
@@ -88,7 +99,7 @@ export function StackWindow(props: {
     <>
       <div
         ref={ref}
-        className="stack-window"
+        className={`stack-window${row ? " row" : ""}`}
         style={{ left: box.x, top: box.y, width: box.w, height: box.h }}
         onPointerUp={onResizeEnd}
         role="region"

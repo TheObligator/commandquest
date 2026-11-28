@@ -360,7 +360,7 @@ dialog.zone-viewer { width: min(980px, calc(100vw - 32px)); max-height: 86vh; ba
 
 /* The stack: a floating window over the table */
 .stack-window {
-  position: absolute; z-index: 30; display: flex; flex-direction: column; min-width: 190px; min-height: 140px; max-width: 520px;
+  position: absolute; z-index: 30; display: flex; flex-direction: column; min-width: 190px; min-height: 140px; max-width: calc(100vw - 16px);
   resize: both; overflow: hidden; border: 1px solid #3b3424; border-radius: 12px; background: rgb(18 16 12 / 94%);
   box-shadow: 0 12px 32px rgb(0 0 0 / 55%); backdrop-filter: blur(3px);
 }
@@ -369,7 +369,9 @@ dialog.zone-viewer { width: min(980px, calc(100vw - 32px)); max-height: 86vh; ba
 .stk-head h3 { margin: 0; font: italic 600 1rem Georgia, "Times New Roman", serif; color: #e7dcc0; }
 .stk-grip { color: #6c6352; font-size: .9rem; }
 .stk-count { margin-left: auto; font-size: .75rem; color: #8a826e; }
-.stk-list { list-style: none; margin: 0; padding: 10px; display: grid; gap: 10px; overflow: auto; flex: 1; align-content: start; }
+.stk-list { list-style: none; margin: 0; padding: 10px; display: grid; gap: 10px; overflow: auto; flex: 1; align-content: start; grid-template-columns: minmax(0, 480px); justify-content: center; }
+/* Wider than tall: the tiles run left to right, top of the stack first. */
+.stack-window.row .stk-list { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 210px; justify-content: start; align-items: start; }
 .stk-item {
   position: relative; border: 1px solid color-mix(in srgb, var(--seat) 55%, #5a4a2a); border-radius: 8px; background: #1a1712;
   cursor: pointer; overflow: visible; transition: box-shadow .12s;
