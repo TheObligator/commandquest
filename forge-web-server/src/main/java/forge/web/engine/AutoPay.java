@@ -28,7 +28,7 @@ import org.tinylog.Logger;
 
 /**
  * The Auto-pay button: pays a mana cost the way a careful player taps lands. Among your untapped
- * sources that just tap for one mana (no damage, sacrifice or life), it picks the cheapest set:
+ * sources that just tap for one mana (no damage, sacrifice or life), or for {C}{C} like Sol Ring, it picks the cheapest set (Sol Ring pays generic before any land, so colored sources stay up):
  * sources that can make fewer colors first (basics before dual and any-color lands, a mana rock
  * before a filter land), creatures last, and what's left untapped should still cast as many of the
  * spells in your hand as it can (keep a Plains up for the Swords to Plowshares). It only takes
@@ -48,11 +48,16 @@ public final class AutoPay {
 
     /**
      * One untapped source: the colors it can make for this payment, each with the ability that does
-     * it; {@code painful}: the colors only an ability that deals you 1 damage makes.
+     * it; {@code painful}: the colors only an ability that deals you 1 damage makes; {@code amount}: how much one tap
+     * makes (2 for Sol Ring, whose only mana is {C}; 1 for everything else).
      */
-    record Source(Card card, Map<Byte, SpellAbility> byColor, int penalty, boolean anyColor, Set<Byte> painful) {
+    record Source(Card card, Map<Byte, SpellAbility> byColor, int penalty, boolean anyColor, Set<Byte> painful, int amount) {
+        Source(Card card, Map<Byte, SpellAbility> byColor, int penalty, boolean anyColor, Set<Byte> painful) {
+            this(card, byColor, penalty, anyColor, painful, 1);
+        }
+
         Source(Card card, Map<Byte, SpellAbility> byColor, int penalty, boolean anyColor) {
-            this(card, byColor, penalty, anyColor, Set.of());
+            this(card, byColor, penalty, anyColor, Set.of(), 1);
         }
     }
 
@@ -197,7 +202,7 @@ public final class AutoPay {
     private static boolean floatMana(Game g, Player me, Tap t) {
         SpellAbility sa = t.ability();
         Card c = t.source().card();
-        if (c.isTapped() || !clean(sa, c)) {
+        if (c.isTapped() || !(clean(sa, c) || colorlessRock(sa, c))) {
             return false;
         }
         sa.setActivatingPlayer(me);
@@ -278,7 +283,7 @@ public final class AutoPay {
         return need;
     }
 
-    /** Your untapped permanents that tap for exactly one mana with no other cost or effect. */
+    /** Your untapped permanents that tap for exactly one mana (or several {C}) with no other cost or effect. */
     static List<Source> sources(Player me, SpellAbility paidFor) {
         return sources(me, paidFor, null);
     }
@@ -316,6 +321,16 @@ public final class AutoPay {
                     }
                 }
             }
+            int amount = 1;
+            if (byColor.isEmpty()) {   // a rock that taps for more than one {C} (Sol Ring, Thran Dynamo)
+                for (SpellAbility ma : abilities) {
+                    if (colorlessRock(ma, c) && ma.isManaAbilityFor(paidFor, (byte) ManaAtom.COLORLESS)) {
+                        byColor.put((byte) ManaAtom.COLORLESS, ma);
+                        amount = ma.amountOfManaGenerated(true);
+                        break;
+                    }
+                }
+            }
             if (byColor.isEmpty()) {
                 continue;
             }
@@ -330,7 +345,7 @@ public final class AutoPay {
             boolean otherAbilities = c.getSpellAbilities().stream().anyMatch(sa -> !sa.isManaAbility() && sa.isActivatedAbility());
             int penalty = 1 + 2 * colors + (c.isCreature() ? 20 : 0) + (otherAbilities ? 3 : 0) + (anyColor ? 1 : 0)
                     + (waiting.contains(c.getId()) ? 30 : 0);
-            out.add(new Source(c, byColor, penalty, anyColor, painful));
+            out.add(new Source(c, byColor, penalty, anyColor, painful, amount));
         }
         out.sort(Comparator.comparingInt(Source::penalty).thenComparingInt(s -> s.card().getId()));
         return out;
@@ -348,10 +363,18 @@ public final class AutoPay {
                 && "You".equals(sub.getParam("Defined")) && "1".equals(sub.getParam("NumDmg")) && tapsForOne(ma, c);
     }
 
+    /** Only {T}, nothing else happens, and it makes two or more {C} and nothing else. */
+    private static boolean colorlessRock(SpellAbility ma, Card c) {
+        AbilityManaPart mp = ma.getManaPart();
+        return ma.getSubAbility() == null && mp != null && "C".equals(mp.getOrigProduced()) && !mp.isComboMana()
+                && !mp.isAnyMana() && ma.amountOfManaGenerated(true) > 1 && onlyTaps(ma, c);
+    }
+
     private static boolean tapsForOne(SpellAbility ma, Card c) {
-        if (ma.amountOfManaGenerated(true) != 1 || ma.getManaPart() == null) {
-            return false;
-        }
+        return ma.amountOfManaGenerated(true) == 1 && ma.getManaPart() != null && onlyTaps(ma, c);
+    }
+
+    private static boolean onlyTaps(SpellAbility ma, Card c) {
         boolean tap = false;
         for (CostPart p : ma.getPayCosts().getCostParts()) {
             if (!(p instanceof CostTap)) {
@@ -436,8 +459,8 @@ public final class AutoPay {
             }
         });
         int free = 0;
-        for (boolean u : used) {
-            free += u ? 0 : 1;
+        for (int k = 0; k < used.length; k++) {
+            free += used[k] ? 0 : sources.get(k).amount();
         }
         if (colored.size() + spell.generic() > free) {
             return false;
@@ -529,7 +552,7 @@ public final class AutoPay {
                 }
             }
         }
-        if (colored.size() + generic > sources.size()) {
+        if (colored.size() + generic > sources.stream().mapToInt(Source::amount).sum()) {
             return null;
         }
         colored.sort(Comparator.comparingLong(col -> sources.stream().filter(s -> s.byColor().containsKey(col)).count()));
@@ -537,6 +560,12 @@ public final class AutoPay {
         s.go(0, new boolean[sources.size()], new ArrayList<>(), 0);
         return s.best;
     }
+
+    /**
+     * Each mana a tap makes that this payment doesn't use (Sol Ring for a single {1}): a basic land pays it instead,
+     * but Sol Ring still goes before a dual land or a talisman.
+     */
+    static final int WASTED = 3;
 
     private static final class Search {
         final List<Source> sources;
@@ -595,9 +624,10 @@ public final class AutoPay {
                 if (c < 0) {
                     continue;
                 }
+                int use = Math.min(src.amount(), left);
                 used[k] = true;
                 taps.add(new Tap(src, ab, (byte) 0));
-                generic(k + 1, left - 1, used, taps, cost + c);
+                generic(k + 1, left - use, used, taps, cost + c + WASTED * (src.amount() - use));
                 taps.remove(taps.size() - 1);
                 used[k] = false;
             }

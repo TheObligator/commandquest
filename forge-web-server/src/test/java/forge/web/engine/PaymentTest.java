@@ -453,4 +453,46 @@ public class PaymentTest {
             session.abort();
         }
     }
+
+    @Test(timeOut = 240_000)
+    public void autoPayTapsSolRingForGenericAndKeepsColorsUp() throws Exception {
+        MyRandom.setRandom(new Random(5));
+        GameSessionTest.ScriptedBrowser browser = new GameSessionTest.ScriptedBrowser();
+        GameSession session = GameSession.startCommander(List.of(
+                new GameSession.Seat("You", deck("Narset, Enlightened Master", "Mountain"), browser),
+                new GameSession.Seat("AI 1", deck("Talrand, Sky Summoner", "Island"), null)));
+        try {
+            PlayerView meView = untilMyMain(session, browser);
+            IGameController controller = session.controller("You", meView);
+            Game g = session.game();
+            Player me = g.getPlayer(meView.getId());
+            Card[] cards = onGameThread(g, () -> {
+                tapTheRest(me);
+                return new Card[] {
+                    make(me, "Furycalm Snarl", ZoneType.Battlefield),
+                    make(me, "Talisman of Conviction", ZoneType.Battlefield),
+                    make(me, "Island", ZoneType.Battlefield),
+                    make(me, "Sol Ring", ZoneType.Battlefield),
+                    make(me, "Seven of Nine, Tertiary Adjunct", ZoneType.Hand),
+                };
+            });
+            onUiThread(() -> controller.selectCard(cards[4].getView(), null, null));
+            waitFor(() -> Payment.info(controller, me) != null, "the mana payment");
+            onUiThread(() -> {
+                Payment.ok(controller, me);
+                return null;
+            });
+            waitFor(() -> AutoPay.held(controller) != null, "the auto-paid mana");
+            Assert.assertTrue(cards[2].isTapped() && cards[3].isTapped(), "the Island and Sol Ring pay {2}{U}");
+            Assert.assertFalse(cards[0].isTapped() || cards[1].isTapped(), "the Snarl and the Talisman stay up");
+            onUiThread(() -> {
+                Payment.ok(controller, me);
+                return null;
+            });
+            waitFor(() -> Payment.info(controller, me) == null && !g.getStack().isEmpty(), "Seven of Nine on the stack");
+            Assert.assertEquals(me.getManaPool().totalMana(), 0, "all the floating mana was spent");
+        } finally {
+            session.abort();
+        }
+    }
 }
