@@ -131,6 +131,17 @@ set-token)
   ;;
 deploy)
   mkdir -p "$HOME_DIR"
+  # One deploy at a time per server (auto-deploy and a deploy by hand share $SRC): wait for the other.
+  LOCK="$HOME_DIR/deploy.lock"
+  find "$LOCK" -maxdepth 0 -mmin +40 -exec rmdir {} \; 2>/dev/null || true   # left by a killed deploy
+  waited=0
+  until mkdir "$LOCK" 2>/dev/null; do
+    [ $waited -ge 1800 ] && { echo "Another deploy is still running ($LOCK)." >&2; exit 4; }
+    [ $waited = 0 ] && echo "Waiting for another deploy to finish…" >&2
+    sleep 5
+    waited=$((waited + 5))
+  done
+  trap 'rmdir "$LOCK" 2>/dev/null' EXIT INT TERM
   [ "$REF" = "origin/$BRANCH" ] && git -C "$REPO" fetch -q origin "$BRANCH"
   sha=$(git -C "$REPO" rev-parse --verify "$REF^{commit}")
   if [ -d "$SRC" ]; then
@@ -235,6 +246,7 @@ auto-deploy)
   case $status in
     0) rm -f "$HOME_DIR/failed" ;;
     3) ;; # a game started during the build
+    4) ;; # another deploy held the lock
     *) echo "$want" > "$HOME_DIR/failed"; echo "deploy failed ($status); see $HOME_DIR/build.log" ;;
   esac
   exit 0
