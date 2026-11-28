@@ -20,7 +20,7 @@ export const fromUrl = action({
       if (!deck) {
         throw new ConvexError(
           "deckId" in ours
-            ? "That CommandQuest deck wasn't found, or it isn't public. Ask its owner for its share link."
+            ? "That CommandQuest deck wasn't found. It may be private, or it may have been deleted."
             : "That CommandQuest deck wasn't found. It may be private, or the link may have changed.",
         );
       }
