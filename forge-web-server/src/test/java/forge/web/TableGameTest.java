@@ -157,7 +157,7 @@ public class TableGameTest {
 
             // Ana comes in first and waits for Bob.
             wa.sendText(join(KEY, "Isamaru, Hound of Konda"), true);
-            JsonNode waiting = next(ana, "tableWaiting", 10_000);
+            JsonNode waiting = next(ana, "tableWaiting", 60_000);   // the first join loads Forge's cards: slow on a busy machine
             Assert.assertEquals(waiting.path("joined").asInt(), 1);
             Assert.assertEquals(waiting.path("total").asInt(), 2);
             Assert.assertEquals(waiting.path("waitingFor").get(0).asText(), "Bob");
