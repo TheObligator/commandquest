@@ -46,7 +46,7 @@ export interface CardState {
   attackingCard?: number;
   /** The attacker this creature blocks (its name). */
   blocking?: string;
-  /** On the battlefield: keywords and abilities other effects gave it, not printed on it. */
+  /** Keywords and abilities other effects gave it, not printed on it (on the battlefield, in your hand, in graveyards…). */
   gained?: Gained[];
 }
 
@@ -113,7 +113,7 @@ export interface CardView {
   counters?: Record<string, number>;
   commander?: boolean;
   sick?: boolean;
-  /** Keywords and abilities other effects gave it, not printed on it (battlefield only). */
+  /** Keywords and abilities other effects gave it, not printed on it (any zone where you can see it). */
   gained?: Gained[];
   attacking?: string;
   /** The planeswalker or battle it attacks (`attacking` is its controller). */

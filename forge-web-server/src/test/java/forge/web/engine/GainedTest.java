@@ -97,6 +97,49 @@ public class GainedTest {
         }
     }
 
+    @Test(timeOut = 240_000)
+    public void gainedInYourHand() throws Exception {
+        MyRandom.setRandom(new Random(6));
+        Deck d = new Deck("Lands");
+        d.getOrCreate(DeckSection.Commander).add("Kenrith, the Returned King", 1);
+        d.getMain().add("Mountain", 98);
+        d.getMain().add("Tectonic Reformation", 1);
+        GameSessionTest.ScriptedBrowser browser = new GameSessionTest.ScriptedBrowser();
+        Deck ai = new Deck("Ezuri");
+        ai.getOrCreate(DeckSection.Commander).add("Ezuri, Renegade Leader", 1);
+        ai.getMain().add("Forest", 99);
+        GameSession session = GameSession.startCommander(List.of(
+                new GameSession.Seat("You", d, browser),
+                new GameSession.Seat("AI 1", ai, null)));
+        try {
+            PlayerView meView = PaymentTest.untilMyMain(session, browser);
+            Game g = session.game();
+            Player me = g.getPlayer(meView.getId());
+            CountDownLatch done = new CountDownLatch(1);
+            Assert.assertTrue(new ManualActions().run(g, me, named(me, "Tectonic Reformation"), "toBattlefield", null, done::countDown));
+            Assert.assertTrue(done.await(10, TimeUnit.SECONDS));
+            Card land = me.getCardsIn(forge.game.zone.ZoneType.Hand).stream().filter(c -> c.getName().equals("Mountain")).findFirst()
+                    .orElseThrow(() -> new AssertionError("no Mountain in hand"));
+
+            // Through the view, as the browser gets it: your hand's Mountain gained cycling.
+            ObjectMapper json = new ObjectMapper();
+            com.fasterxml.jackson.databind.node.ObjectNode view = json.createObjectNode();
+            view.putArray("players").addObject().putArray("hand").addObject().put("id", land.getId());
+            onGameThread(g, () -> {
+                Gained.annotate(g, view, json);
+                return null;
+            });
+            JsonNode gained = view.path("players").get(0).path("hand").get(0).path("gained");
+            JsonNode cycling = gained.size() == 1 ? gained.get(0) : null;
+            Assert.assertNotNull(cycling, "cycling: " + gained);
+            Assert.assertEquals(cycling.path("keyword").asText(), "Cycling");
+            Assert.assertEquals(cycling.path("source").asText(), "Tectonic Reformation");
+            Assert.assertTrue(cycling.path("text").asText().startsWith("Cycling"), cycling.toString());
+        } finally {
+            session.abort();
+        }
+    }
+
     private static JsonNode find(JsonNode list, String text) {
         List<JsonNode> hits = new ArrayList<>();
         list.forEach(e -> {

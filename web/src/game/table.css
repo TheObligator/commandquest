@@ -308,7 +308,7 @@ dialog.zone-viewer { width: min(980px, calc(100vw - 32px)); max-height: 86vh; ba
 .gk-short, .ga-count { display: none; }
 /* Small cards (the usual board size): no room for text. Keywords without an icon get two letters,
    gained abilities a "+N" chip; hovering the card shows them in full. */
-.bf-card { container-type: inline-size; }
+.bf-card, .zt-card { container-type: inline-size; }
 @container (max-width: 70px) {
   .gk-full, .ga-text .ga-line, .ga-more { display: none; }
   .gk-short, .ga-count { display: inline; }

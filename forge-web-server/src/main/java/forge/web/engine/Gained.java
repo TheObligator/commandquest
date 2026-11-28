@@ -35,27 +35,35 @@ final class Gained {
     private Gained() {
     }
 
-    /** Adds {@code gained} to each battlefield card of a view ({@link ViewJson#game}) whose face its viewer can see. */
+    /** The zones of a player in a view that can hold cards: hand (only the viewer's is sent with cards), graveyard, exile... */
+    private static final String[] ZONES = {"battlefield", "hand", "graveyard", "exile", "command"};
+
+    /**
+     * Adds {@code gained} to each card of a view ({@link ViewJson#game}) whose face its viewer can see:
+     * permanents, and cards elsewhere that gained something there (cycling in your hand, flashback in a graveyard).
+     */
     static void annotate(Game g, ObjectNode view, ObjectMapper json) {
         if (g == null) {
             return;
         }
         Map<Long, Card> statics = null;
         for (JsonNode p : view.path("players")) {
-            for (JsonNode c : p.path("battlefield")) {
-                if (c.path("hidden").asBoolean()) {
-                    continue;   // a face-down card's abilities stay hidden
-                }
-                Card card = g.findById(c.path("id").asInt());
-                if (card == null || card.getChangedCardKeywords().isEmpty() && card.getChangedCardTraits().isEmpty()) {
-                    continue;
-                }
-                if (statics == null) {
-                    statics = staticHosts(g);
-                }
-                ArrayNode list = of(card, statics, json);
-                if (!list.isEmpty()) {
-                    ((ObjectNode) c).set("gained", list);
+            for (String zone : ZONES) {
+                for (JsonNode c : p.path(zone)) {
+                    if (c.path("hidden").asBoolean()) {
+                        continue;   // a card you can't see keeps what it gained hidden too
+                    }
+                    Card card = g.findById(c.path("id").asInt());
+                    if (card == null || card.getChangedCardKeywords().isEmpty() && card.getChangedCardTraits().isEmpty()) {
+                        continue;
+                    }
+                    if (statics == null) {
+                        statics = staticHosts(g);
+                    }
+                    ArrayNode list = of(card, statics, json);
+                    if (!list.isEmpty()) {
+                        ((ObjectNode) c).set("gained", list);
+                    }
                 }
             }
         }

@@ -30,7 +30,7 @@ function KeywordTip({ g, at }: { g: Gained; at: DOMRect }) {
       role="tooltip"
       style={{ left, top: below ? at.bottom + 8 : at.top - 8, transform: `translate(-50%, ${below ? "0" : "-100%"})` }}
     >
-      <strong>{icon && <i className={icon} />}{g.text}</strong>
+      <strong>{icon && <i className={icon} />}<SymText text={g.text} /></strong>
       {g.reminder && <p><SymText text={g.reminder} /></p>}
       <small>Gained{g.source ? ` from ${g.source}` : ""}. Not printed on the card.</small>
     </div>,

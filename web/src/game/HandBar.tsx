@@ -1,6 +1,7 @@
 // Your hand: upright cards in a row from the left. Drag one onto your board or double-click it to
 // play it. While choosing cards to put on the bottom after a mulligan, clicking selects instead.
 import { CardFace, CostOverlay, PTOverlay, previewFor, usePreview } from "./cards";
+import { GainedMarks } from "./GainedMarks";
 import { isMarkClick, useMarks, useMarquee } from "./marks";
 import { DRAG_TYPE, setDrag, type DragData } from "./SeatBoard";
 import type { OpenMenu } from "./TableBoard";
@@ -66,6 +67,7 @@ export function HandBar(props: {
               <CardFace card={c} />
               <CostOverlay card={c} />
               <PTOverlay card={c} />
+              <GainedMarks gained={c.gained} />
             </button>
           );
         })}
