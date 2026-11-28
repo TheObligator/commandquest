@@ -404,7 +404,7 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
                     e.dataTransfer.effectAllowed = "move";
                   }}
                   onDragEnd={() => (setDrag(null), setDropAt(null))}
-                  aria-label={canAttack ? `${c.name ?? "Face-down card"}: drag to an opponent to attack them, click to attack the chosen one` : props.onCardClick ? `${c.name ?? "Face-down card"}: click to use or choose it, right-click for more, drag to move` : isMe && props.onTap ? `${c.name ?? "Face-down card"}: click to ${c.tapped ? "untap" : "tap"}, drag to move` : undefined}
+                  aria-label={c.undoMana ? `${c.name}: click to untap it and take back its unspent mana` : canAttack ? `${c.name ?? "Face-down card"}: drag to an opponent to attack them, click to attack the chosen one` : props.onCardClick ? `${c.name ?? "Face-down card"}: click to use or choose it, right-click for more, drag to move` : isMe && props.onTap ? `${c.name ?? "Face-down card"}: click to ${c.tapped ? "untap" : "tap"}, drag to move` : undefined}
                   onClick={(e) => {
                     // Shift/Ctrl/⌘-click selects it (with others) for one right-click menu.
                     if (isMarkClick(e)) return marks.toggle(ids);

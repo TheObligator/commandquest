@@ -695,6 +695,13 @@ public final class GameHub {
             return;
         }
         Player who = seat.player() == null ? null : g.getPlayer(seat.player().getId());
+        // Your permanent you tapped for mana that's still in your pool: clicking it again takes that back.
+        // Only while Forge waits on you to act (the game thread is parked), like desktop Forge's undo.
+        if (ability == null && who != null && priorityInput(ctl) && g.getPhaseHandler().getPriorityPlayer() == who
+                && forge.web.engine.ManaUndo.untap(g, who, card)) {
+            seat.refresh();
+            return;
+        }
         if (who != null && priorityInput(ctl) && Explain.noTargets(card, who, ability, label)) {
             notice(c, "Nothing it can target right now.");
             return;

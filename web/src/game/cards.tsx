@@ -183,6 +183,7 @@ export function CardBadges({ card }: { card: CardView }) {
         <span key={k} className="ctr other">{n} {k}</span>
       ))}
       <GainedMarks gained={card.gained} />
+      {card.undoMana && <span className="undo-mana" title="Click to untap it: its mana hasn't been spent">↺</span>}
       {card.commander && <span className="crown" title="Commander">♛</span>}
       {card.faceDown && !card.hidden && <span className="fd-eye" title="Face down. You can see it.">👁</span>}
     </>

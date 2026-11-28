@@ -383,6 +383,9 @@ public final class BrowserSeat implements IRemote {
             }
             untapLocks(live, view);
             Gained.annotate(live, view, json);
+            if (live != null) {
+                ManaUndo.annotate(live, live.getPlayer(me.getId()), view);
+            }
             if (!searching.isEmpty()) {
                 ArrayNode s = view.putArray("searching"); // players whose library you may search
                 searching.forEach(id -> s.add(String.valueOf(id)));

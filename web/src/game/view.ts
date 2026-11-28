@@ -119,6 +119,8 @@ export interface CardView {
   /** The planeswalker or battle it attacks (`attacking` is its controller). */
   attackingCard?: number;
   blocking?: string;
+  /** Live games: you tapped it for mana that's still unspent in your pool; clicking it untaps it and takes that mana back. */
+  undoMana?: boolean;
   /** For a face-down card: the players who may look at it. Public, even when the face is hidden. */
   visibleTo?: string[];
   /** Live games: kept from untapping by hand, during its next untap step or never. */
@@ -356,7 +358,7 @@ export interface Pile {
 
 function pileKey(c: CardView): string {
   if (c.hidden || c.commander) return `#${c.id}`;
-  return JSON.stringify([c.name, !!c.tapped, !!c.token, !!c.sick, c.power, c.toughness, c.counters ?? null, c.attacking ?? null, c.attackingCard ?? null, c.blocking ?? null, c.gained?.map((g) => g.text) ?? null]);
+  return JSON.stringify([c.name, !!c.tapped, !!c.token, !!c.sick, c.power, c.toughness, c.counters ?? null, c.attacking ?? null, c.attackingCard ?? null, c.blocking ?? null, c.gained?.map((g) => g.text) ?? null, !!c.undoMana]);
 }
 
 /**
