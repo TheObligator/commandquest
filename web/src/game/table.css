@@ -824,3 +824,6 @@ dialog.decision-window.wide { width: min(860px, calc(100vw - 32px)); }
 /* Where an arrow's target is when an enlarged board covers it (locate.ts). */
 .stack-arrows .sa-away rect { fill: rgb(18 16 12 / 92%); stroke: color-mix(in srgb, var(--seat) 70%, #e0b04a); stroke-width: 1.5; }
 .stack-arrows .sa-away text { fill: #f1e9d6; font: 600 11px system-ui, sans-serif; text-anchor: start; }
+
+.restart-banner { position: fixed; z-index: 95; top: 8px; left: 50%; transform: translateX(-50%); max-width: calc(100vw - 32px); padding: 7px 14px; border-radius: 999px; background: #3a2410; border: 1px solid #e0a84f; color: #f6e7c8; font-size: .85rem; box-shadow: 0 6px 20px rgb(0 0 0 / 50%); pointer-events: none; text-align: center; }
+.restart-banner b { font-variant-numeric: tabular-nums; color: #ffd48a; }

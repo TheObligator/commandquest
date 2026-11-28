@@ -11,7 +11,8 @@
 #   forge-web-server/scripts/game-service.sh restart         restart the server
 #   forge-web-server/scripts/game-service.sh restart-tunnel  restart the tunnel (drops both servers' games)
 #   forge-web-server/scripts/game-service.sh uninstall       stop and remove the server (and the tunnel, if it's the last)
-#   forge-web-server/scripts/game-service.sh auto-on         every 15 min, deploy a newer branch when no game is running
+#   forge-web-server/scripts/game-service.sh auto-on         deploy a newer branch: staging every 2 min, warning games
+#                                                             5 min ahead; production every 15 min, when no game is running
 #   forge-web-server/scripts/game-service.sh auto-off        stop doing that
 #
 # e.g. `SITE=production forge-web-server/scripts/game-service.sh status`.
@@ -57,6 +58,10 @@ TUNNEL=com.commandquest.tunnel
 AUTO=com.commandquest.autodeploy$SUFFIX
 OTHER_SERVER=com.commandquest.game$([ "$SITE" = production ] || echo -production)
 GAME_LOG="$LOGS/commandquest-game$SUFFIX.log"
+# The secret the server takes restart warnings with (POST /admin/restart-notice).
+RESTART_TOKEN="$HOME_DIR/restart-token"
+# Staging updates don't wait for games to end: players get this long a warning. Production waits for none running.
+if [ "$SITE" = staging ]; then WARN_DEFAULT=300 INTERVAL=120; else WARN_DEFAULT= INTERVAL=900; fi
 
 loaded() { launchctl print "$DOMAIN/$1" > /dev/null 2>&1; }
 
@@ -85,6 +90,7 @@ plist() { # label, log file, then the program and its arguments
     <key>CONVEX_ISSUERS</key><string>$ISSUERS</string>
     <key>GIT_SHA</key><string>$(cat "$HOME_DIR/version" 2>/dev/null || echo unknown)</string>
     <key>REPLAY_SECRET_FILE</key><string>$REPLAY_SECRET_FILE</string>
+    <key>RESTART_TOKEN_FILE</key><string>$RESTART_TOKEN</string>
   </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
@@ -135,8 +141,13 @@ deploy)
   # A Forge merge can bump the version, which would leave the old version's jars beside the new ones.
   rm -f "$SRC"/forge-web-server/target/forge-web-server-*.jar
   echo "Building $REF ($(git -C "$SRC" log -1 --format='%h %s'))…"
-  (cd "$SRC" && JAVA_HOME="$JAVA_HOME" mvn -q -f forge-web-server/reactor.xml package > "$HOME_DIR/build.log" 2>&1) \
-    || { echo "Build or tests failed; the running server is unchanged. See $HOME_DIR/build.log" >&2; exit 1; }
+  # Once more on a failure: a timing-sensitive test can fail while this Mac is busy (CI had passed it).
+  if ! (cd "$SRC" && JAVA_HOME="$JAVA_HOME" mvn -q -f forge-web-server/reactor.xml package > "$HOME_DIR/build.log" 2>&1); then
+    echo "Build or tests failed; trying once more…" >&2
+    cp "$HOME_DIR/build.log" "$HOME_DIR/build-first-try.log"
+    (cd "$SRC" && JAVA_HOME="$JAVA_HOME" mvn -q -f forge-web-server/reactor.xml package > "$HOME_DIR/build.log" 2>&1) \
+      || { echo "Build or tests failed; the running server is unchanged. See $HOME_DIR/build.log" >&2; exit 1; }
+  fi
   # Auto-deploy: a game may have started during the build. Don't cut it off; try again later.
   if [ -n "${IF_IDLE:-}" ]; then
     n=$(games)
@@ -145,6 +156,18 @@ deploy)
       exit 3
     fi
   fi
+  # WARN=seconds: games in progress get that long a countdown before the restart ends them.
+  if [ -n "${WARN:-}" ]; then
+    n=$(games)
+    if [ -n "$n" ] && [ "$n" != 0 ]; then
+      echo "$n game(s) in progress: warning players, restarting in $WARN s"
+      curl -fsS -m 5 -X POST -H "X-Restart-Token: $(cat "$RESTART_TOKEN" 2>/dev/null)" \
+        "http://127.0.0.1:$PORT/admin/restart-notice?seconds=$WARN" > /dev/null 2>&1 \
+        || echo "(the running server couldn't show the warning)"
+      sleep "$WARN"
+    fi
+  fi
+  [ -s "$RESTART_TOKEN" ] || (umask 077 && openssl rand -hex 24 > "$RESTART_TOKEN")
   cp "$SRC"/forge-web-server/target/forge-web-server-*-all.jar "$JAR.new"
   mv "$JAR.new" "$JAR"
   git -C "$SRC" rev-parse --short HEAD > "$HOME_DIR/version"
@@ -182,8 +205,9 @@ logs)
   tail -n 50 -f "$GAME_LOG" "$LOGS/commandquest-tunnel.log"
   ;;
 auto-deploy)
-  # Run by launchd (auto-on). Deploys origin/$BRANCH when it has moved past what's running, and only
-  # while no game is in progress, so nobody's game is cut off by the restart.
+  # Run by launchd (auto-on). Deploys origin/$BRANCH when it has moved past what's running. Production
+  # only while no game is in progress, so nobody's game is cut off by the restart; staging right away,
+  # with a 5-minute countdown for games in progress (WARN).
   echo "$(date '+%F %T') checking"
   git -C "$REPO" fetch -q origin "$BRANCH"
   want=$(git -C "$REPO" rev-parse "origin/$BRANCH")
@@ -197,13 +221,17 @@ auto-deploy)
     echo "$want failed to build before; waiting for a newer commit"
     exit 0
   fi
-  n=$(games)
-  if [ -n "$n" ] && [ "$n" != 0 ]; then
-    echo "$n game(s) in progress; deploying later"
-    exit 0
-  fi
   status=0
-  REF=$want IF_IDLE=1 "$0" deploy || status=$?
+  if [ -n "$WARN_DEFAULT" ]; then
+    REF=$want WARN=$WARN_DEFAULT "$0" deploy || status=$?
+  else
+    n=$(games)
+    if [ -n "$n" ] && [ "$n" != 0 ]; then
+      echo "$n game(s) in progress; deploying later"
+      exit 0
+    fi
+    REF=$want IF_IDLE=1 "$0" deploy || status=$?
+  fi
   case $status in
     0) rm -f "$HOME_DIR/failed" ;;
     3) ;; # a game started during the build
@@ -228,7 +256,7 @@ auto-on)
     <key>JAVA_HOME</key><string>$JAVA_HOME</string>
     <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
-  <key>StartInterval</key><integer>900</integer>
+  <key>StartInterval</key><integer>$INTERVAL</integer>
   <key>RunAtLoad</key><true/>
   <key>StandardOutPath</key><string>$LOGS/commandquest-autodeploy$SUFFIX.log</string>
   <key>StandardErrorPath</key><string>$LOGS/commandquest-autodeploy$SUFFIX.log</string>
@@ -237,7 +265,11 @@ auto-on)
 PLIST
   stop "$AUTO"
   launchctl bootstrap "$DOMAIN" "$HOME/Library/LaunchAgents/$AUTO.plist"
-  echo "Auto-deploy is on: every 15 minutes, a new origin/$BRANCH is deployed when no game is running."
+  if [ -n "$WARN_DEFAULT" ]; then
+    echo "Auto-deploy is on: every $INTERVAL s, a new origin/$BRANCH is deployed; games in progress get a $WARN_DEFAULT s warning."
+  else
+    echo "Auto-deploy is on: every $INTERVAL s, a new origin/$BRANCH is deployed when no game is running."
+  fi
   echo "Log: $LOGS/commandquest-autodeploy$SUFFIX.log"
   ;;
 auto-off)

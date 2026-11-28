@@ -243,6 +243,9 @@ export function useLiveGame() {
   const [tableWaiting, setTableWaiting] = useState<TableWaiting | null>(null);
   /** The table's game this page asked to join isn't on (any more). */
   const [tableGone, setTableGone] = useState<string | null>(null);
+  /** When the server restarts for an update (local clock, ms), once announced. */
+  const [restartAt, setRestartAt] = useState<number | null>(null);
+  const restartRef = useRef<number | null>(null);
   const actionWaiters = useRef(new Map<number, ((a: CardActions) => void)[]>());
   const detailWaiters = useRef(new Map<number, ((d: CardDetails) => void)[]>());
   const manaWaiters = useRef<((o: ManaOptions) => void)[]>([]);
@@ -351,7 +354,8 @@ export function useLiveGame() {
               setStatus("playing");
               setAutoPassState(m.autoPass ?? null);
             } else if (statusRef.current === "reconnecting") {
-              setError("You were away too long, so the game ended.");
+              const restarted = restartRef.current !== null && Date.now() > restartRef.current - 5000;
+              setError(restarted ? "The server restarted for an update, so the game ended." : "You were away too long, so the game ended.");
               setStatus("over");
             } else {
               setStatus("ready");
@@ -380,6 +384,12 @@ export function useLiveGame() {
             break;
           case "pong":
             break;
+          case "restart": {
+            const at = Date.now() + (m.seconds ?? 0) * 1000; // by the server's countdown, not its clock
+            restartRef.current = at;
+            setRestartAt(at);
+            break;
+          }
           case "prompt":
             if (statusRef.current === "over") break; // the game has ended: nothing to answer
             setPrompt({ message: m.message, ok: m.ok, cancel: m.cancel, pay: m.pay });
@@ -499,6 +509,7 @@ export function useLiveGame() {
     signedIn: !!token,
     tableWaiting,
     tableGone,
+    restartAt,
     clearError: () => setError(null),
     /** Brings the game back to this tab after it was opened in another one. */
     takeBack: () => reconnect.current(),

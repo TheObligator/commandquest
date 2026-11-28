@@ -99,6 +99,18 @@ public final class WebServer {
                 body.put("games", hub.activeGames());
                 ctx.json(body);
             });
+            // The deploy script announces a restart (scripts/game-service.sh): players get a countdown. It needs the
+            // token in RESTART_TOKEN_FILE (requests through the tunnel come from localhost too).
+            config.routes.post("/admin/restart-notice", ctx -> {
+                String want = restartToken();
+                String got = ctx.header("X-Restart-Token");
+                if (want == null || got == null || !java.security.MessageDigest.isEqual(want.getBytes(), got.getBytes())) {
+                    throw new ForbiddenResponse("No");
+                }
+                int seconds = Math.max(0, Math.min(3600, Integer.parseInt(ctx.queryParamAsClass("seconds", String.class).getOrDefault("300"))));
+                hub.announceRestart(seconds);
+                ctx.result("ok");
+            });
             config.routes.wsBeforeUpgrade("/ws", ctx -> {
                 if (!opts.allows(ctx.header("Origin"))) {
                     throw new ForbiddenResponse("Origin not allowed");
@@ -113,6 +125,17 @@ public final class WebServer {
                 ws.onClose(hub::onClose);
             });
         });
+    }
+
+    /** The secret in RESTART_TOKEN_FILE, or null when there's none. */
+    private static String restartToken() {
+        String file = System.getenv("RESTART_TOKEN_FILE");
+        try {
+            String t = file == null ? null : java.nio.file.Files.readString(java.nio.file.Path.of(file)).trim();
+            return t == null || t.length() < 16 ? null : t;
+        } catch (java.io.IOException e) {
+            return null;
+        }
     }
 
     /** Starts Forge in the background so the first game doesn't wait ~5 s for the card index. */

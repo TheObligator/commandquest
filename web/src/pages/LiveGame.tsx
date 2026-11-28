@@ -47,6 +47,7 @@ import { TargetBar } from "../game/TargetBar";
 import { ScryDialog, type ArrangeKind } from "../game/ScryDialog";
 import { ShownWindow } from "../game/CardWindow";
 import { TopLayer } from "../game/TopLayer";
+import { RestartBanner } from "../game/RestartBanner";
 import { CostDialog } from "../game/CostDialog";
 import { isAttackPrompt, type AttackTarget } from "../game/AttackArrows";
 
@@ -1153,6 +1154,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
     <AbilityProvider value={abilityControls}>
     <LaterProvider value={laterControls}>
     <TopLayer>
+    <RestartBanner at={game.restartAt} />
     {manaChoice && (
       <ManaChoice
         choice={manaChoice}

@@ -182,6 +182,30 @@ public final class GameHub {
         this.gatherWait = wait;
     }
 
+    /** When the server will restart for an update (epoch ms), announced by the deploy script; 0 for none. */
+    private volatile long restartAt;
+
+    /**
+     * The server restarts in {@code seconds} (an update, from scripts/game-service.sh): tells everyone signed in now,
+     * and whoever signs in before then, so they can see a countdown.
+     */
+    public void announceRestart(int seconds) {
+        restartAt = System.currentTimeMillis() + seconds * 1000L;
+        for (Conn c : conns.values()) {
+            if (c.user != null) {
+                send(c, restartMsg());
+            }
+        }
+        Logger.info("Restart announced in {} s", seconds);
+    }
+
+    private ObjectNode restartMsg() {
+        ObjectNode o = msg("restart");
+        o.put("at", restartAt);
+        o.put("seconds", Math.max(0, (restartAt - System.currentTimeMillis() + 999) / 1000));
+        return o;
+    }
+
     public void onConnect(WsContext ws) {
         conns.put(ws.sessionId(), new Conn(ws));
     }
@@ -365,6 +389,9 @@ public final class GameHub {
                     hello.put("autoPass", h.autoPass);
                 }
                 send(c, hello);
+                if (restartAt > System.currentTimeMillis()) {
+                    send(c, restartMsg());
+                }
                 if (resume) {
                     resume(c, h);
                 }

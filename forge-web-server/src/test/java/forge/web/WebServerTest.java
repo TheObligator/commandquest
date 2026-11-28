@@ -46,6 +46,16 @@ public class WebServerTest {
     }
 
     @Test
+    public void restartNoticeNeedsTheToken() throws Exception {
+        // No RESTART_TOKEN_FILE in tests: nobody can announce a restart.
+        HttpResponse<String> res = client.send(
+                HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/admin/restart-notice?seconds=300"))
+                        .header("X-Restart-Token", "anything-at-all-long-enough").POST(HttpRequest.BodyPublishers.noBody()).build(),
+                HttpResponse.BodyHandlers.ofString());
+        Assert.assertEquals(res.statusCode(), 403);
+    }
+
+    @Test
     public void allowedOriginsGateHealthAndWebSocket() throws Exception {
         Javalin locked = WebServer.create(new WebServer.Options(null, Set.of("https://commandquest.app"), "abc123")).start(0);
         try {

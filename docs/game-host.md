@@ -82,16 +82,24 @@ The site finds the server through `VITE_GAME_SERVER` in `web/.env.production` an
 
 ## Updating
 
-Games in progress end when the server restarts, so it only restarts when nobody's playing.
+Games in progress end when the server restarts.
 
 With `auto-on`, a launchd job per server (`com.commandquest.autodeploy` and `…autodeploy-production`,
-logs in `~/Library/Logs/`) checks every 15 minutes. When the server's branch (`origin/staging` or
-`origin/production`) has moved past what's running and `/health` says `"games":0`, it deploys. So
-promoting to `production` also updates the production server, as soon as nobody's playing on it. It checks again after the build,
-before restarting, in case a game started meanwhile. A commit whose build or tests fail isn't
-retried (it's recorded in `<folder>/failed`) until a newer one lands, and the running
-server stays as it was. The job runs a copy of this script, `<folder>/game-service.sh`,
-refreshed by each deploy.
+logs in `~/Library/Logs/`) checks for a new commit on the server's branch (`origin/staging` or
+`origin/production`) and builds it (with the tests, once more if they fail, since a timing-sensitive
+test can fail while the Mac is busy):
+
+- **Staging** checks every 2 minutes and doesn't wait for games to end. If games are in progress after
+  the build, it warns them (`POST /admin/restart-notice?seconds=300`, with the secret in
+  `<folder>/restart-token`; the server sends every signed-in browser a `restart` countdown banner),
+  waits 5 minutes, then restarts.
+- **Production** checks every 15 minutes and only deploys when `/health` says `"games":0`, checking
+  again after the build in case a game started meanwhile. So promoting to `production` updates the
+  production server as soon as nobody's playing on it.
+
+A commit whose build or tests fail twice isn't retried (it's recorded in `<folder>/failed`) until a
+newer one lands, and the running server stays as it was. The job runs a copy of this script,
+`<folder>/game-service.sh`, refreshed by each deploy (run `auto-on` again to pick up a new interval).
 
 This is how the nightly Forge sync (docs/deploy.md) reaches staging's games. To deploy right away instead,
 run `game-service.sh deploy`, which doesn't wait for games to finish.
