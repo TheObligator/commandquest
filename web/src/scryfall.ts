@@ -86,6 +86,9 @@ export interface ScryCard {
   collector_number: string;
   rarity: string;
   artist?: string;
+  /** "nonfoil", "foil", "etched": a print with no "nonfoil" exists only as a foil variant. */
+  finishes?: string[];
+  illustration_id?: string;
   released_at?: string;
   scryfall_uri: string;
   legalities: Record<string, string>;
@@ -738,7 +741,7 @@ export interface TokenSpec {
   art?: string;
 }
 
-const TOKEN_STORE = "cq.scryfall.tokens.v1";
+const TOKEN_STORE = "cq.scryfall.tokens.v2";
 const tokenArtMem = new Map<string, { url: string | null; at: number }>();
 const tokenArtInflight = new Map<string, Promise<string | undefined>>();
 let tokenStoreLoaded = false;
@@ -793,6 +796,25 @@ export function tokenArt(spec: TokenSpec): Promise<string | undefined> {
   return p;
 }
 
+/**
+ * Some sets list a token twice: the regular one and a foil-only collector variant (Star Trek
+ * Commander's surge foils), and Forge picks either. Show the regular print of the same art, so one
+ * player's tokens don't come out in two different finishes.
+ */
+async function regularPrint(c: ScryCard): Promise<string | undefined> {
+  if (!c.finishes || c.finishes.includes("nonfoil")) return undefined;
+  try {
+    // Raw search (not `search`): its cards are trimmed and lose `finishes`.
+    const q = `set:${c.set} t:token !"${c.name.replace(/"/g, "")}"`;
+    const page = await getJson<{ data: ScryCard[] }>(`${API}/cards/search?${new URLSearchParams({ q, unique: "prints" })}`);
+    const regular = page.data.filter((p) => p.finishes?.includes("nonfoil") && imageUrl(p, "normal"));
+    const hit = regular.find((p) => p.illustration_id && p.illustration_id === c.illustration_id) ?? regular.find((p) => p.artist === c.artist);
+    return hit ? imageUrl(hit, "normal") : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function findTokenArt(spec: TokenSpec): Promise<string | undefined> {
   if (spec.art) {
     if (!cachedById(spec.art)) await cardsById([spec.art]);
@@ -808,7 +830,7 @@ async function findTokenArt(spec: TokenSpec): Promise<string | undefined> {
     try {
       const c = await getJson<ScryCard>(`${API}/cards/${encodeURIComponent(set)}/${encodeURIComponent(number)}`);
       const url = imageUrl(c, "normal");
-      if (url && /token/i.test(c.type_line ?? c.card_faces?.[0]?.type_line ?? "")) return url;
+      if (url && /token/i.test(c.type_line ?? c.card_faces?.[0]?.type_line ?? "")) return (await regularPrint(c)) ?? url;
     } catch {
       // not on Scryfall under that number: try the next, then search
     }
