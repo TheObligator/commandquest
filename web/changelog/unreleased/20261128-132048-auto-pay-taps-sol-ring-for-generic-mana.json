@@ -1,0 +1,6 @@
+{
+  "category": "fixed",
+  "title": "Auto-pay taps Sol Ring for generic mana",
+  "date": "2026-11-28T13:20:48.261Z",
+  "body": "Auto-pay used to skip Sol Ring and other rocks that tap for {C}{C}, so it tapped dual lands and talismans for generic mana instead. Now Sol Ring pays first and your colored sources stay untapped."
+}
