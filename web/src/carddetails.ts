@@ -64,7 +64,7 @@ export function showCardDetails(card: ScryCard, actions: CardDetailAction[] = []
           conquestChip(card),
           ...LEGALITY_FORMATS.map(([k, label]) => {
             const v = card.legalities?.[k] ?? "not_legal";
-            return h("span", { class: `legal is-${v}`, title: LEGALITY_LABEL[v] ?? v }, label);
+            return h("span", { class: `legality is-${v}`, title: LEGALITY_LABEL[v] ?? v }, label);
           }),
         ),
         rulingsSection(card),
@@ -101,7 +101,7 @@ function rulingsSection(card: ScryCard): HTMLElement {
 /** Conquest isn't a Scryfall format, so its legality comes from our own rules. */
 function conquestChip(card: ScryCard) {
   const v = cardLegality(card);
-  return h("span", { class: `legal ${v.ok ? "is-legal" : "is-banned"}`, title: v.ok ? "Legal" : `Not legal: ${v.reason}` }, "Conquest");
+  return h("span", { class: `legality ${v.ok ? "is-legal" : "is-banned"}`, title: v.ok ? "Legal" : `Not legal: ${v.reason}` }, "Conquest");
 }
 
 function stats(f: CardFace): string | undefined {

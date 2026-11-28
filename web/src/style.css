@@ -726,10 +726,10 @@ dialog.card-detail.two-faces { width: min(1180px, calc(100vw - 32px)); }
 .pt { font-weight: 700; text-align: right; margin: 8px 0 0; }
 .printing { margin: 16px 0 10px; }
 .legalities { display: flex; flex-wrap: wrap; gap: 6px; }
-.legal { font-size: .75rem; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--line); color: var(--muted); }
-.legal.is-legal { color: var(--ok); border-color: rgb(111 207 151 / 40%); }
-.legal.is-banned { color: var(--danger); border-color: rgb(239 107 107 / 40%); }
-.legal.is-restricted { color: var(--accent); border-color: rgb(224 168 79 / 40%); }
+.legality { font-size: .75rem; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--line); color: var(--muted); }
+.legality.is-legal { color: var(--ok); border-color: rgb(111 207 151 / 40%); }
+.legality.is-banned { color: var(--danger); border-color: rgb(239 107 107 / 40%); }
+.legality.is-restricted { color: var(--accent); border-color: rgb(224 168 79 / 40%); }
 .detail-rulings { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
 .detail-rulings summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px; }
 .detail-rulings summary::-webkit-details-marker { display: none; }
