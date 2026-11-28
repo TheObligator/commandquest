@@ -84,4 +84,41 @@ public class PlayableTest {
             session.abort();
         }
     }
+
+    @Test(timeOut = 240_000)
+    public void counterspellsOnlyGlowWithSomethingToCounter() throws Exception {
+        MyRandom.setRandom(new Random(5));
+        GameSessionTest.ScriptedBrowser browser = new GameSessionTest.ScriptedBrowser();
+        GameSession session = GameSession.startCommander(List.of(
+                new GameSession.Seat("You", deck("Talrand, Sky Summoner", "Island"), browser),
+                new GameSession.Seat("AI 1", deck("Ezuri, Renegade Leader", "Forest"), null)));
+        try {
+            PlayerView meView = PaymentTest.untilMyMain(session, browser);
+            Game g = session.game();
+            Player me = g.getPlayer(meView.getId());
+            Player them = g.getPlayers().stream().filter(p -> p != me).findFirst().orElseThrow();
+            boolean[] usable = onGameThread(g, () -> {
+                make(me, "Island", ZoneType.Battlefield);
+                make(me, "Island", ZoneType.Battlefield);
+                Card negate = make(me, "Negate", ZoneType.Hand);
+                boolean empty = Explain.usableNow(negate, me);
+                forge.game.spellability.SpellAbility bear = make(them, "Grizzly Bears", ZoneType.Hand).getFirstSpellAbility();
+                bear.setActivatingPlayer(them);
+                g.getStack().add(bear);
+                boolean creature = Explain.usableNow(negate, me);
+                forge.game.spellability.SpellAbility growth = make(them, "Giant Growth", ZoneType.Hand).getFirstSpellAbility();
+                growth.setActivatingPlayer(them);
+                growth.resetTargets();
+                growth.getTargets().add(bear.getHostCard());
+                g.getStack().add(growth);
+                boolean noncreature = Explain.usableNow(negate, me);
+                return new boolean[] {empty, creature, noncreature};
+            });
+            Assert.assertFalse(usable[0], "Negate has nothing to counter on an empty stack");
+            Assert.assertFalse(usable[1], "Negate can't counter a creature spell");
+            Assert.assertTrue(usable[2], "Negate can counter Giant Growth");
+        } finally {
+            session.abort();
+        }
+    }
 }

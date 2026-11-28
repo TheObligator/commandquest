@@ -123,7 +123,22 @@ public final class Explain {
             if (sa.getActivatingPlayer() == null) {
                 sa.setActivatingPlayer(me);
             }
-            return tr.hasCandidates(sa);
+            if (!tr.getZone().contains(ZoneType.Stack)) {
+                return tr.hasCandidates(sa);
+            }
+            // Forge's hasCandidates says yes to anything that targets the stack, so Negate would
+            // glow with nothing to counter. Look at what's actually on the stack.
+            for (forge.game.spellability.SpellAbilityStackInstance si : me.getGame().getStack()) {
+                if (sa.canTargetSpellAbility(si.getSpellAbility())) {
+                    return true;
+                }
+            }
+            for (forge.game.GameEntity e : tr.getAllCandidates(sa)) {
+                if (!(e instanceof Card c) || !c.isInZone(ZoneType.Stack)) {
+                    return true; // a player or a card elsewhere it can also target
+                }
+            }
+            return false;
         } catch (RuntimeException e) {
             return true; // when in doubt, let Forge decide
         }
