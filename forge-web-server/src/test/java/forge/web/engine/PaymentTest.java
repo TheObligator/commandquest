@@ -291,4 +291,54 @@ public class PaymentTest {
             session.abort();
         }
     }
+
+    /** Lands and a Talisman for a Jeskai commander, then Guinan ({2}{W}) and {@code hand} in hand. */
+    private static void jeskaiPainTest(String[] lands, String hand, java.util.function.BiConsumer<Card[], Integer> check)
+            throws Exception {
+        MyRandom.setRandom(new Random(5));
+        GameSessionTest.ScriptedBrowser browser = new GameSessionTest.ScriptedBrowser();
+        GameSession session = GameSession.startCommander(List.of(
+                new GameSession.Seat("You", deck("Narset, Enlightened Master", "Mountain"), browser),
+                new GameSession.Seat("AI 1", deck("Talrand, Sky Summoner", "Island"), null)));
+        try {
+            PlayerView meView = untilMyMain(session, browser);
+            IGameController controller = session.controller("You", meView);
+            Game g = session.game();
+            Player me = g.getPlayer(meView.getId());
+            Card[] cards = onGameThread(g, () -> {
+                tapTheRest(me);
+                Card[] made = new Card[lands.length + 1];
+                for (int i = 0; i < lands.length; i++) {
+                    made[i] = make(me, lands[i], ZoneType.Battlefield);
+                }
+                make(me, hand, ZoneType.Hand);
+                made[lands.length] = make(me, "Guinan, Ancient Advisor", ZoneType.Hand);
+                return made;
+            });
+            int life = me.getLife();
+            autoPayFor(g, controller, me, cards[lands.length]);
+            check.accept(cards, life - me.getLife());
+        } finally {
+            session.abort();
+        }
+    }
+
+    @Test(timeOut = 240_000)
+    public void autoPayStaysPainlessWhenYourHandIsStillCastable() throws Exception {
+        jeskaiPainTest(new String[] {"Command Tower", "Battlefield Forge", "Mountain", "Island", "Talisman of Conviction"},
+                "Negate", (cards, damage) -> {
+                    Assert.assertEquals((int) damage, 0, "no damage: the Island and the Talisman can still cast Negate");
+                    Assert.assertTrue(cards[0].isTapped(), "Command Tower pays the {W}");
+                    Assert.assertFalse(cards[3].isTapped(), "the Island stays up for Negate");
+                });
+    }
+
+    @Test(timeOut = 240_000)
+    public void autoPayTakesPainToKeepASpellCastable() throws Exception {
+        jeskaiPainTest(new String[] {"Command Tower", "Battlefield Forge", "Mountain", "Mountain"}, "Opt", (cards, damage) -> {
+            Assert.assertEquals((int) damage, 1, "Battlefield Forge pays the {W} for 1 damage");
+            Assert.assertFalse(cards[0].isTapped(), "Command Tower stays up to make {U} for Opt");
+            Assert.assertTrue(cards[1].isTapped() && cards[2].isTapped() && cards[3].isTapped(), "the Forge and both Mountains paid");
+        });
+    }
 }

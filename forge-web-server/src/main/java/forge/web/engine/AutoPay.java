@@ -3,6 +3,7 @@ package forge.web.engine;
 import forge.card.MagicColor;
 import forge.card.mana.ManaAtom;
 import forge.card.mana.ManaCostShard;
+import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.cost.CostPart;
 import forge.game.cost.CostTap;
@@ -17,6 +18,7 @@ import forge.interfaces.IGameController;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,7 +30,9 @@ import org.tinylog.Logger;
  * sources that just tap for one mana (no damage, sacrifice or life), it picks the cheapest set:
  * sources that can make fewer colors first (basics before dual and any-color lands, a mana rock
  * before a filter land), creatures last, and what's left untapped should still cast as many of the
- * spells in your hand as it can (keep a Plains up for the Swords to Plowshares). It taps them
+ * spells in your hand as it can (keep a Plains up for the Swords to Plowshares). It only takes
+ * damage from a pain land or talisman when tapping painlessly would leave a spell in your hand
+ * uncastable that the damage keeps castable. It taps them
  * through Forge's own payment, in an order where each tap's color is unambiguous. When it can't plan a payment (hybrid or Phyrexian
  * costs, floating mana, only sources with drawbacks left), Forge's own auto-payment does it.
  */
@@ -37,8 +41,14 @@ public final class AutoPay {
     private AutoPay() {
     }
 
-    /** One untapped source: the colors it can make for this payment, each with the ability that does it. */
-    record Source(Card card, Map<Byte, SpellAbility> byColor, int penalty, boolean anyColor) {
+    /**
+     * One untapped source: the colors it can make for this payment, each with the ability that does
+     * it; {@code painful}: the colors only an ability that deals you 1 damage makes.
+     */
+    record Source(Card card, Map<Byte, SpellAbility> byColor, int penalty, boolean anyColor, Set<Byte> painful) {
+        Source(Card card, Map<Byte, SpellAbility> byColor, int penalty, boolean anyColor) {
+            this(card, byColor, penalty, anyColor, Set.of());
+        }
     }
 
     /** A tap: this source's ability, making {@code color} (0 for generic). */
@@ -107,20 +117,28 @@ public final class AutoPay {
                 continue;
             }
             Map<Byte, SpellAbility> byColor = new HashMap<>();
+            Set<Byte> painful = new HashSet<>();
             boolean anyColor = false;
-            for (SpellAbility ma : InputPayMana.getAllManaAbilities(c, me)) {
-                if (!clean(ma, c)) {
-                    continue;
-                }
-                AbilityManaPart mp = ma.getManaPart();
-                for (byte color : COLORS) {
-                    if (ma.canProduce(MagicColor.toShortString(color)) && ma.isManaAbilityFor(paidFor, color)) {
-                        byColor.putIfAbsent(color, ma);
-                        anyColor |= mp.isAnyMana();
+            List<SpellAbility> abilities = InputPayMana.getAllManaAbilities(c, me);
+            for (boolean pain : new boolean[] {false, true}) { // painless abilities first
+                for (SpellAbility ma : abilities) {
+                    if (pain ? !painful(ma, c) : !clean(ma, c)) {
+                        continue;
                     }
-                }
-                if (ma.canProduce("C") && ma.isManaAbilityFor(paidFor, (byte) ManaAtom.COLORLESS)) {
-                    byColor.putIfAbsent((byte) ManaAtom.COLORLESS, ma);
+                    AbilityManaPart mp = ma.getManaPart();
+                    for (byte color : COLORS) {
+                        if (ma.canProduce(MagicColor.toShortString(color)) && ma.isManaAbilityFor(paidFor, color)
+                                && byColor.putIfAbsent(color, ma) == null) {
+                            anyColor |= mp.isAnyMana();
+                            if (pain) {
+                                painful.add(color);
+                            }
+                        }
+                    }
+                    if (ma.canProduce("C") && ma.isManaAbilityFor(paidFor, (byte) ManaAtom.COLORLESS)
+                            && byColor.putIfAbsent((byte) ManaAtom.COLORLESS, ma) == null && pain) {
+                        painful.add((byte) ManaAtom.COLORLESS);
+                    }
                 }
             }
             if (byColor.isEmpty()) {
@@ -137,7 +155,7 @@ public final class AutoPay {
             boolean otherAbilities = c.getSpellAbilities().stream().anyMatch(sa -> !sa.isManaAbility() && sa.isActivatedAbility());
             int penalty = 1 + 2 * colors + (c.isCreature() ? 20 : 0) + (otherAbilities ? 3 : 0) + (anyColor ? 1 : 0)
                     + (waiting.contains(c.getId()) ? 30 : 0);
-            out.add(new Source(c, byColor, penalty, anyColor));
+            out.add(new Source(c, byColor, penalty, anyColor, painful));
         }
         out.sort(Comparator.comparingInt(Source::penalty).thenComparingInt(s -> s.card().getId()));
         return out;
@@ -145,7 +163,18 @@ public final class AutoPay {
 
     /** Only {T}, one mana, nothing else happens, and the source can tap now. */
     private static boolean clean(SpellAbility ma, Card c) {
-        if (ma.getSubAbility() != null || ma.amountOfManaGenerated(true) != 1 || ma.getManaPart() == null) {
+        return ma.getSubAbility() == null && tapsForOne(ma, c);
+    }
+
+    /** Like {@link #clean}, except it also deals you 1 damage (pain lands, talismans). */
+    private static boolean painful(SpellAbility ma, Card c) {
+        SpellAbility sub = ma.getSubAbility();
+        return sub != null && sub.getApi() == ApiType.DealDamage && sub.getSubAbility() == null
+                && "You".equals(sub.getParam("Defined")) && "1".equals(sub.getParam("NumDmg")) && tapsForOne(ma, c);
+    }
+
+    private static boolean tapsForOne(SpellAbility ma, Card c) {
+        if (ma.amountOfManaGenerated(true) != 1 || ma.getManaPart() == null) {
             return false;
         }
         boolean tap = false;
@@ -261,6 +290,48 @@ public final class AutoPay {
         return plan(sources, need, List.of());
     }
 
+    /** In the plan that may take damage: a spell left castable outweighs any damage and source penalties. */
+    private static final int LOST_SPELL_WITH_PAIN = 100_000;
+    private static final int PAIN = 1_000;
+
+    /**
+     * The best painless plan; but when one that takes damage leaves more spells in {@code hand}
+     * castable (or it's the only way to pay), the one of those that takes the least damage.
+     */
+    static List<Tap> plan(List<Source> sources, Map<Byte, Integer> need, List<HandSpell> hand) {
+        List<Tap> painless = plan(sources, need, hand, false);
+        List<Tap> pain = plan(sources, need, hand, true);
+        if (pain == null || damage(pain) == 0) {
+            return painless;
+        }
+        if (painless == null || lost(sources, pain, hand) < lost(sources, painless, hand)) {
+            return pain;
+        }
+        return painless;
+    }
+
+    /** Damage these taps deal you. */
+    static int damage(List<Tap> taps) {
+        int n = 0;
+        for (Tap t : taps) {
+            n += t.source().painful().contains(t.color() == 0 ? (byte) ManaAtom.COLORLESS : t.color()) ? 1 : 0;
+        }
+        return n;
+    }
+
+    /** How many spells in {@code hand} what's left untapped after {@code taps} couldn't pay for. */
+    static int lost(List<Source> sources, List<Tap> taps, List<HandSpell> hand) {
+        boolean[] used = new boolean[sources.size()];
+        for (Tap t : taps) {
+            used[sources.indexOf(t.source())] = true;
+        }
+        int n = 0;
+        for (HandSpell h : hand) {
+            n += canPay(sources, used, h) ? 0 : 1;
+        }
+        return n;
+    }
+
     /**
      * The cheapest taps that pay {@code need} (color -> count, 0 = generic), or null. The cost of a
      * plan is its sources' penalties, plus {@link #KEEP_CASTABLE} for each spell in {@code hand}
@@ -268,7 +339,7 @@ public final class AutoPay {
      * candidates first), then generic. Any-color sources only pay colored shards (for generic Forge
      * would ask which color).
      */
-    static List<Tap> plan(List<Source> sources, Map<Byte, Integer> need, List<HandSpell> hand) {
+    private static List<Tap> plan(List<Source> sources, Map<Byte, Integer> need, List<HandSpell> hand, boolean allowPain) {
         if (need == null || need.isEmpty()) {
             return null;
         }
@@ -287,7 +358,7 @@ public final class AutoPay {
             return null;
         }
         colored.sort(Comparator.comparingLong(col -> sources.stream().filter(s -> s.byColor().containsKey(col)).count()));
-        Search s = new Search(sources, colored, generic, hand);
+        Search s = new Search(sources, colored, generic, hand, allowPain);
         s.go(0, new boolean[sources.size()], new ArrayList<>(), 0);
         return s.best;
     }
@@ -297,15 +368,28 @@ public final class AutoPay {
         final List<Byte> colored;
         final int generic;
         final List<HandSpell> hand;
+        final boolean allowPain;
+        final int lostSpell;
         List<Tap> best;
         int bestCost = Integer.MAX_VALUE;
         int nodes;
 
-        Search(List<Source> sources, List<Byte> colored, int generic, List<HandSpell> hand) {
+        Search(List<Source> sources, List<Byte> colored, int generic, List<HandSpell> hand, boolean allowPain) {
             this.sources = sources;
             this.colored = colored;
             this.generic = generic;
             this.hand = hand;
+            this.allowPain = allowPain;
+            this.lostSpell = allowPain ? LOST_SPELL_WITH_PAIN : KEEP_CASTABLE;
+        }
+
+        /** What tapping {@code src} for {@code color} (0: generic) costs, or -1 if this search can't. */
+        int cost(Source src, byte color) {
+            boolean pain = src.painful().contains(color == 0 ? (byte) ManaAtom.COLORLESS : color);
+            if (pain && !allowPain) {
+                return -1;
+            }
+            return src.penalty() + (pain ? PAIN : 0);
         }
 
         /** Generic: the cheapest sources left first, trying other sets too (each set once, in source order). */
@@ -317,7 +401,7 @@ public final class AutoPay {
                 int total = cost;
                 for (HandSpell h : hand) {
                     if (!canPay(sources, used, h)) {
-                        total += KEEP_CASTABLE;
+                        total += lostSpell;
                     }
                 }
                 if (total < bestCost) {
@@ -331,10 +415,14 @@ public final class AutoPay {
                 if (used[k] || src.anyColor()) {
                     continue;
                 }
-                SpellAbility ab = src.byColor().getOrDefault((byte) ManaAtom.COLORLESS, src.byColor().values().iterator().next());
+                SpellAbility ab = genericAbility(src);
+                int c = ab == null ? -1 : cost(src, (byte) 0);
+                if (c < 0) {
+                    continue;
+                }
                 used[k] = true;
                 taps.add(new Tap(src, ab, (byte) 0));
-                generic(k + 1, left - 1, used, taps, cost + src.penalty());
+                generic(k + 1, left - 1, used, taps, cost + c);
                 taps.remove(taps.size() - 1);
                 used[k] = false;
             }
@@ -352,16 +440,31 @@ public final class AutoPay {
             for (int k = 0; k < sources.size(); k++) {
                 Source src = sources.get(k);
                 SpellAbility ab = src.byColor().get(col);
-                if (used[k] || ab == null) {
+                int c = ab == null ? -1 : cost(src, col);
+                if (used[k] || c < 0) {
                     continue;
                 }
                 used[k] = true;
                 taps.add(new Tap(src, ab, col));
-                go(i + 1, used, taps, cost + src.penalty());
+                go(i + 1, used, taps, cost + c);
                 taps.remove(taps.size() - 1);
                 used[k] = false;
             }
         }
+    }
+
+    /** The ability a generic tap uses: its {C} (painful or not), else a painless color; null if neither. */
+    private static SpellAbility genericAbility(Source src) {
+        SpellAbility c = src.byColor().get((byte) ManaAtom.COLORLESS);
+        if (c != null) {
+            return c;
+        }
+        for (Map.Entry<Byte, SpellAbility> e : src.byColor().entrySet()) {
+            if (!src.painful().contains(e.getKey())) {
+                return e.getValue();
+            }
+        }
+        return null; // only painful colors: not used for generic
     }
 
     /**
