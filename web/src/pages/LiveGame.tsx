@@ -1097,6 +1097,10 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
     stackNonEmpty: view.stack.length > 0, landDrop: !!view.landDrop,
   });
   const priorityPrompt = !!game.prompt && !game.ask && isPriorityPrompt(game.prompt);
+  // Forge offers End Turn at every priority stop, but on someone else's turn it would only pass
+  // you through their turn, so it isn't shown then (auto-pass does that job).
+  const hideEndTurn = priorityPrompt && game.prompt!.cancel.label === "End Turn" && view.active !== view.viewer;
+  const railPrompt = hideEndTurn ? { ...game.prompt!, cancel: { ...game.prompt!.cancel, label: "", enabled: false } } : game.prompt;
   const ok = () => {
     if (game.busy()) return; // the server is still on the last press
     // Only OK at "you have priority" passes; OK while casting (Auto-pay, skipping convoke, done
@@ -1110,6 +1114,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
   };
   const cancel = () => {
     if (game.busy()) return;
+    if (hideEndTurn) return;
     if (priorityPrompt && game.prompt?.cancel.label === "End Turn" && !landCheck("skip")) return;
     castFrom.current = null;
     castDone.current = false;
@@ -1245,7 +1250,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
         },
         onCancel: () => setStepPick(null),
       } : undefined}
-      rail={(preview) => <LiveRail priority={priorityPrompt} knownCombos={knownCombos} myZones={myZones} game={{ ...game, ok, cancel, setAutoPass, clickCard: click }} nameOf={nameOf} colorOf={colorOf} preview={preview} boardAsk={board && game.ask ? { onOk: boardPicked.length >= game.ask.min && boardPicked.length <= game.ask.max ? answerBoard : null } : undefined} pickAsk={!!askCards || windowAsk} onShowPick={pickKey && pickHidden === pickKey ? () => setPickHidden("") : undefined} />}
+      rail={(preview) => <LiveRail priority={priorityPrompt} knownCombos={knownCombos} myZones={myZones} game={{ ...game, prompt: railPrompt, ok, cancel, setAutoPass, clickCard: click }} nameOf={nameOf} colorOf={colorOf} preview={preview} boardAsk={board && game.ask ? { onOk: boardPicked.length >= game.ask.min && boardPicked.length <= game.ask.max ? answerBoard : null } : undefined} pickAsk={!!askCards || windowAsk} onShowPick={pickKey && pickHidden === pickKey ? () => setPickHidden("") : undefined} />}
       hand={{
         onPlay: click,
         onClick: click,
