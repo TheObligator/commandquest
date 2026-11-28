@@ -3,7 +3,7 @@
 // The left rail differs (simulated decisions vs. Forge's prompts), so the caller passes it in.
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { TopLayer } from "./TopLayer";
 import { api } from "../../convex/_generated/api";
 import { errorMessage } from "../app/errors";
 import { toast } from "../dom";
@@ -478,7 +478,7 @@ export function TableBoard(props: {
       <StackArrows view={v} colorOf={colorOf} />
       <CombatArrows view={v} colorOf={colorOf} />
       {attackDrag.overlay}
-      <HoverZoom preview={menu || inspect ? null : preview} />
+      <TopLayer><HoverZoom preview={menu || inspect ? null : preview} /></TopLayer>
       {inspect && (
         <CardInspect
           card={findCard(v, inspect.id) ?? inspect}
@@ -488,7 +488,7 @@ export function TableBoard(props: {
         />
       )}
       {/* Inside an open dialog (the zone viewer) so it shows above it: dialogs sit on the top layer. */}
-      {menu && createPortal(<ContextMenu menu={menu} onClose={() => setMenu(null)} />, document.querySelector("dialog[open]") ?? document.body)}
+      {menu && <TopLayer><ContextMenu menu={menu} onClose={() => setMenu(null)} /></TopLayer>}
     </PreviewContext.Provider>
     </MarkContext.Provider>
   );

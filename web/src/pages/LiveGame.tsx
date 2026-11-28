@@ -46,6 +46,7 @@ import { askInWindow, DecisionWindow } from "../game/DecisionWindow";
 import { TargetBar } from "../game/TargetBar";
 import { ScryDialog, type ArrangeKind } from "../game/ScryDialog";
 import { ShownWindow } from "../game/CardWindow";
+import { TopLayer } from "../game/TopLayer";
 import { CostDialog } from "../game/CostDialog";
 import { isAttackPrompt, type AttackTarget } from "../game/AttackArrows";
 
@@ -1145,6 +1146,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
   return (
     <AbilityProvider value={abilityControls}>
     <LaterProvider value={laterControls}>
+    <TopLayer>
     {manaChoice && (
       <ManaChoice
         choice={manaChoice}
@@ -1166,6 +1168,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
       />
     )}
     {game.prompt?.pay && !game.ask && <PayPrompt prompt={game.prompt} pool={view.players[0].mana} game={{ ok, cancel, payFree: game.payFree, payPool: game.payPool, sent: game.sent }} />}
+    </TopLayer>
     {pickKey && pickHidden !== pickKey && askCards && game.ask && (
       <AskPick key={pickKey} ask={game.ask} cards={askCards} piles={askPiles} onAnswer={(i) => game.answer(game.ask!.id, i)} onHide={() => setPickHidden(pickKey)} />
     )}

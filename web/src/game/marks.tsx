@@ -4,6 +4,7 @@
 // Shift/Ctrl/⌘-click cards to add or take them out. Esc or a click on empty space clears it.
 import { createContext, useContext, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { topLayerHost } from "./TopLayer";
 
 export interface Marks {
   marked: ReadonlySet<number>;
@@ -71,7 +72,7 @@ export function useMarquee() {
   // In the top layer (inside an open dialog) when there is one, so it shows over a card viewer.
   const marquee = box && createPortal(
     <div className="marquee" style={{ left: box.x, top: box.y, width: box.w, height: box.h }} aria-hidden />,
-    document.querySelector("dialog[open]") ?? document.body,
+    topLayerHost(),
   );
   return { onMouseDown, marquee };
 }
