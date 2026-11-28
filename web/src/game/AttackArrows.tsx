@@ -5,6 +5,7 @@
 // does with it. Once attackers are declared, arrows show who attacks whom for the rest of combat.
 import { useEffect, useRef, useState } from "react";
 import type { CardView, GameView } from "./view";
+import { center, findEl, type Spot, spotOf } from "./locate";
 
 /** Who an attack goes to: a player, or a planeswalker or battle (by card id). Null: call them back. */
 export type AttackTarget = { player: string } | { card: number } | null;
@@ -29,9 +30,8 @@ export const isAttackPrompt = (p: { message: string }) => p.message.startsWith("
 
 const isDefenderCard = (c: CardView) => !!c.types?.some((t) => t === "Planeswalker" || t === "Battle");
 
-/** A creature's slot on a battlefield (piles list every id). */
-const slotOf = (id: number) => document.querySelector<HTMLElement>(`.battlefield [data-card-ids~="${id}"]`);
-const center = (r: DOMRect) => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+/** A creature's slot on a battlefield (piles list every id), on the enlarged board if it's there. */
+const slotOf = (id: number) => findEl(`.battlefield [data-card-ids~="${id}"]`);
 
 export function useAttackDrag(opts: {
   view: GameView;
@@ -130,11 +130,11 @@ export function useAttackDrag(opts: {
 }
 
 /** Where an arrow to this target ends: the planeswalker's middle, or the player's name plate. */
-function targetPoint(hover: AttackHover): { x: number; y: number } | null {
+function targetPoint(hover: AttackHover): Spot | null {
   const el = hover.card !== undefined
     ? slotOf(hover.card)
-    : hover.seat !== undefined ? document.querySelector<HTMLElement>(`.seat-board[data-seat="${hover.seat}"] .sb-name`) : null;
-  return el ? center(el.getBoundingClientRect()) : null;
+    : hover.seat !== undefined ? findEl(`.seat-board[data-seat="${CSS.escape(hover.seat)}"] .sb-name`) : null;
+  return el ? spotOf(el) : null;
 }
 
 const curve = (a: { x: number; y: number }, b: { x: number; y: number }) => {
@@ -206,9 +206,8 @@ export function CombatArrows({ view, colorOf, hide }: { view: GameView; colorOf:
         done.add(el);
         const to = targetPoint(c.attackingCard !== undefined ? { card: c.attackingCard } : { seat: c.attacking });
         if (!to) continue;
-        const r = el.getBoundingClientRect();
-        if (!r.width) continue;
-        const a = center(r);
+        const a = spotOf(el);
+        if (!a || (a.away && to.away)) continue; // both under the enlarged board
         next.push({ key: `${c.id}`, d: curve(a, to), color: colorRef.current(c.controller) });
       }
       const key = next.map((l) => l.key + l.d).join("|");

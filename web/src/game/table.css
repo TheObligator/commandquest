@@ -760,3 +760,6 @@ dialog.decision-window.wide { width: min(860px, calc(100vw - 32px)); }
 .rw-body p { margin: 0 0 8px; }
 .reveal-window .zv-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
 .reveal-window .zv-card { --cw: 120px; }
+/* Where an arrow's target is when an enlarged board covers it (locate.ts). */
+.stack-arrows .sa-away rect { fill: rgb(18 16 12 / 92%); stroke: color-mix(in srgb, var(--seat) 70%, #e0b04a); stroke-width: 1.5; }
+.stack-arrows .sa-away text { fill: #f1e9d6; font: 600 11px system-ui, sans-serif; text-anchor: start; }

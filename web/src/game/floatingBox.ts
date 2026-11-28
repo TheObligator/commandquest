@@ -10,14 +10,20 @@ export interface Box {
   h: number;
 }
 
-function loadBox(key: string, fallback: () => Box): Box {
+/** The area a window is placed in: its offset parent, or the viewport. */
+export interface Area {
+  w: number;
+  h: number;
+}
+
+function loadBox(key: string): Box | null {
   try {
     const b = JSON.parse(localStorage.getItem(key) ?? "null");
     if (b && [b.x, b.y, b.w, b.h].every((n) => typeof n === "number")) return b;
   } catch {
     // no storage: the default place
   }
-  return fallback();
+  return null;
 }
 
 function saveBox(key: string, b: Box) {
@@ -29,21 +35,30 @@ function saveBox(key: string, b: Box) {
 }
 
 /**
+ * `fallback` places it the first time (nothing remembered yet), given the area it's placed in.
  * `ref` goes on the window, `startDrag` on its drag handle's onPointerDown, `onResizeEnd` on the
  * window's onPointerUp, and `box` sets its left/top/width/height. The window is placed in its
  * offset parent, or in the viewport when it's `position: fixed`.
  */
-export function useFloatingBox(key: string, fallback: () => Box) {
-  const [box, setBox] = useState<Box>(() => loadBox(key, fallback));
+export function useFloatingBox(key: string, fallback: (area: Area) => Box) {
+  const [box, setBox] = useState<Box>(() => loadBox(key) ?? fallback({ w: window.innerWidth, h: window.innerHeight }));
   const ref = useRef<HTMLDivElement>(null);
+  /** False until it's shown with a remembered box, or placed in its real area. */
+  const placed = useRef(loadBox(key) !== null);
 
-  // Keep it on screen when the table (or the browser window) shrinks.
+  // Place it in its area when first shown; keep it on screen when the table (or the browser window) shrinks.
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     const parent = el.offsetParent as HTMLElement | null;
     const pw = parent ? parent.clientWidth : window.innerWidth;
     const ph = parent ? parent.clientHeight : window.innerHeight;
+    if (!placed.current) {
+      placed.current = true;
+      const first = fallback({ w: pw, h: ph });
+      if (first.x !== box.x || first.y !== box.y || first.w !== box.w || first.h !== box.h) setBox(first);
+      return;
+    }
     const maxX = Math.max(0, pw - 120);
     const maxY = Math.max(0, ph - 60);
     if (box.x > maxX || box.y > maxY) setBox((b) => ({ ...b, x: Math.min(b.x, maxX), y: Math.min(b.y, maxY) }));

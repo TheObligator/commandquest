@@ -7,7 +7,7 @@
 // Choosing cards from a library you're searching, a graveyard or exile is the pick window
 // (PickDialog).
 import { CardBadges, CardFace, usePreview } from "./cards";
-import { useFloatingBox } from "./floatingBox";
+import { type Area, useFloatingBox } from "./floatingBox";
 import type { CardView } from "./view";
 
 function Tile({ card, className, onClick, caption }: { card: CardView; className?: string; onClick?: () => void; caption?: React.ReactNode }) {
@@ -29,10 +29,10 @@ function Tile({ card, className, onClick, caption }: { card: CardView; className
 }
 
 const REVEAL_KEY = "cq.reveal.box";
-/** First time: a small window at the top right, clear of the stack window on the left. */
-const revealDefault = () => {
+/** First time: a small window at the top right, clear of the stack window in the middle. */
+const revealDefault = (area: Area) => {
   const w = 300;
-  return { x: Math.max(0, window.innerWidth - w - 24), y: 80, w, h: 340 };
+  return { x: Math.max(0, area.w - w - 24), y: 80, w, h: 340 };
 };
 
 /**

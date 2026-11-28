@@ -5,17 +5,23 @@
 // While you're choosing targets (a counterspell), spells you can target glow, and clicking one
 // targets it; "⋯" and right-click still open it.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { type Box, useFloatingBox } from "./floatingBox";
+import { type Area, type Box, useFloatingBox } from "./floatingBox";
 import type { MenuSection } from "../components/CardMenu";
 import { CardImg } from "../components/CardImg";
 import { cached, imageUrl } from "../scryfall";
 import { tokenImage, usePreview } from "./cards";
 import { AbilityMarks } from "./AbilityMenu";
 import { stackText } from "./stackText";
+import { awayLabel, findCardEl, findPlayerEl, type Spot, spotOf } from "./locate";
 import type { GameView, StackItemView } from "./view";
 
-const KEY = "cq.stack.box";
-const DEFAULT_BOX: Box = { x: 12, y: 12, w: 250, h: 400 };
+const KEY = "cq.stack.box.v2"; // v2: starts in the middle of the table (was the top left)
+/** First time: in the middle of the table. */
+const defaultBox = (area: Area): Box => {
+  const w = 250;
+  const h = Math.min(400, Math.max(140, area.h - 16));
+  return { x: Math.max(8, Math.round((area.w - w) / 2)), y: Math.max(8, Math.round((area.h - h) / 2)), w, h };
+};
 
 function art(s: StackItemView): string | undefined {
   if (!s.card || s.card.hidden) return undefined;
@@ -49,7 +55,7 @@ export function StackWindow(props: {
 }) {
   const { view, nameOf, colorOf, selectable, chosen, onPick } = props;
   const pickable = (s: StackItemView) => s.cardId !== undefined && !!onPick && !!selectable?.has(s.cardId);
-  const { box, ref, startDrag, onResizeEnd } = useFloatingBox(KEY, () => DEFAULT_BOX);
+  const { box, ref, startDrag, onResizeEnd } = useFloatingBox(KEY, defaultBox);
   const [open, setOpen] = useState<{ id: number; x: number; y: number } | null>(null);
   const setPreview = usePreview();
 
@@ -228,13 +234,24 @@ interface Line {
   color: string;
   dashed: boolean;
   n: number;
-  end: { x: number; y: number };
+  end: Spot;
 }
+
+/** The name of the card with this id on the table, for an arrow's "elsewhere" label. */
+const cardName = (v: GameView, id: number) => {
+  for (const p of v.players) for (const zone of [p.battlefield, p.graveyard, p.exile, p.command]) {
+    const c = zone?.find((x) => x.id === id);
+    if (c) return c.hidden ? undefined : c.name;
+  }
+  return undefined;
+};
 
 /**
  * Curved lines from each stack tile to the cards and players it targets, numbered like the tile,
  * and a dashed one to the permanent an ability comes from. Positions follow the page every frame
- * while the stack has something on it (boards resize, the window gets dragged).
+ * while the stack has something on it (boards resize, the window gets dragged). With a board
+ * enlarged, they go to the enlarged board; a target on another board gets a line to the edge,
+ * toward it, labeled with where it is.
  */
 export function StackArrows({ view, colorOf }: { view: GameView; colorOf: (id: string) => string }) {
   const [lines, setLines] = useState<Line[]>([]);
@@ -251,6 +268,7 @@ export function StackArrows({ view, colorOf }: { view: GameView; colorOf: (id: s
     }
     let raf = 0;
     let lastKey = "";
+    const top = (r: DOMRect) => ({ x: r.left + r.width / 2, y: r.top + Math.min(14, r.height / 3) });
     const tick = () => {
       const v = viewRef.current;
       const next: Line[] = [];
@@ -260,10 +278,10 @@ export function StackArrows({ view, colorOf }: { view: GameView; colorOf: (id: s
         const from = tile.getBoundingClientRect();
         const n = v.stack.indexOf(s) + 1;
         const color = colorRef.current(s.controller);
-        const ends: { el: HTMLElement; dashed: boolean; key: string }[] = [];
+        const ends: { el: HTMLElement; dashed: boolean; key: string; name?: string }[] = [];
         for (const t of s.targets ?? []) {
-          const el = t.cardId !== undefined ? findCardEl(t.cardId) : t.playerId !== undefined ? document.querySelector<HTMLElement>(`[data-player-id="${t.playerId}"]`) : null;
-          if (el) ends.push({ el, dashed: false, key: `${t.cardId ?? "p" + t.playerId}` });
+          const el = t.cardId !== undefined ? findCardEl(t.cardId) : t.playerId !== undefined ? findPlayerEl(t.playerId) : null;
+          if (el) ends.push({ el, dashed: false, key: `${t.cardId ?? "p" + t.playerId}`, name: t.cardId !== undefined ? cardName(v, t.cardId) : undefined });
         }
         // An ability's source permanent (spells' cards are on the stack itself).
         if (s.card && s.cardId === undefined && s.card.zone === "battlefield") {
@@ -271,16 +289,15 @@ export function StackArrows({ view, colorOf }: { view: GameView; colorOf: (id: s
           if (el && !ends.some((e) => e.el === el)) ends.push({ el, dashed: true, key: `src${s.card.id}` });
         }
         for (const end of ends) {
-          const to = end.el.getBoundingClientRect();
-          if (!to.width || overlaps(from, to)) continue;
+          const b = spotOf(end.el, top, end.name);
+          if (!b || (end.dashed && b.away) || overlaps(from, b.rect)) continue;
           const a = { x: from.right - 6, y: from.top + Math.min(40, from.height / 2) };
-          const b = { x: to.left + to.width / 2, y: to.top + Math.min(14, to.height / 3) };
           if (b.x < from.left) a.x = from.left + 6; // target to the left of the window
           const mid = { x: (a.x + b.x) / 2, y: Math.min(a.y, b.y) - Math.max(40, Math.abs(b.x - a.x) * 0.25) };
           next.push({ key: `${s.id}-${end.key}`, d: `M${a.x},${a.y} Q${mid.x},${mid.y} ${b.x},${b.y}`, color, dashed: end.dashed, n, end: b });
         }
       }
-      const key = next.map((l) => l.key + l.d).join("|");
+      const key = next.map((l) => l.key + l.d + (l.end.away ?? "")).join("|");
       if (key !== lastKey) {
         lastKey = key;
         setLines(next);
@@ -304,15 +321,24 @@ export function StackArrows({ view, colorOf }: { view: GameView; colorOf: (id: s
               <text dy="4">{l.n}</text>
             </g>
           )}
+          {l.end.away && <AwayLabel spot={l.end} />}
         </g>
       ))}
     </svg>
   );
 }
 
-/** A card on the table by id: a battlefield slot (piles list every id), a hand card or a zone tile card. */
-export function findCardEl(id: number): HTMLElement | null {
-  return document.querySelector<HTMLElement>(`[data-card-ids~="${id}"]`);
+/** "Llanowar Elves · on Ann's board": where an arrow's target is when an enlarged board covers it. */
+export function AwayLabel({ spot }: { spot: Spot }) {
+  const b = awayLabel(spot);
+  return (
+    <g className="sa-away">
+      <rect x={b.x} y={b.y} width={b.w} height="18" rx="9" />
+      <text x={b.x + 8} y={b.y + 13}>{spot.away}</text>
+    </g>
+  );
 }
+
+export { findCardEl };
 
 const overlaps = (a: DOMRect, b: DOMRect) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
