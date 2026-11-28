@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState, useSyncExternalStore } 
 import { CardImg, CardNone, CardWait } from "../components/CardImg";
 import { ManaCost } from "../components/ManaCost";
 import { cached, cachedTokenArt, cardLookup, imageUrl, lookupVersion, onLookup, resolve, tokenArt, wantCard, type CardLookup } from "../scryfall";
-import type { CardView } from "./view";
+import { artOf, type CardView } from "./view";
 
 /** Loads Scryfall data for these card names once; re-renders when it arrives. */
 export function useCardData(names: string[]) {
@@ -64,9 +64,11 @@ export function CardBack({ label }: { label?: string }) {
 /** The face of a card at any size. Width comes from the parent (`--cw`). */
 export function CardFace({ card, size = "normal", knownFaceDown }: { card: CardView; size?: "small" | "normal"; knownFaceDown?: boolean }) {
   if (card.hidden) return <CardBack />;
-  if (card.token) return <TokenFace card={card} />;
-  return <NamedFace card={card} size={size} knownFaceDown={knownFaceDown} />;
+  const shown = artOf(card);
+  if (shown.token) return <TokenFace card={shown} />;
+  return <NamedFace card={shown} size={size} knownFaceDown={knownFaceDown} />;
 }
+
 
 function NamedFace({ card, size, knownFaceDown }: { card: CardView; size: "small" | "normal"; knownFaceDown?: boolean }) {
   const name = card.name ?? "";
@@ -87,6 +89,7 @@ function NamedFace({ card, size, knownFaceDown }: { card: CardView; size: "small
 
 /** A token's Scryfall art if it's been found (see `tokenArt`), for previews and the stack. */
 export function tokenImage(card: CardView): string | undefined {
+  card = artOf(card);
   return card.token && card.name ? cachedTokenArt(tokenSpec(card)) ?? undefined : undefined;
 }
 
@@ -150,7 +153,8 @@ export function CostOverlay({ card }: { card: CardView }) {
 export function PTOverlay({ card }: { card: CardView }) {
   // A token's base P/T is in Forge's token key ("t:r_1_1_goblin|…"); a name lookup could find another token's.
   const tokenBase = /^t:[a-z]+_(\d+)_(\d+)_/.exec(card.tokenKey ?? "");
-  const p = card.hidden ? undefined : card.token ? (tokenBase ? { power: tokenBase[1], toughness: tokenBase[2] } : undefined) : printed(card.name);
+  const shown = artOf(card);
+  const p = card.hidden ? undefined : shown.token ? (tokenBase ? { power: tokenBase[1], toughness: tokenBase[2] } : undefined) : printed(shown.name);
   const inPlay = card.zone === "battlefield";
   const power = inPlay ? card.power : p?.power;
   const toughness = inPlay ? card.toughness : p?.toughness;
@@ -161,7 +165,7 @@ export function PTOverlay({ card }: { card: CardView }) {
     typeof now !== "number" || was === undefined || card.hidden ? "" : now > was ? " up" : now < was ? " down" : "";
   const flag = inPlay ? cmp(power, base(p?.power)) || cmp(toughness, base(p?.toughness)) : "";
   return (
-    <span className={`pt-ov${flag}${card.token || card.hidden ? " tile" : ""}`} title={inPlay && p?.power !== undefined ? `Printed ${p.power}/${p.toughness}` : undefined}>
+    <span className={`pt-ov${flag}${shown.token || card.hidden ? " tile" : ""}`} title={inPlay && p?.power !== undefined ? `Printed ${p.power}/${p.toughness}` : undefined}>
       {power}/{toughness}
     </span>
   );

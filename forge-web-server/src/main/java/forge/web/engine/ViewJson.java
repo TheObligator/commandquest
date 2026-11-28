@@ -3,6 +3,7 @@ package forge.web.engine;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import forge.ImageKeys;
 import forge.StaticData;
 import forge.card.CardEdition;
 import forge.card.CardType.CoreType;
@@ -17,6 +18,7 @@ import forge.game.combat.CombatView;
 import forge.game.player.PlayerView;
 import forge.game.spellability.StackItemView;
 import forge.game.zone.ZoneType;
+import forge.item.PaperCard;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -210,11 +212,21 @@ public final class ViewJson {
             for (CoreType t : face.getType().getCoreTypes()) {
                 types.add(t.name());
             }
+            String key = face.getImageKey();
+            // A copy (a token copy, a clone) keeps the image key of the card it copies: "c:<name>|<SET>|<art>".
+            // Name that card, so the client shows its art even when the copy has another name
+            // (Mishra's Warform) or is a token (Myriad's copies of Caller of the Pack).
+            String copied = copiedCard(key);
+            if (copied != null && (c.isToken() || c.isCloned() && !copied.equals(face.getName()))) {
+                o.put("copyOf", copied);
+            }
             if (c.isToken()) {
                 o.put("token", true);
+            }
+            if (copied == null && (c.isToken() || key != null && key.startsWith(ImageKeys.TOKEN_PREFIX))) {
                 // Forge's token image key, e.g. "t:r_1_1_goblin|M19|12": the token script (colors,
                 // base P/T, name) and, when known, the printing. The client finds its Scryfall art.
-                String key = face.getImageKey();
+                // (Also on a nontoken copy of a token, a Clone copying a Goblin, so it shows the token's art.)
                 if (key != null) {
                     o.put("tokenKey", key);
                     String art = pickedArt(tokenArt.apply(c.getOwner()), identity(face, key));
@@ -302,6 +314,38 @@ public final class ViewJson {
             o.set("card", card(gv, source, viewer));
         }
         return o;
+    }
+
+    /**
+     * The card a copy's image key names ("c:<name>|<SET>|<art index>", the copied card's key), by its
+     * real name (Forge strips accents from keys), or null for any other key (a token's "t:…").
+     */
+    static String copiedCard(String key) {
+        if (key == null || !key.startsWith(ImageKeys.CARD_PREFIX)) {
+            return null;
+        }
+        boolean back = key.endsWith(ImageKeys.BACKFACE_POSTFIX);
+        String[] parts = key.substring(ImageKeys.CARD_PREFIX.length()).split("\\|");
+        String name = parts[0];
+        int special = name.indexOf('$');
+        if (special >= 0) {
+            name = name.substring(0, special);
+        }
+        if (name.isEmpty()) {
+            return null;
+        }
+        PaperCard pc = StaticData.instance().getCommonCards().getCard(name, parts.length > 1 ? parts[1] : null);
+        if (pc == null) {
+            pc = StaticData.instance().getCommonCards().getCard(name);
+        }
+        if (pc == null) {
+            return name;
+        }
+        // A copy of a transformed card shows its back face ("…$alt").
+        if (back && pc.getRules().getOtherPart() != null) {
+            return pc.getRules().getOtherPart().getName();
+        }
+        return pc.getName();
     }
 
     /**

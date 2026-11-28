@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { arrange, moveCards, prune, redact, viewFor, type CardState, type GameState } from "../src/game/view.ts";
+import { arrange, artOf, moveCards, prune, redact, viewFor, type CardState, type GameState } from "../src/game/view.ts";
 
 const card = (id: number, name: string, extra: Partial<CardState> = {}): CardState => ({
   id, name, owner: "me", controller: "me", zone: "battlefield", types: ["Creature"], ...extra,
@@ -117,4 +117,17 @@ test("a board shows its rows with cards plus one empty row to play into", async 
   assert.equal(dropRow(0, [[], [], [pile]], { types: ["Land"] }), 0);
   assert.equal(dropRow(0, [[], [], [pile]], { types: ["Artifact"] }), 1);
   assert.equal(dropRow(2, [[], [], [pile]], { types: ["Creature"] }), 2);
+});
+
+test("a copy shows the card it copies, and a nontoken copy of a token shows the token", () => {
+  const base = { id: 1, owner: "a", controller: "a", zone: "battlefield" as const, types: ["Creature"] };
+  // Mishra's Warform: a 4/4 token copy of an artifact, under another name.
+  const warform = artOf({ ...base, name: "Mishra's Warform", token: true, copyOf: "Sol Ring", power: 4, toughness: 4 });
+  assert.equal(warform.name, "Sol Ring");
+  assert.equal(warform.token, false, "the card's art, not a token printing");
+  assert.equal(warform.power, 4, "its own P/T");
+  // A Clone copying a Goblin token.
+  assert.equal(artOf({ ...base, name: "Goblin", tokenKey: "t:r_1_1_goblin|10E|4" }).token, true);
+  const plain = { ...base, name: "Grizzly Bears" };
+  assert.equal(artOf(plain), plain);
 });

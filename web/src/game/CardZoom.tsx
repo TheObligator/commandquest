@@ -12,13 +12,14 @@ import { CardBack, cardImage, tokenImage, useCardLookup, type Preview } from "./
 import type { CardAbility } from "./abilities";
 import { AbilityMark } from "./AbilityMenu";
 import type { CardDetails } from "./useLiveGame";
-import type { CardView } from "./view";
+import { artOf, type CardView } from "./view";
 
 /** How long the pointer rests on a card before it's shown large. */
 export const HOVER_ZOOM_MS = 350;
 
 function bigImage(card: CardView): string | undefined {
   if (card.hidden) return undefined;
+  card = artOf(card);
   if (card.token) return tokenImage(card);
   const sc = card.name ? cached({ name: card.name, quantity: 1, board: "main" }) : undefined;
   return sc && imageUrl(sc, "large");
@@ -26,6 +27,7 @@ function bigImage(card: CardView): string | undefined {
 
 /** Printed sideways (a battle, a split card): shown turned so it reads like a normal card. */
 function sideways(card: CardView): boolean {
+  card = artOf(card);
   if (card.hidden || card.token || !card.name) return false;
   const sc = cached({ name: card.name, quantity: 1, board: "main" });
   return !!sc && isSideways(sc);
@@ -61,6 +63,7 @@ export function usePreloadZoom(cards: CardView[]) {
 
 /** The small image the table already has, shown enlarged until the large one is here. */
 function smallImage(card: CardView): string | undefined {
+  card = artOf(card);
   return card.hidden ? undefined : card.token ? tokenImage(card) : cardImage(card.name, "normal");
 }
 
@@ -155,7 +158,8 @@ export function HoverZoom({ preview }: { preview: Preview | null }) {
 
 /** On the tile that stands in for a card's image: whether the image is on its way. */
 function ImageWait({ card }: { card: CardView }) {
-  const lookup = useCardLookup(card.token || card.hidden ? undefined : card.name);
+  const shown = artOf(card);
+  const lookup = useCardLookup(shown.token || card.hidden ? undefined : shown.name);
   return lookup === "loading" ? <Waiting text="Looking it up…" className="muted small" /> : null;
 }
 
@@ -220,22 +224,26 @@ export function CardInspect({ card, loadDetails, ownerName, onClose }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [card.id, stateKey]);
 
-  // Official rulings, for real cards whose name we know (not tokens or hidden cards).
+  // Official rulings, for real cards whose name we know (not tokens or hidden cards). A copy has the
+  // rulings and printed text of the card it copies.
+  const shown = artOf(card);
   const [rules, setRules] = useState<Ruling[] | "error" | null>(null);
   useEffect(() => {
-    if (!card.name || card.token || card.hidden) return;
+    if (!shown.name || shown.token || card.hidden) return;
     let live = true;
-    rulings(card.name).then(
+    rulings(shown.name).then(
       (r) => live && setRules(r),
       () => live && setRules("error"),
     );
     return () => {
       live = false;
     };
-  }, [card.name, card.token, card.hidden]);
+  }, [shown.name, shown.token, card.hidden]);
 
-  const lookup = useCardLookup(card.token || card.hidden ? undefined : card.name);
-  const sc = card.name && !card.token ? cached({ name: card.name, quantity: 1, board: "main" }) : undefined;
+  const lookup = useCardLookup(shown.token || card.hidden ? undefined : shown.name);
+  const sc = shown.name && !shown.token ? cached({ name: shown.name, quantity: 1, board: "main" }) : undefined;
+  // A copy under another name (Mishra's Warform) isn't what's printed on the card it copies.
+  const renamed = !!card.copyOf && card.copyOf !== card.name;
   const faces: CardFace[] = sc ? (sc.card_faces?.length ? sc.card_faces : [sc as CardFace]) : [];
   const src = bigImage(card);
   const counters = Object.entries(card.counters ?? {});
@@ -267,7 +275,7 @@ export function CardInspect({ card, loadDetails, ownerName, onClose }: {
             <h2>{card.hidden ? "Face-down card" : card.name}</h2>
             <Cost cost={printed?.mana_cost} />
           </div>
-          <p className="ci-type">{printed?.type_line ?? sc?.type_line ?? `${card.token ? "Token " : ""}${card.types?.join(" ") ?? ""}`}</p>
+          <p className="ci-type">{(renamed ? undefined : printed?.type_line ?? sc?.type_line) ?? `${card.token ? "Token " : ""}${card.types?.join(" ") ?? ""}`}</p>
           {forgeText ? (
             <div className="ci-forge"><ForgeText text={forgeText} abilities={details?.triggers ?? []} /></div>
           ) : faces.length ? (
@@ -278,10 +286,10 @@ export function CardInspect({ card, loadDetails, ownerName, onClose }: {
                 <Rules text={f.oracle_text} />
               </section>
             ))
-          ) : (loadDetails && !details) || (!card.token && !card.hidden && lookup === "loading") ? (
+          ) : (loadDetails && !details) || (!shown.token && !card.hidden && lookup === "loading") ? (
             <p><Waiting text="Looking up its text…" /></p>
           ) : (
-            <p className="muted">{card.token ? "A token: it has what the card that made it gave it." : "No rules text found."}</p>
+            <p className="muted">{shown.token ? "A token: it has what the card that made it gave it." : "No rules text found."}</p>
           )}
           {(pt || (printed?.power !== undefined && !inPlay)) && (
             <div className="ci-pt-row">
@@ -303,7 +311,7 @@ export function CardInspect({ card, loadDetails, ownerName, onClose }: {
               {facts.map((f) => <h3 key={f}>{f}</h3>)}
             </section>
           )}
-          {card.name && !card.token && !card.hidden && (
+          {shown.name && !shown.token && !card.hidden && (
             <details className="ci-sec ci-rulings" open={Array.isArray(rules) && rules.length <= 4}>
               <summary>
                 <h3>Rulings{Array.isArray(rules) && ` (${rules.length})`}</h3>

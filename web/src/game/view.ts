@@ -28,6 +28,8 @@ export interface CardState {
   /** For a token: its printing on Scryfall (set code, collector number), when Forge knows it. */
   tokenSet?: string;
   tokenNumber?: string;
+  /** A copy (a token copy, a clone): the card it copies, whose art it shows, e.g. Mishra's Warform's artifact. */
+  copyOf?: string;
   faceDown?: boolean;
   /** Players allowed to look at this card while it's face down or in a hidden zone, besides the zone's normal rules. */
   visibleTo?: string[];
@@ -100,6 +102,7 @@ export interface CardView {
   tokenKey?: string;
   tokenSet?: string;
   tokenNumber?: string;
+  copyOf?: string;
   /** For a token: the printing its owner picked for their deck (Scryfall id). */
   tokenArt?: string;
   power?: number;
@@ -489,3 +492,14 @@ export function prune(arr: Arrangement, cards: CardView[], keep: Iterable<number
 }
 
 export const commanderTax = (p: PlayerState) => 2 * p.commanderCasts;
+
+/**
+ * The card whose art (and printed text) a card shows. A copy shows the card it copies, whatever its
+ * own name: Myriad's token copies of Caller of the Pack, Mishra's Warform (a copy of an artifact).
+ * A nontoken copy of a token (a Clone copying a Goblin) shows the token's art.
+ */
+export function artOf(card: CardView): CardView {
+  if (card.copyOf) return { ...card, name: card.copyOf, token: false };
+  if (card.tokenKey && !card.token) return { ...card, token: true };
+  return card;
+}

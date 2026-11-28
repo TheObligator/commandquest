@@ -13,7 +13,7 @@ import { tokenImage, usePreview } from "./cards";
 import { AbilityMarks } from "./AbilityMenu";
 import { stackText } from "./stackText";
 import { awayLabel, findCardEl, findPlayerEl, type Spot, spotOf } from "./locate";
-import type { GameView, StackItemView } from "./view";
+import { artOf, type GameView, type StackItemView } from "./view";
 
 const KEY = "cq.stack.box.v2"; // v2: starts in the middle of the table (was the top left)
 /** First time: in the middle of the table. */
@@ -25,8 +25,9 @@ const defaultBox = (area: Area): Box => {
 
 function art(s: StackItemView): string | undefined {
   if (!s.card || s.card.hidden) return undefined;
-  if (s.card.token) return tokenImage(s.card);
-  const sc = s.card.name ? cached({ name: s.card.name, quantity: 1, board: "main" }) : undefined;
+  const card = artOf(s.card);
+  if (card.token) return tokenImage(card);
+  const sc = card.name ? cached({ name: card.name, quantity: 1, board: "main" }) : undefined;
   return sc && imageUrl(sc, "art_crop");
 }
 
