@@ -553,8 +553,13 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
   // What Forge's prompt lets you click: cards to pick or target, and while paying, your mana sources.
   const sel = view.selection;
   const selectable = useMemo(
-    () => new Set([...(sel?.cards ?? []), ...(game.prompt?.pay?.sources ?? []), ...(board?.cards.keys() ?? [])]),
-    [sel, game.prompt?.pay, board],
+    () => new Set([
+      ...(sel?.cards ?? []),
+      ...(game.prompt?.pay?.sources ?? []),
+      // Once you've chosen as many as you can, the rest stop glowing (click a chosen one to swap it).
+      ...[...(board?.cards.keys() ?? [])].filter((id) => !game.ask || game.ask.max <= 1 || boardPicked.length < game.ask.max || boardPicked.includes(id)),
+    ]),
+    [sel, game.prompt?.pay, board, game.ask, boardPicked],
   );
   const chosen = useMemo(
     () => new Set([...(sel?.chosen ?? []), ...boardPicked].filter((x): x is number => typeof x === "number")),
@@ -1255,9 +1260,10 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
           <TargetBar
             sent={game.sent}
             message={game.ask.title ? `${game.ask.title}\n${game.ask.message}` : game.ask.message}
-            status={`Click on the table · ${boardPicked.length} of ${game.ask.min === game.ask.max ? game.ask.min : game.ask.min ? `${game.ask.min}–${game.ask.max}` : `up to ${game.ask.max}`} chosen`}
+            status={game.ask.max > 1 && boardPicked.length < game.ask.max ? `Click on the table · ${game.ask.min > boardPicked.length ? `${game.ask.min - boardPicked.length} more to go` : `up to ${game.ask.max - boardPicked.length} more`}` : "Click on the table"}
+            count={{ picked: boardPicked.length, min: game.ask.min, max: game.ask.max }}
             ok={{
-              label: boardPicked.length === 0 && game.ask.min === 0 ? "Choose none" : "OK",
+              label: boardPicked.length === 0 && game.ask.min === 0 ? "Choose none" : "Confirm",
               enabled: boardPicked.length >= game.ask.min && boardPicked.length <= game.ask.max,
               onClick: answerBoard,
             }}

@@ -111,10 +111,13 @@ button.zone-tile:hover .zt-card { outline: 2px solid var(--accent-2); }
 .atk-badge { position: absolute; z-index: 3; left: 50%; bottom: -5px; translate: -50% 0; padding: 0 5px; border-radius: 99px; background: var(--danger); color: #1a0606; font-size: 9px; font-weight: 800; white-space: nowrap; }
 
 /* ---- Hand ---- */
-.hand-bar { display: flex; align-items: flex-end; gap: 10px; padding: 0 8px 0 8px; border: 1px solid var(--line); border-radius: 10px; background: #10131b; min-width: 0; }
+.hand-bar { position: relative; z-index: 4; display: flex; align-items: flex-end; gap: 10px; padding: 0 8px 0 8px; border: 1px solid var(--line); border-radius: 10px; background: #10131b; min-width: 0; }
 .hand-label { writing-mode: vertical-rl; transform: rotate(180deg); align-self: center; font-size: .62rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
-/* Room around the cards for the hover lift (top) and the playable glow, which the scroller would clip. */
-.hand-cards { display: flex; gap: 8px; overflow-x: auto; padding: 14px 6px 14px; min-width: 0; min-height: calc(96px * 1.4 + 28px); }
+/* Room around the cards for the hover lift (top) and the playable glow, which the scroller would clip.
+   The scroller reaches 32px up over the board so lifted cards draw over it instead of being cut off;
+   that strip lets clicks through to the board (only the cards take the pointer). */
+.hand-cards { display: flex; gap: 8px; overflow-x: auto; margin-top: -32px; padding: 46px 6px 14px; min-width: 0; min-height: calc(96px * 1.4 + 60px); pointer-events: none; }
+.hand-card { pointer-events: auto; }
 .hand-card { --cw: 96px; position: relative; flex: none; width: var(--cw); aspect-ratio: 488 / 680; padding: 0; border: 0; background: none; border-radius: 5% / 3.6%; cursor: grab; transition: transform .12s, box-shadow .12s; }
 .hand-card:hover { transform: translateY(-9px); box-shadow: 0 10px 22px rgb(0 0 0 / 55%); }
 .hand-card.selected { transform: translateY(-10px); outline: 3px solid var(--accent); outline-offset: 1px; }
@@ -241,6 +244,9 @@ dialog.zone-viewer { width: min(980px, calc(100vw - 32px)); max-height: 86vh; ba
 
 /* Live games: what Forge lets you pick, and clickable player names. */
 .hand-card.chosen { transform: translateY(-14px); box-shadow: 0 0 0 3px #7fd1ff, 0 0 14px rgb(127 209 255 / 55%); border-radius: 6px; }
+.hand-card.chosen[data-pick]::after { content: attr(data-pick); position: absolute; top: -8px; left: -8px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: #7fd1ff; color: #06121a; font-size: .72rem; font-weight: 800; box-shadow: 0 1px 4px #0009; }
+/* Everything you can choose is chosen: the other cards step back. */
+.game-center:has(.target-bar.full) .hand-card:not(.chosen) { opacity: .45; }
 .slot.chosen .bf-card { box-shadow: 0 0 0 3px #7fd1ff, 0 0 14px rgb(127 209 255 / 55%); border-radius: 6px; }
 .sb-target { color: var(--accent-2, #ffd27a) !important; text-decoration: underline dotted; text-underline-offset: 3px; }
 .slot.selectable .bf-card, .hand-card.selectable { box-shadow: 0 0 0 2px var(--accent-2, #ffd27a), 0 0 12px rgb(255 210 122 / 45%); border-radius: 6px; }
@@ -628,6 +634,14 @@ dialog.decision-window.wide { width: min(860px, calc(100vw - 32px)); }
 .tb-icon { color: var(--accent-2, #ffd27a); font-size: 1.1rem; }
 .tb-text { flex: 1; min-width: 0; display: grid; }
 .tb-text span { color: var(--muted); font-size: .78rem; }
+.tb-count { flex: none; padding: 2px 9px; border-radius: 99px; font-weight: 800; font-size: .8rem; white-space: nowrap; background: #2a2410; color: var(--accent-2, #ffd27a); border: 1px solid #5a4a20; }
+/* All chosen: green, and the button asks to be pressed. */
+.target-bar.ready { border-color: #5fd38a; box-shadow: 0 0 0 1px #5fd38a, 0 0 22px rgb(95 211 138 / 35%), 0 8px 24px #0009; }
+.target-bar.ready .tb-icon, .target-bar.ready .tb-text b { color: #5fd38a; }
+.target-bar.ready .tb-count { background: #123222; color: #5fd38a; border-color: #2c6a46; }
+.target-bar.ready .tb-ok:not(:disabled) { background: #5fd38a; border-color: #5fd38a; color: #06180d; padding-inline: 16px; animation: tb-pulse 1.4s ease-in-out infinite; }
+@keyframes tb-pulse { 50% { box-shadow: 0 0 0 5px rgb(95 211 138 / 25%); } }
+@media (prefers-reduced-motion: reduce) { .target-bar.ready .tb-ok { animation: none; } }
 
 /* Ability settings (AbilityMenu): a panel beside an ability's menu row, or in an opened stack item. */
 .cm-sub > button .cm-end { display: inline-flex; align-items: center; gap: 6px; flex: none; }

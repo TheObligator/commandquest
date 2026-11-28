@@ -34,11 +34,14 @@ export function HandBar(props: {
       <div className="hand-cards">
         {props.cards.map((c) => {
           const selected = props.selected.includes(c.id);
+          // Which pick this card is (1, 2, ...), shown on it when you're choosing several.
+          const pick = props.chosen?.has(c.id) && props.chosen.size > 1 ? [...props.chosen].indexOf(c.id) + 1 : 0;
           return (
             <button
               key={c.id}
               className={`hand-card${selected ? " selected" : ""}${props.selectable?.has(c.id) ? " selectable" : ""}${props.chosen?.has(c.id) ? " chosen" : ""}${!props.selecting && props.playable?.has(c.id) ? " playable" : ""}${marks.marked.has(c.id) ? " marked" : ""}`}
               data-card-ids={c.id}
+              data-pick={pick || undefined}
               draggable={!props.selecting}
               aria-pressed={props.selecting ? selected : undefined}
               aria-label={props.selecting ? "Put this on the bottom" : props.onClick ? `${c.name}: click or drag to your board to play it, right-click for more` : `${c.name}: drag to your board or double-click to play`}
