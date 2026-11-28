@@ -3,3 +3,10 @@
 # (a blank page until refreshed). Not storing the page makes a restored tab fetch the current one.
 /
   Cache-Control: no-store
+
+# Card data (scripts/carddata.ts). The manifest says which build is current; the shards it names sit in
+# a folder named for their contents, so they never change and can be cached for good.
+/card-data.json
+  Cache-Control: no-cache
+/card-data/*
+  Cache-Control: public, max-age=31536000, immutable

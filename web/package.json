@@ -9,6 +9,7 @@
     "dev:all": "node scripts/dev-all.mjs",
     "cardnames": "node scripts/cardnames.ts",
     "cardcategories": "node scripts/cardcategories.ts",
+    "carddata": "node scripts/carddata.ts",
     "precons": "node scripts/precons.ts",
     "cardsupport": "node scripts/cardsupport.ts",
     "broken:check": "node scripts/brokencheck.ts",

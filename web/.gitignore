@@ -10,3 +10,6 @@ dist/
 /public/card-names.json
 # built from Scryfall bulk data by scripts/cardcategories.ts
 /public/card-categories.json
+# built from Scryfall bulk data by scripts/carddata.ts
+/public/card-data.json
+/public/card-data/

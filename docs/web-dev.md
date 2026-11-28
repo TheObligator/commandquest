@@ -68,6 +68,21 @@ opening a deck doesn't wait on Scryfall. Only cards it hasn't seen before go to 
 are quick; the first full run takes about four minutes. After merging upstream Forge, run it and
 commit the results (the nightly Forge sync does this); `npm test` fails locally while they're out of date.
 
+### Scryfall requests and card data
+
+Scryfall's API limits requests per IP address (2 per second for searches and card lookups, 10 for the
+rest), so every tab on a device shares one schedule (`src/scryfallQueue.ts`, kept in localStorage and
+updated under a Web Lock). A 429, or a request that can't get through at all (a block can look like a
+network error), pauses every tab: 30 seconds, doubling with each failure in a row up to 4 minutes.
+
+Most cards are looked up by name, and those don't go to the API at all. `scripts/carddata.ts` builds
+`web/public/card-data.json` and `web/public/card-data/<tag>/` (not committed) from Scryfall's daily
+oracle bulk data at every build, like the card-name list: one printing per card, in 4096 small files
+split by a hash of the name (`src/carddata.ts`). The folder is named for its contents, so the files are
+cached for good (`public/_headers`). Cards asked for by a particular printing (id, or set and number),
+names the data doesn't have, and data over 8 days old still go to the API. If the download fails, the
+site just uses the API. `npm run carddata` downloads it again by hand.
+
 ### The card search dropdown
 
 Suggestions come from a list of every card name, searched in the browser, so typing makes no requests

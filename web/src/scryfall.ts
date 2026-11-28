@@ -2,14 +2,19 @@
 //
 // Follows https://scryfall.com/docs/api and https://scryfall.com/docs/api/rate-limits:
 //  - Rate limits: /cards/search, /cards/named, /cards/random and /cards/collection allow 2 requests
-//    per second; everything else 10 per second. Every request goes through one queue that spaces
-//    their starts by the right gap. Images and symbols come from *.scryfall.io, which has no rate limit, so
-//    they never go through the API.
-//  - On HTTP 429 we pause all requests for 30 seconds, as Scryfall requires, then try that one again.
+//    per second; everything else 10 per second. Every request goes through one queue, shared by all
+//    of the site's tabs (src/scryfallQueue.ts), that spaces their starts by the right gap. Images and
+//    symbols come from *.scryfall.io, which has no rate limit, so they never go through the API.
+//  - On HTTP 429, or a request that can't get through at all (a block can look like that), we pause
+//    all requests in every tab, for 30 seconds and longer if it happens again, then try that one again.
 //  - The browser's own User-Agent is left intact and an Accept header is sent.
 //  - Card data is cached in localStorage for 7 days (Scryfall asks for at least 24h).
+//  - Cards looked up by name come from our own copy of Scryfall's bulk data when the site has one
+//    (src/carddata.ts), so most of them need no API request at all.
 
 import { capJson } from "./app/storageRoom";
+import { CARD_DATA_VERSION, decode, isTokenLike, lookupNames, shardOf, trimCard, type CardDataManifest, type StoredCard } from "./carddata";
+import { createQueue } from "./scryfallQueue";
 import type { DeckCard } from "../convex/model/deckRules";
 import { probes, rank } from "./didyoumean";
 import { choosePrinting, type Print, type PrintingPref } from "./printings";
@@ -17,9 +22,6 @@ import { restrictToNames } from "./searchquery";
 
 const API = "https://api.scryfall.com";
 const SLOW = /^\/cards\/(search|named|random|collection)\b/;
-const SLOW_GAP_MS = 520;
-const FAST_GAP_MS = 110;
-const BACKOFF_MS = 30_000;
 
 export interface ImageUris {
   small: string;
@@ -100,23 +102,13 @@ export interface SearchPage {
 // ---- Request queue ------------------------------------------------------------
 
 // Requests are spaced by when they start, not chained on finishing: Scryfall limits how many
-// arrive per second, so a slow response needn't hold up the next request. Every request is at least
-// FAST_GAP_MS after the last one, and the slow endpoints are also SLOW_GAP_MS after each other.
-let nextAny = 0;
-let nextSlow = 0;
-let pausedUntil = 0;
-
-function queued<T>(path: string, fn: () => Promise<T>): Promise<T> {
-  const slow = SLOW.test(path);
-  const now = Date.now();
-  const at = Math.max(now, nextAny, pausedUntil, slow ? nextSlow : 0);
-  nextAny = at + FAST_GAP_MS;
-  if (slow) nextSlow = at + SLOW_GAP_MS;
-  return new Promise<void>((r) => setTimeout(r, at - now)).then(() =>
-    // A 429 while this one waited: get back in line behind the pause.
-    Date.now() < pausedUntil ? queued(path, fn) : fn(),
-  );
-}
+// arrive per second, so a slow response needn't hold up the next request.
+const queue = createQueue({
+  now: Date.now,
+  sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+  storage: typeof localStorage === "undefined" ? undefined : localStorage,
+  lock: typeof navigator !== "undefined" && navigator.locks ? (fn) => navigator.locks.request("cq-scryfall-queue", () => fn()) : undefined,
+});
 
 class ScryfallError extends Error {
   status: number;
@@ -127,7 +119,7 @@ class ScryfallError extends Error {
 }
 
 /** How long Scryfall has us waiting before the next request (after a 429), in ms; 0 when it doesn't. */
-export const pauseLeft = () => Math.max(0, pausedUntil - Date.now());
+export const pauseLeft = () => queue.pauseLeft();
 
 /** A user-facing message for a failed request: Scryfall's own words, or that it couldn't be reached at all. */
 export function lookupError(e: unknown): string {
@@ -137,15 +129,25 @@ export function lookupError(e: unknown): string {
 const MAX_429_RETRIES = 2;
 
 async function getJson<T>(url: string, init?: RequestInit, retries = MAX_429_RETRIES): Promise<T> {
-  const path = new URL(url).pathname;
-  return queued(path, async () => {
-    const res = await fetch(url, { ...init, headers: { Accept: "application/json", ...(init?.headers ?? {}) } });
+  const slow = SLOW.test(new URL(url).pathname);
+  return queue.run(slow, async () => {
+    let res: Response;
+    try {
+      res = await fetch(url, { ...init, headers: { Accept: "application/json", ...(init?.headers ?? {}) } });
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") throw e;
+      // Offline, or blocked (a reply without CORS headers looks the same): pause like a 429.
+      await queue.strike();
+      if (retries > 0) return getJson<T>(url, init, retries - 1);
+      throw e;
+    }
     if (res.status === 429) {
-      pausedUntil = Date.now() + BACKOFF_MS;
+      await queue.strike();
       // Back in the queue, behind the pause (the page says how long: src/components/Spinner.tsx).
       if (retries > 0) return getJson<T>(url, init, retries - 1);
-      throw new ScryfallError(429, "Scryfall says we're sending too many requests. Try again in a minute.");
+      throw new ScryfallError(429, "Scryfall says we're sending too many requests. Try again in a few minutes.");
     }
+    queue.ok();
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new ScryfallError(res.status, (data as { details?: string }).details ?? `Scryfall error ${res.status}`);
     return data as T;
@@ -168,34 +170,12 @@ const byId = new Map<string, ScryCard>();
 const byName = new Map<string, ScryCard>();
 const storedAt = new Map<string, number>();
 
-/** Only the fields we display, so the cache stays small. */
-function trim(c: ScryCard): ScryCard {
-  const pick = <O extends object>(o: O, keys: (keyof O)[]) =>
-    Object.fromEntries(keys.filter((k) => o[k] !== undefined).map((k) => [k, o[k]])) as O;
-  const card = pick(c, ["id", "oracle_id", "game_changer", "produced_mana", "name", "layout", "mana_cost", "cmc", "type_line", "oracle_text", "flavor_text", "power", "toughness", "loyalty", "defense", "color_identity", "color_indicator", "colors", "keywords", "reserved", "set", "set_name", "collector_number", "rarity", "artist", "released_at", "scryfall_uri", "legalities", "image_uris"]);
-  const tokens = c.all_parts?.filter((p) => p.component === "token" && p.id !== c.id);
-  if (tokens?.length) card.all_parts = tokens.map((p) => ({ id: p.id, component: p.component, name: p.name, type_line: p.type_line }));
-  else delete card.all_parts;
-  if (c.card_faces) {
-    card.card_faces = c.card_faces.map((f) => pick(f, ["name", "oracle_id", "mana_cost", "type_line", "oracle_text", "flavor_text", "power", "toughness", "loyalty", "defense", "artist", "color_indicator", "image_uris"]));
-  }
-  return card;
-}
-
-/**
- * Tokens, emblems and art cards. Some share a card's name (Angel of Sanctions makes an Angel of
- * Sanctions token), so they're only ever looked up by id, never by name, and a deck card never
- * takes one as its printing.
- */
-export function isTokenLike(c: { layout?: string; type_line?: string }): boolean {
-  return ["token", "double_faced_token", "emblem", "art_series"].includes(c.layout ?? "") || /^(Token|Emblem)\b/.test(c.type_line ?? "");
-}
+export { isTokenLike };
 
 function index(c: ScryCard) {
   byId.set(c.id, c);
   if (isTokenLike(c)) return;
-  byName.set(c.name.toLowerCase(), c);
-  if (c.card_faces?.[0]) byName.set(c.card_faces[0].name.toLowerCase(), c);
+  for (const n of lookupNames(c)) byName.set(n, c);
 }
 
 function loadStore() {
@@ -237,7 +217,7 @@ function saveStore() {
 }
 
 function remember(c: ScryCard) {
-  const t = trim(c);
+  const t = trimCard(c);
   index(t);
   storedAt.set(t.id, Date.now());
   saveStore();
@@ -245,6 +225,79 @@ function remember(c: ScryCard) {
 }
 
 loadStore();
+
+// ---- Our own card data (src/carddata.ts) ------------------------------------------------
+// Cards by name, from the site's copy of Scryfall's bulk data: no API request, and no rate limit.
+// Without it (a dev server that couldn't download it, a tab left open across a deploy), lookups
+// go to Scryfall's API as before. Its cards aren't kept in localStorage: the browser caches them.
+
+const CARD_DATA = "/card-data";
+/**
+ * Older card data than this isn't used: a site that hasn't been deployed for a while would show old
+ * legalities (bans), so it asks the API instead, as Scryfall's own data is a week old at most here.
+ */
+const CARD_DATA_MAX_AGE_MS = 8 * 24 * 60 * 60 * 1000;
+/** How long to wait before asking for the manifest again after it couldn't be had. */
+const MANIFEST_RETRY_MS = 5 * 60_000;
+let manifest: Promise<CardDataManifest | undefined> | undefined;
+let manifestMissedAt: number | undefined;
+const shardLoads = new Map<string, Promise<StoredCard[]>>();
+
+function cardData(): Promise<CardDataManifest | undefined> {
+  if (manifest && !(manifestMissedAt !== undefined && Date.now() - manifestMissedAt > MANIFEST_RETRY_MS)) return manifest;
+  manifestMissedAt = undefined;
+  manifest = fetch(`${CARD_DATA}.json`, { cache: "no-cache" })
+    .then((res) => (res.ok ? (res.json() as Promise<CardDataManifest>) : undefined))
+    .then((m) => (m?.version === CARD_DATA_VERSION && m.tag && Array.isArray(m.formats) && Date.now() - Date.parse(m.built) < CARD_DATA_MAX_AGE_MS ? m : undefined))
+    .catch(() => undefined) // no data on this server (a dev server answers with index.html, which isn't JSON)
+    .then((m) => {
+      if (!m) manifestMissedAt = Date.now();
+      return m;
+    });
+  return manifest;
+}
+
+function shard(m: CardDataManifest, name: string): Promise<StoredCard[]> {
+  const key = `${m.tag}/${name}`;
+  let hit = shardLoads.get(key);
+  if (!hit) {
+    hit = fetch(`${CARD_DATA}/${key}.json`).then((res) => {
+      // Every shard of a build exists, so a missing one means the site was deployed since the
+      // manifest came: ask for the new one next time.
+      if (res.status === 404) manifest = undefined;
+      if (!res.ok) throw new Error(`card data ${key}: HTTP ${res.status}`);
+      return res.json() as Promise<StoredCard[]>;
+    });
+    hit.catch(() => shardLoads.delete(key)); // try again next time
+    shardLoads.set(key, hit);
+  }
+  return hit;
+}
+
+/**
+ * Looks these card names up in our own card data, keyed by lowercased name: only names it has, and
+ * not ones already known. The cards are indexed like any other, so `cached()` finds them afterwards.
+ */
+async function fromCardData(names: string[]): Promise<Map<string, ScryCard>> {
+  const found = new Map<string, ScryCard>();
+  const want = new Set(names.map((n) => n.toLowerCase()).filter((n) => n && !byName.has(n)));
+  if (!want.size) return found;
+  const m = await cardData();
+  if (!m) return found;
+  const lists = await Promise.all([...new Set([...want].map(shardOf))].map((s) => shard(m, s).catch(() => [] as StoredCard[])));
+  for (const list of lists) {
+    for (const stored of list) {
+      const keys = lookupNames(stored).filter((n) => want.has(n));
+      if (!keys.length) continue;
+      const card = decode(stored, m.formats);
+      for (const k of keys) found.set(k, card);
+      // A printing someone already has stays: this one only fills names nobody has.
+      if (!byId.has(card.id)) byId.set(card.id, card);
+      for (const k of lookupNames(card)) if (!byName.has(k)) byName.set(k, card);
+    }
+  }
+  return found;
+}
 
 /** The card for a deck entry: its printing, else any printing by name. Never a token. */
 export function cached(card: DeckCard): ScryCard | undefined {
@@ -388,14 +441,14 @@ export async function didYouMean(q: string): Promise<string[]> {
 
 /** One card by its exact name (front-face names work too); cached. */
 export async function named(name: string): Promise<ScryCard> {
-  const hit = byName.get(name.toLowerCase());
+  const hit = byName.get(name.toLowerCase()) ?? (await fromCardData([name])).get(name.toLowerCase());
   if (hit) return hit;
   return remember(await getJson<ScryCard>(`${API}/cards/named?${new URLSearchParams({ exact: name })}`));
 }
 
 /** One card by a loose name ("sol ring", "atraxa praetors voice"): Scryfall's best match; cached. */
 export async function fuzzyNamed(name: string): Promise<ScryCard> {
-  const hit = byName.get(name.toLowerCase());
+  const hit = byName.get(name.toLowerCase()) ?? (await fromCardData([name])).get(name.toLowerCase());
   if (hit) return hit;
   return remember(await getJson<ScryCard>(`${API}/cards/named?${new URLSearchParams({ fuzzy: name })}`));
 }
@@ -457,12 +510,16 @@ export async function preferredPrintings(names: string[], pref: PrintingPref, on
   const wanted = new Set(want);
   const keys = (c: ScryCard) => [c.name, deckName(c), c.name.split(" // ")[0]].map((n) => n.toLowerCase()).filter((n) => wanted.has(n));
   if (pref === "default") {
-    for (let i = 0; i < want.length; i += 75) {
-      onProgress?.(i, want.length);
+    // Our card data has Scryfall's own pick for each name; the API only for names it doesn't have.
+    const local = await fromCardData(want);
+    for (const [k, c] of local) out.set(k, c);
+    const rest = want.filter((n) => !local.has(n));
+    for (let i = 0; i < rest.length; i += 75) {
+      onProgress?.(i, rest.length);
       const data = await getJson<{ data: ScryCard[] }>(`${API}/cards/collection`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifiers: want.slice(i, i + 75).map((name) => ({ name })) }),
+        body: JSON.stringify({ identifiers: rest.slice(i, i + 75).map((name) => ({ name })) }),
       });
       for (const c of data.data) for (const k of keys(c)) out.set(k, remember(c));
     }
@@ -513,6 +570,9 @@ export async function resolve(cards: DeckCard[]): Promise<string[]> {
   // A named entry whose printing is a token wants the card: ask by name. (Token lookups by id, with
   // no name, are the token list's and stay as they are.)
   const asked = cards.map((c) => (c.name && printingIsToken(c) ? withoutPrinting(c) : c));
+  // Cards asked for by name alone come from our own card data when it has them.
+  const byNameAlone = asked.filter((c) => c.name && !c.scryfallId && !c.set && !c.collectorNumber);
+  if (byNameAlone.length) await fromCardData(byNameAlone.map((c) => c.name));
   for (const c of asked) if (!exactPrinting(c)) unique.set(JSON.stringify(identifier(c)), c);
   // Cards another caller is already looking up (the editor and its token list open together) share
   // that request instead of sending a second one.

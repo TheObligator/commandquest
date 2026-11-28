@@ -1,6 +1,7 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 import { updateCardCategories } from "./scripts/cardcategories";
+import { updateCardData } from "./scripts/carddata";
 import { updateCardNames } from "./scripts/cardnames";
 import { searchFiles } from "./scripts/searchfiles";
 
@@ -36,7 +37,10 @@ function searchEngines(): Plugin {
   };
 }
 
-/** The card names and categories for the editor: there before a build, and brought up to date as the dev server starts. */
+/**
+ * The card names and categories for the editor, and the card data for lookups by name: there before a
+ * build, and brought up to date as the dev server starts.
+ */
 function cardData(): Plugin {
   let dev = false;
   return {
@@ -45,7 +49,7 @@ function cardData(): Plugin {
       dev = config.command === "serve";
     },
     async buildStart() {
-      const updated = Promise.all([updateCardNames(), updateCardCategories()]);
+      const updated = Promise.all([updateCardNames(), updateCardCategories(), updateCardData()]);
       if (!dev) await updated;
     },
   };
