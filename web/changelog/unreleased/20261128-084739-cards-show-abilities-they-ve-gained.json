@@ -1,0 +1,6 @@
+{
+  "category": "new",
+  "title": "Cards show abilities they've gained",
+  "date": "2026-11-28T08:47:39.183Z",
+  "body": "When a permanent gains a keyword or ability from another card (equipment, anthems, pump spells), it gets a marker: an icon for keywords, with what the keyword does on hover, and the ability's text over the card. The card preview and card details list everything gained this game, and where it came from, apart from the card's printed text. Mana symbols in mana choices, your mana pool and paying now use the same icon set."
+}

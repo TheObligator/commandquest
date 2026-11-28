@@ -130,7 +130,9 @@ public final class Recording {
             if (it == null || !it.hasNext()) {
                 return;
             }
-            ObjectNode now = normalize(views.game(gv, it.next()));
+            ObjectNode seen = views.game(gv, it.next());
+            Gained.annotate(game, seen, json);
+            ObjectNode now = normalize(seen);
             ObjectNode patch = last == null ? now.deepCopy() : diff(last, now);
             log(patch);
             dirty = false;

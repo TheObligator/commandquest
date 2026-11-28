@@ -25,7 +25,7 @@ export function PayPrompt({ prompt, game, pool }: {
       <header>
         <span className="pay-what">{what}</span>
         <strong>{pay.card || "this"}</strong>
-        <ManaCost cost={pay.cost} />
+        <ManaCost cost={pay.cost} font />
       </header>
       <div className="pay-btns">
         <PressButton
@@ -41,7 +41,7 @@ export function PayPrompt({ prompt, game, pool }: {
         </PressButton>
         {floating.length > 0 && (
           <PressButton what="payPool:all" sent={game.sent} className="ar-btn" title="Pay with the mana in your pool, as much as it can (click a symbol by your name to use just one)" onClick={() => game.payPool("all")}>
-            Use floating <ManaCost cost={floating.map(([x, n]) => `{${x}}`.repeat(n)).join("")} />
+            Use floating <ManaCost cost={floating.map(([x, n]) => `{${x}}`.repeat(n)).join("")} font />
           </PressButton>
         )}
         {pay.free && (

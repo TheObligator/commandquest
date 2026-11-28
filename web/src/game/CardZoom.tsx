@@ -11,6 +11,8 @@ import { Spinner, Waiting } from "../components/Spinner";
 import { CardBack, cardImage, tokenImage, useCardLookup, type Preview } from "./cards";
 import type { CardAbility } from "./abilities";
 import { AbilityMark } from "./AbilityMenu";
+import { withoutGained } from "./gained";
+import { GainedList } from "./GainedMarks";
 import type { CardDetails } from "./useLiveGame";
 import { artOf, type CardView } from "./view";
 
@@ -152,6 +154,7 @@ export function HoverZoom({ preview }: { preview: Preview | null }) {
         </div>
       )}
       {shown.note && <p className="hz-note">{shown.note}</p>}
+      <GainedList gained={card.gained} />
     </div>
   );
 }
@@ -258,7 +261,8 @@ export function CardInspect({ card, loadDetails, ownerName, onClose }: {
   if (card.untapLock === "never") facts.push("Never untaps by itself");
   else if (card.untapLock === "next") facts.push("Doesn't untap during its next untap step");
   if (card.faceDown) facts.push("Face down");
-  const forgeText = details?.text?.trim();
+  // Forge's text has what was gained mixed in; that's listed on its own below it.
+  const forgeText = details?.text ? withoutGained(details.text, card.gained).trim() : undefined;
   return (
     <dialog
       ref={ref}
@@ -291,6 +295,7 @@ export function CardInspect({ card, loadDetails, ownerName, onClose }: {
           ) : (
             <p className="muted">{shown.token ? "A token: it has what the card that made it gave it." : "No rules text found."}</p>
           )}
+          <GainedList gained={card.gained} reminders />
           {(pt || (printed?.power !== undefined && !inPlay)) && (
             <div className="ci-pt-row">
               <span className={`ci-pt${ptDiff ? " changed" : ""}`} title={printed?.power !== undefined ? `Printed ${printed.power}/${printed.toughness}` : undefined}>

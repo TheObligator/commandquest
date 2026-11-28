@@ -55,7 +55,7 @@ export function ManaDialog({ cards, via, onClose, onApply }: {
               <div key={x} className="md-color">
                 <button type="button" className={`md-arrow${up?.hurts ? " hurts" : ""}`} disabled={!up} onClick={up?.go} aria-label={`One more ${COLOR_NAME[x]}`}
                   title={up?.hurts ? `One more ${COLOR_NAME[x]}: costs you life` : undefined}>▲</button>
-                <ManaCost cost={`{${x}}`} />
+                <ManaCost cost={`{${x}}`} font />
                 <b>{t[x] ?? 0}</b>
                 <button type="button" className={`md-arrow${down?.hurts ? " hurts" : ""}`} disabled={!down} onClick={down?.go} aria-label={`One less ${COLOR_NAME[x]}`}
                   title={down?.hurts ? `One less ${COLOR_NAME[x]}: costs you life` : undefined}>▼</button>
@@ -81,7 +81,7 @@ export function ManaDialog({ cards, via, onClose, onApply }: {
         </ul>
         {owText && <p className="md-hurt">♥ This costs you {owText}{ow.damage && ow.life ? "" : ow.damage ? " (dealt to you)" : ""}.</p>}
         <div className="cd-btns">
-          <button type="submit" className="btn small" disabled={!all}>Add <ManaCost cost={symbols(all)} />{owText ? ` (♥ −${ow.damage + ow.life})` : ""}</button>
+          <button type="submit" className="btn small" disabled={!all}>Add <ManaCost cost={symbols(all)} font />{owText ? ` (♥ −${ow.damage + ow.life})` : ""}</button>
           <button type="button" className="btn small ghost" onClick={() => ref.current?.close()}>Cancel</button>
         </div>
         <p className="muted small">The mana goes to your mana pool (by your name) and empties at the end of the step. When you pay a cost, click it there to use it.</p>

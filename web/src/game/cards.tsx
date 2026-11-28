@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, useSyncExternalStore } 
 import { CardImg, CardNone, CardWait } from "../components/CardImg";
 import { ManaCost } from "../components/ManaCost";
 import { cached, cachedTokenArt, cardLookup, imageUrl, lookupVersion, onLookup, resolve, tokenArt, wantCard, type CardLookup } from "../scryfall";
+import { GainedMarks } from "./GainedMarks";
 import { artOf, type CardView } from "./view";
 
 /** Loads Scryfall data for these card names once; re-renders when it arrives. */
@@ -181,6 +182,7 @@ export function CardBadges({ card }: { card: CardView }) {
       {others.map(([k, n]) => (
         <span key={k} className="ctr other">{n} {k}</span>
       ))}
+      <GainedMarks gained={card.gained} />
       {card.commander && <span className="crown" title="Commander">♛</span>}
       {card.faceDown && !card.hidden && <span className="fd-eye" title="Face down. You can see it.">👁</span>}
     </>

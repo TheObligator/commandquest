@@ -147,10 +147,10 @@ export function SeatBoard(props: {
             {Object.entries(p.mana ?? {}).filter(([, n]) => n > 0).map(([x, n]) => (
               props.onPayPool && (!props.payPool || props.payPool.includes(x)) ? (
                 <button key={x} className="sb-mana" onClick={() => props.onPayPool!(x)} title={`Pay with one {${x}} from your pool`}>
-                  <ManaCost cost={`{${x}}`} />{n}
+                  <ManaCost cost={`{${x}}`} font />{n}
                 </button>
               ) : (
-                <span key={x} className="sb-mana"><ManaCost cost={`{${x}}`} />{n}</span>
+                <span key={x} className="sb-mana"><ManaCost cost={`{${x}}`} font />{n}</span>
               )
             ))}
           </span>

@@ -292,6 +292,57 @@ dialog.zone-viewer { width: min(980px, calc(100vw - 32px)); max-height: 86vh; ba
 .pt-ov.up { color: #8fe3a8; border-color: rgb(143 227 168 / 55%); }
 .pt-ov.down { color: #ff8f8f; border-color: rgb(255 143 143 / 55%); }
 
+/* What a permanent gained that isn't printed on it: keyword icons (Mana font) down the right edge,
+   a keyword without an icon as a "+Name" pill, and a gained ability's text over the text box. */
+.gk-list { position: absolute; right: 3%; top: 13%; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; max-height: 58%; overflow: hidden; }
+.gk { display: inline-grid; place-items: center; width: max(15px, calc(var(--cw) * .17)); aspect-ratio: 1; border-radius: 50%; background: rgb(20 16 8 / 92%); border: 1.5px solid #e0a84f; color: #ffd48a; font-size: max(9px, calc(var(--cw) * .1)); box-shadow: 0 1px 4px rgb(0 0 0 / 65%); cursor: help; }
+.gk .ms { line-height: 1; }
+.gk.text { width: auto; aspect-ratio: auto; border-radius: 99px; padding: 0 5px; font-weight: 700; font-size: max(8px, calc(var(--cw) * .08)); line-height: 1.5; color: #ffe2ae; }
+.gk-more { font-size: max(8px, calc(var(--cw) * .08)); font-weight: 800; color: #ffd48a; text-shadow: 0 1px 2px #000; }
+.ga-text { position: absolute; left: 5%; right: 5%; bottom: 17%; padding: 2px 4px; border-radius: 4px; background: rgb(18 15 10 / 88%); border: 1px dashed #e0a84f; color: #ffe9c4; font-size: max(7.5px, calc(var(--cw) * .075)); line-height: 1.3; box-shadow: 0 2px 6px rgb(0 0 0 / 65%); pointer-events: none; }
+.ga-text .ga-line { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.ga-text b { color: #e0a84f; }
+.ga-more { display: block; color: #e0a84f; font-weight: 700; }
+.gk-short, .ga-count { display: none; }
+/* Small cards (the usual board size): no room for text. Keywords without an icon get two letters,
+   gained abilities a "+N" chip; hovering the card shows them in full. */
+.bf-card { container-type: inline-size; }
+@container (max-width: 70px) {
+  .gk-full, .ga-text .ga-line, .ga-more { display: none; }
+  .gk-short, .ga-count { display: inline; }
+  .gk.text { padding: 0 3px; }
+  .ga-text { left: auto; right: auto; left: 4%; bottom: 30%; padding: 0 4px; border-style: solid; border-radius: 99px; font-weight: 800; color: #ffd48a; }
+}
+/* Hovering a keyword icon: what it does. */
+.gk-tip { position: fixed; z-index: 90; max-width: 260px; padding: 6px 9px; border-radius: 8px; background: #1a150e; border: 1px solid #6a5434; box-shadow: 0 8px 22px rgb(0 0 0 / 60%); color: #f0e2c4; font-size: .8rem; line-height: 1.35; pointer-events: none; }
+.gk-tip strong { color: #ffd48a; }
+.gk-tip .ms { color: #e0a84f; margin-right: 5px; }
+.gk-tip p { margin: 3px 0 0; }
+.gk-tip small { display: block; margin-top: 4px; color: #a39a85; }
+/* The same list under the hover zoom and in card details: "Gained this game", in italics. */
+.gained-box { margin-top: 8px; border: 1px solid rgb(224 168 79 / 55%); background: rgb(224 168 79 / 8%); border-radius: 8px; padding: 6px 9px; font-size: .82rem; line-height: 1.4; }
+.hover-zoom .gained-box { background: #1a150e; margin-top: 6px; }
+.gained-box header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 2px; }
+.gained-box header b { color: #e0a84f; font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; }
+.gained-box header span { font-size: .72rem; color: var(--muted); font-style: italic; }
+.gained-box ul { list-style: none; margin: 0; padding: 0; }
+.gained-box li { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; border-top: 1px dashed rgb(224 168 79 / 28%); }
+.gained-box li:first-child { border-top: 0; }
+.gained-box .gl-text { flex: 1; min-width: 0; font-style: italic; }
+.gained-box .gl-text > .ms, .gained-box .gl-plus { color: #e0a84f; font-style: normal; font-weight: 700; margin-right: 5px; }
+.gained-box .gl-text .rules p { display: inline; margin: 0; }
+.gained-box .gl-rem { display: block; font-size: .74rem; color: var(--muted); }
+.gained-box img.sym, .gk-tip img.sym { display: inline; width: 1em; height: 1em; aspect-ratio: auto; border-radius: 0; margin: 0 1px; vertical-align: -.12em; }
+.gained-box .gl-src { font-size: .72rem; color: var(--muted); white-space: nowrap; }
+
+/* Mana font symbols (mana choices, pool, paying). */
+.sym-font { margin: 0 1px; font-size: 14px; }
+.mana-choice-btn .sym-font { font-size: 19px; }
+.md-color .sym-font { font-size: 21px; }
+.pay-prompt header .sym-font { font-size: 16px; }
+.sb-mana .sym-font { font-size: 12px; }
+.pay-btns .sym-font { font-size: 12px; }
+
 /* Cards you can use right now (live games): a green glow. */
 .slot.playable .bf-card, .hand-card.playable, .zt-card.playable, .zone-viewer figure.playable .zv-card {
   box-shadow: 0 0 0 2px #5fd38a, 0 0 14px rgb(95 211 138 / 55%); border-radius: 6px;
