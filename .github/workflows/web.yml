@@ -1,14 +1,14 @@
 # CommandQuest: test everything, then deploy Convex and the website.
 #
-#   push to `web`  -> tests -> Convex staging (robust-barracuda-45) -> Cloudflare Worker commandquest-staging
-#   push to `live` -> tests -> Convex production (impressive-manatee-540)  -> Cloudflare Worker commandquest
+#   push to `staging`    -> tests -> Convex staging (robust-barracuda-45) -> Cloudflare Worker commandquest-staging
+#   push to `production` -> tests -> Convex production (impressive-manatee-540)  -> Cloudflare Worker commandquest
 #
 # Setup (one time) is described in docs/deploy.md.
 name: Web
 
 on:
   push:
-    branches: [web, live]
+    branches: [staging, production]
   workflow_dispatch:
 
 # A newer push to the same branch makes an older test run pointless. Deploys
@@ -77,7 +77,7 @@ jobs:
         run: npx tsc -p convex --noEmit
         working-directory: web
       # The last card-name list that downloaded (web/scripts/cardnames.ts), for when Scryfall is down.
-      # Only `web` saves it; `live` reads that one, as `web` is the default branch.
+      # Only `staging` saves it; `production` reads that one, as `staging` is the default branch.
       - name: Restore the last card-name list
         id: cardnames
         uses: actions/cache/restore@v5
@@ -86,11 +86,11 @@ jobs:
           key: card-names-none
           restore-keys: card-names-
       - name: Build (type-checks the client)
-        run: npm run ${{ github.ref_name == 'live' && 'build' || 'build:staging' }}
+        run: npm run ${{ github.ref_name == 'production' && 'build' || 'build:staging' }}
         working-directory: web
       - name: Save the card-name list
         if: >-
-          github.ref_name == 'web' && hashFiles('web/public/card-names.json') != '' &&
+          github.ref_name == 'staging' && hashFiles('web/public/card-names.json') != '' &&
           steps.cardnames.outputs.cache-matched-key != format('card-names-{0}', hashFiles('web/public/card-names.json'))
         uses: actions/cache/save@v5
         continue-on-error: true
@@ -122,11 +122,11 @@ jobs:
     # Run after the server job passed or was skipped (no server changes), never after a failure.
     if: >-
       !cancelled() && !failure() &&
-      (github.ref_name == 'web' || github.ref_name == 'live') &&
+      (github.ref_name == 'staging' || github.ref_name == 'production') &&
       (needs.changes.outputs.site == 'true' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     environment:
-      name: ${{ github.ref_name == 'live' && 'production' || 'staging' }}
+      name: ${{ github.ref_name == 'production' && 'production' || 'staging' }}
       url: ${{ vars.SITE_URL }}
     concurrency:
       group: deploy-${{ github.ref }}
@@ -167,7 +167,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          ENV_FLAG: ${{ github.ref_name == 'live' && ' ' || '--env staging' }}
+          ENV_FLAG: ${{ github.ref_name == 'production' && ' ' || '--env staging' }}
         run: |
           npx --yes wrangler@${{ env.WRANGLER_VERSION }} deploy $ENV_FLAG --message "${{ github.sha }}" | tee deploy.log
           id=$(grep -oiE 'Current Version ID: [0-9a-f-]+' deploy.log | awk '{print $NF}')
@@ -182,8 +182,8 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          ENV_FLAG: ${{ github.ref_name == 'live' && ' ' || '--env staging' }}
-          EXPECT: ${{ github.ref_name == 'live' && 'impressive-manatee-540' || 'robust-barracuda-45' }}
+          ENV_FLAG: ${{ github.ref_name == 'production' && ' ' || '--env staging' }}
+          EXPECT: ${{ github.ref_name == 'production' && 'impressive-manatee-540' || 'robust-barracuda-45' }}
           VERSION: ${{ steps.worker.outputs.version }}
         run: |
           grep -qr "$EXPECT" dist/assets \

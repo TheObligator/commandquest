@@ -6,7 +6,7 @@
 
 [**Play at commandquest.app**](https://commandquest.app) · [Staging](https://staging.commandquest.app) · [Docs](../docs/web-dev.md)
 
-[![Web](https://github.com/TheObligator/commandquest/actions/workflows/web.yml/badge.svg?branch=web)](https://github.com/TheObligator/commandquest/actions/workflows/web.yml)
+[![Web](https://github.com/TheObligator/commandquest/actions/workflows/web.yml/badge.svg?branch=staging)](https://github.com/TheObligator/commandquest/actions/workflows/web.yml)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](../LICENSE)
 
 </div>
@@ -73,7 +73,7 @@ Deployment is described in [`docs/deploy.md`](../docs/deploy.md).
 
 Read [`AGENTS.md`](../AGENTS.md) first. The short version:
 
-- Work happens on `web`, which deploys to staging. `live` is the public site. `master` mirrors
+- Work happens on `staging`, which deploys to the staging site. `production` is the public site. `master` mirrors
   upstream Forge and never gets our commits.
 - Our code lives in `forge-web-server/`, `web/`, `overrides/` and `docs/`. Upstream files are
   read-only unless there's no other way, and any change to one is recorded in

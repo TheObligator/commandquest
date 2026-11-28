@@ -1,8 +1,8 @@
 #!/bin/sh
 # Runs the game servers on this Mac for the real sites, through one Cloudflare Tunnel. See docs/game-host.md.
 # Two servers, picked with SITE (default staging):
-#   SITE=staging  builds `web`,  port 8090, https://game-staging.commandquest.app, for staging.commandquest.app
-#   SITE=live     builds `live`, port 8091, https://game.commandquest.app,         for commandquest.app
+#   SITE=staging     builds `staging`,    port 8090, https://game-staging.commandquest.app, for staging.commandquest.app
+#   SITE=production  builds `production`, port 8091, https://game.commandquest.app,         for commandquest.app
 #
 #   forge-web-server/scripts/game-service.sh set-token       save the tunnel token (paste it, then Ctrl-D)
 #   forge-web-server/scripts/game-service.sh deploy          build the pushed branch, install it, (re)start
@@ -14,7 +14,7 @@
 #   forge-web-server/scripts/game-service.sh auto-on         every 15 min, deploy a newer branch when no game is running
 #   forge-web-server/scripts/game-service.sh auto-off        stop doing that
 #
-# e.g. `SITE=live forge-web-server/scripts/game-service.sh status`.
+# e.g. `SITE=production forge-web-server/scripts/game-service.sh status`.
 # `deploy` builds a commit, not this working tree: it checks out REF (default the pushed branch) in its
 # own worktree, so switching branches here never changes what players are on. Separate from the dev
 # service (web/scripts/dev-service.sh), which uses port 8080.
@@ -23,18 +23,18 @@ set -eu
 SITE=${SITE:-staging}
 case "$SITE" in
 staging)
-  BRANCH=web PORT=${PORT:-8090} SUFFIX=
+  BRANCH=staging PORT=${PORT:-8090} SUFFIX=
   PUBLIC=https://game-staging.commandquest.app
   ORIGINS=${ALLOWED_ORIGINS:-https://staging.commandquest.app}
   ISSUERS=${CONVEX_ISSUERS:-https://robust-barracuda-45.convex.site}
   ;;
-live)
-  BRANCH=live PORT=${PORT:-8091} SUFFIX=-live
+production)
+  BRANCH=production PORT=${PORT:-8091} SUFFIX=-production
   PUBLIC=https://game.commandquest.app
   ORIGINS=${ALLOWED_ORIGINS:-https://commandquest.app}
   ISSUERS=${CONVEX_ISSUERS:-https://impressive-manatee-540.convex.site}
   ;;
-*) echo "SITE must be staging or live, not $SITE" >&2; exit 1 ;;
+*) echo "SITE must be staging or production, not $SITE" >&2; exit 1 ;;
 esac
 # The pushed branch by default: a local branch can lag behind when another worktree has it checked out.
 REF=${REF:-origin/$BRANCH}
@@ -55,7 +55,7 @@ DOMAIN="gui/$(id -u)"
 SERVER=com.commandquest.game$SUFFIX
 TUNNEL=com.commandquest.tunnel
 AUTO=com.commandquest.autodeploy$SUFFIX
-OTHER_SERVER=com.commandquest.game$([ "$SITE" = live ] || echo -live)
+OTHER_SERVER=com.commandquest.game$([ "$SITE" = production ] || echo -production)
 GAME_LOG="$LOGS/commandquest-game$SUFFIX.log"
 
 loaded() { launchctl print "$DOMAIN/$1" > /dev/null 2>&1; }

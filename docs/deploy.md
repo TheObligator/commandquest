@@ -1,10 +1,10 @@
 # Deploying: CI, Convex and commandquest.app
 
-`.github/workflows/web.yml` runs on every push to `web` and `live`:
+`.github/workflows/web.yml` runs on every push to `staging` and `production`:
 
 1. **changes** checks which files the push touched, so jobs that can't be affected are skipped.
 2. **frontend** (always, about a minute): `npm test`, a type-check of `web/convex/`, and `npm run build`
-   (`build:staging` on `web`), which type-checks the client. It checks out only `web/`.
+   (`build:staging` on `staging`), which type-checks the client. It checks out only `web/`.
 3. **server** (only when something outside `web/` and `docs/` changed):
    `mvn -f forge-web-server/reactor.xml package` on JDK 17 with a Maven cache.
 4. **deploy** (only when `web/` or the workflow changed, and nothing failed):
@@ -17,8 +17,8 @@
 
 | Branch | Convex | Cloudflare Worker | Address |
 |---|---|---|---|
-| `web` | staging, `robust-barracuda-45` (`convex deploy`) | `commandquest-staging` (`wrangler deploy --env staging`) | `staging.commandquest.app` |
-| `live` | production, `impressive-manatee-540` (`convex deploy`) | `commandquest` (`wrangler deploy`) | `commandquest.app` |
+| `staging` | staging, `robust-barracuda-45` (`convex deploy`) | `commandquest-staging` (`wrangler deploy --env staging`) | `staging.commandquest.app` |
+| `production` | production, `impressive-manatee-540` (`convex deploy`) | `commandquest` (`wrangler deploy`) | `commandquest.app` |
 
 Workers, not Pages: Cloudflare points new projects at Workers static assets. The custom domains are
 declared in `web/wrangler.jsonc`, and the first deploy creates both Workers and their DNS records,
@@ -73,21 +73,21 @@ Add both addresses as authorized redirect URIs in the Google and Discord OAuth a
 | Environment `production`, secret | `CONVEX_DEPLOY_KEY` | production deploy key |
 | Environment `production`, variable | `SITE_URL` | `https://commandquest.app` |
 
-Optionally, on the `production` environment restrict deployment branches to `live` and add a
+Optionally, on the `production` environment restrict deployment branches to `production` and add a
 required reviewer, so nothing reaches the public site without a click.
 
 ## Not covered yet
 
 CI tests the Java game server but doesn't deploy it: it runs on the Mac (docs/game-host.md), as two
-servers, one per site. Each deploys a new push of its branch (`web` for staging, `live` for
-production) itself when no game is running (`game-service.sh auto-on`).
+servers, one per site. Each deploys a new push of its branch (`staging` for the staging site,
+`production` for the public site) itself when no game is running (`game-service.sh auto-on`).
 
 ## Nightly card names
 
 `.github/workflows/card-names.yml` runs at 08:23 UTC, and by hand from `Actions → Card names → Run
 workflow`. It downloads the deck editor's card-name list from Scryfall (three tries), tests it, and saves
 it in the build cache that deploys fall back on when Scryfall is down (docs/web-dev.md). Once a week it
-also commits the list to `web` as `web/data/card-names.json` and starts the Web workflow; by hand, tick
+also commits the list to `staging` as `web/data/card-names.json` and starts the Web workflow; by hand, tick
 the box to commit it now. If the download fails, the run fails and nothing changes. The sites
 themselves get a new list when they're next deployed. GitHub often starts scheduled runs hours late.
 
@@ -96,11 +96,11 @@ themselves get a new list when they're next deployed. GitHub often starts schedu
 `.github/workflows/forge-sync.yml` runs at 10:00 UTC (2 am Pacific), and by hand from
 `Actions → Forge sync → Run workflow`. When Card-Forge/forge has new commits, it:
 
-1. merges `upstream/master` into `web` (as one merge commit),
+1. merges `upstream/master` into `staging` (as one merge commit),
 2. regenerates `web/public/precons.json` and `card-support.json` into that commit,
 3. runs the server's and the site's tests and the staging build,
 4. makes that merge again on a clean machine that never runs Forge's code, checks it's exactly what
-   was tested, and pushes `master` (the mirror) and `web` together, never forced,
+   was tested, and pushes `master` (the mirror) and `staging` together, never forced,
 5. which starts the Web workflow, which deploys staging. The Mac's auto-deploy then picks up the new
    game server once nobody's playing.
 
@@ -113,9 +113,9 @@ access and put the private half in the secret.
 
 Nothing is pushed if the merge conflicts or a test fails: the run fails, and GitHub emails a failed
 scheduled run to whoever last changed its schedule. Then merge by hand: `git fetch upstream`,
-`git merge upstream/master` on `web`, fix, `npm run precons && npm run cardsupport` in `web/`,
-test, push. If someone pushed to `web` while the run was testing, the push is refused and the next
+`git merge upstream/master` on `staging`, fix, `npm run precons && npm run cardsupport` in `web/`,
+test, push. If someone pushed to `staging` while the run was testing, the push is refused and the next
 night tries again.
 
 Every run, merging or not, also runs `npm run broken:check`. Known-broken cards whose Forge issue
-has closed show as a warning on the run, listed in its summary. `live` is never touched.
+has closed show as a warning on the run, listed in its summary. `production` is never touched.

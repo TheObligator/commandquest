@@ -10,25 +10,25 @@ browser: commandquest.app                     browser: staging.commandquest.app
 Cloudflare Tunnel ── one tunnel, outbound from the Mac, no open ports, home IP never exposed
    │  http://localhost:8091                      │  http://localhost:8090
    ▼                                             ▼
-production server, built from `live`          staging server, built from `web`
-(launchd: com.commandquest.game-live)         (launchd: com.commandquest.game)
+production server, built from `production`    staging server, built from `staging`
+(launchd: com.commandquest.game-production)   (launchd: com.commandquest.game)
 ```
 
 Two servers, so the public site always talks to the same code it was built from. Staging's server
-follows `web` and redeploys whenever `web` moves. Production's follows `live` and only changes when
-`live` is promoted. Each accepts only its own site's origin and its own Convex deployment's sign-ins.
+follows `staging` and redeploys whenever `staging` moves. Production's follows `production` and only
+changes when `production` is promoted. Each accepts only its own site's origin and its own Convex deployment's sign-ins.
 An idle server takes about 450 MB of memory and no CPU.
 
-| | `SITE=staging` (default) | `SITE=live` |
+| | `SITE=staging` (default) | `SITE=production` |
 |---|---|---|
-| Builds | `origin/web` | `origin/live` |
+| Builds | `origin/staging` | `origin/production` |
 | Port | 8090 | 8091 |
 | Address | `game-staging.commandquest.app` | `game.commandquest.app` |
 | Allowed origin | `https://staging.commandquest.app` | `https://commandquest.app` |
 | Convex sign-ins | `robust-barracuda-45` | `impressive-manatee-540` |
-| Folder | `~/.commandquest/game` | `~/.commandquest/game-live` |
-| launchd jobs | `com.commandquest.game`, `.autodeploy` | `com.commandquest.game-live`, `.autodeploy-live` |
-| Logs (`~/Library/Logs/`) | `commandquest-game.log`, `commandquest-autodeploy.log` | `commandquest-game-live.log`, `commandquest-autodeploy-live.log` |
+| Folder | `~/.commandquest/game` | `~/.commandquest/game-production` |
+| launchd jobs | `com.commandquest.game`, `.autodeploy` | `com.commandquest.game-production`, `.autodeploy-production` |
+| Logs (`~/Library/Logs/`) | `commandquest-game.log`, `commandquest-autodeploy.log` | `commandquest-game-production.log`, `commandquest-autodeploy-production.log` |
 
 The tunnel (`com.commandquest.tunnel`), its token and the replay secret are shared, and live in
 `~/.commandquest/game`.
@@ -36,7 +36,7 @@ The tunnel (`com.commandquest.tunnel`), its token and the replay secret are shar
 ## The service
 
 `forge-web-server/scripts/game-service.sh` (run from anywhere in the repo). Every command acts on the
-staging server unless it's prefixed with `SITE=live`, e.g. `SITE=live forge-web-server/scripts/game-service.sh status`.
+staging server unless it's prefixed with `SITE=production`, e.g. `SITE=production forge-web-server/scripts/game-service.sh status`.
 
 | Command | What it does |
 |---|---|
@@ -73,10 +73,9 @@ The site finds the server through `VITE_GAME_SERVER` in `web/.env.production` an
    ```sh
    forge-web-server/scripts/game-service.sh set-token    # paste the token, Ctrl-D
    forge-web-server/scripts/game-service.sh deploy && forge-web-server/scripts/game-service.sh auto-on
-   # once the `live` branch exists:
-   SITE=live forge-web-server/scripts/game-service.sh deploy && SITE=live forge-web-server/scripts/game-service.sh auto-on
+   SITE=production forge-web-server/scripts/game-service.sh deploy && SITE=production forge-web-server/scripts/game-service.sh auto-on
    ```
-   `status` (and `SITE=live … status`) should then show `public: {"status":"ok",…}`.
+   `status` (and `SITE=production … status`) should then show `public: {"status":"ok",…}`.
 3. **Keep the Mac available.** These are login services (no root), so they start when you log
    in. In System Settings, turn on automatic login for this user and, under Energy, "Prevent
    automatic sleeping when the display is off" and "Start up automatically after a power failure".
@@ -85,10 +84,10 @@ The site finds the server through `VITE_GAME_SERVER` in `web/.env.production` an
 
 Games in progress end when the server restarts, so it only restarts when nobody's playing.
 
-With `auto-on`, a launchd job per server (`com.commandquest.autodeploy` and `…autodeploy-live`,
-logs in `~/Library/Logs/`) checks every 15 minutes. When the server's branch (`origin/web` or
-`origin/live`) has moved past what's running and `/health` says `"games":0`, it deploys. So
-promoting to `live` also updates the production server, as soon as nobody's playing on it. It checks again after the build,
+With `auto-on`, a launchd job per server (`com.commandquest.autodeploy` and `…autodeploy-production`,
+logs in `~/Library/Logs/`) checks every 15 minutes. When the server's branch (`origin/staging` or
+`origin/production`) has moved past what's running and `/health` says `"games":0`, it deploys. So
+promoting to `production` also updates the production server, as soon as nobody's playing on it. It checks again after the build,
 before restarting, in case a game started meanwhile. A commit whose build or tests fail isn't
 retried (it's recorded in `<folder>/failed`) until a newer one lands, and the running
 server stays as it was. The job runs a copy of this script, `<folder>/game-service.sh`,

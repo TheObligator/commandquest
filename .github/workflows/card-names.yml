@@ -4,7 +4,7 @@
 #   download from Scryfall -> check it -> save it in the build cache the Web workflow reads
 #   -> once a week, commit it as web/data/card-names.json, the backup for when there's no cache
 #
-# The copy isn't committed nightly: it's 1 MB, its order shifts daily, and each commit to `web` deploys
+# The copy isn't committed nightly: it's 1 MB, its order shifts daily, and each commit to `staging` deploys
 # staging and the game server. A failed download or check fails the run and changes nothing.
 name: Card names
 
@@ -19,10 +19,10 @@ on:
         default: false
 
 permissions:
-  contents: write # push the copy to web
+  contents: write # push the copy to staging
   actions: write # start the Web workflow: a push made with GITHUB_TOKEN doesn't trigger it
 
-# Shared with the Forge sync, whose push is refused if `web` moves while it's testing.
+# Shared with the Forge sync, whose push is refused if `staging` moves while it's testing.
 concurrency:
   group: forge-sync
   cancel-in-progress: false
@@ -38,7 +38,7 @@ jobs:
       # The script and its tests need no packages, so there's no npm install.
       - uses: actions/checkout@v5
         with:
-          ref: web
+          ref: staging
           sparse-checkout: web
           persist-credentials: false
       - uses: actions/setup-node@v5
@@ -67,7 +67,7 @@ jobs:
           path: web/public/card-names.json
           key: card-names-${{ hashFiles('web/public/card-names.json') }}
 
-      # Never forced. If `web` moved meanwhile, commit again on top of it.
+      # Never forced. If `staging` moved meanwhile, commit again on top of it.
       - name: Commit the copy
         if: steps.list.outputs.commit == 'true'
         env:
@@ -78,21 +78,21 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           auth=$(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)
           for try in 1 2 3; do
-            git fetch --depth=1 "$REPO" web
+            git fetch --depth=1 "$REPO" staging
             git reset --mixed FETCH_HEAD
             git add web/data/card-names.json
             git commit -m "Card names: weekly copy of the search list" -- web/data/card-names.json
             if git -c core.hooksPath=/dev/null -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
-                 push "$REPO" HEAD:refs/heads/web; then
+                 push "$REPO" HEAD:refs/heads/staging; then
               git log -1 --format='Pushed %h: %s'
               exit 0
             fi
             sleep 5
           done
-          echo "::error::Couldn't push the copy to web"; exit 1
+          echo "::error::Couldn't push the copy to staging"; exit 1
 
       - name: Test and deploy staging
         if: steps.list.outputs.commit == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run web.yml --repo "${{ github.repository }}" --ref web
+        run: gh workflow run web.yml --repo "${{ github.repository }}" --ref staging

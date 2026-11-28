@@ -1,7 +1,7 @@
-# Nightly: merge upstream Forge into `web`, so staging gets Forge's card fixes and new cards.
+# Nightly: merge upstream Forge into `staging`, so staging gets Forge's card fixes and new cards.
 #
-#   fetch Card-Forge/forge master -> merge into web -> regenerate precons.json and card-support.json
-#   -> server and site tests -> push master (the mirror) and web, which starts the Web workflow
+#   fetch Card-Forge/forge master -> merge into staging -> regenerate precons.json and card-support.json
+#   -> server and site tests -> push master (the mirror) and staging, which starts the Web workflow
 #   (deploys staging; the Mac's auto-deploy picks up the game server when no game is running)
 #
 # The push uses a deploy key (secret FORGE_SYNC_DEPLOY_KEY), because GitHub never lets a workflow's
@@ -10,7 +10,7 @@
 # again on a clean machine, checks that it's exactly what was tested, and pushes that.
 #
 # Nothing is pushed unless every test passes. A conflict or a failing test fails the run, and GitHub
-# emails a failed scheduled run to whoever last changed its schedule. `live` is never touched. See
+# emails a failed scheduled run to whoever last changed its schedule. `production` is never touched. See
 # docs/deploy.md.
 name: Forge sync
 
@@ -35,14 +35,14 @@ jobs:
     timeout-minutes: 90
     outputs:
       commits: ${{ steps.merge.outputs.commits }}
-      web: ${{ steps.merge.outputs.web }}
+      merged: ${{ steps.merge.outputs.merged }}
       upstream: ${{ steps.merge.outputs.upstream }}
       tree: ${{ steps.tested.outputs.tree }}
     steps:
       # No stored credentials: Forge's build and tests run below.
       - uses: actions/checkout@v5
         with:
-          ref: web
+          ref: staging
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
@@ -55,13 +55,13 @@ jobs:
           git remote add upstream https://github.com/Card-Forge/forge.git
           git fetch --no-tags upstream master
           n=$(git rev-list --count HEAD..upstream/master)
-          { echo "commits=$n"; echo "web=$(git rev-parse HEAD)"; echo "upstream=$(git rev-parse upstream/master)"; } >> "$GITHUB_OUTPUT"
+          { echo "commits=$n"; echo "merged=$(git rev-parse HEAD)"; echo "upstream=$(git rev-parse upstream/master)"; } >> "$GITHUB_OUTPUT"
           if [ "$n" = 0 ]; then
             echo "Already up to date with Forge."
             exit 0
           fi
           git merge --no-edit -m "Merge upstream Forge: $n commits" upstream/master \
-            || { git diff --name-only --diff-filter=U; echo "::error::Merging Forge conflicts with web"; exit 1; }
+            || { git diff --name-only --diff-filter=U; echo "::error::Merging Forge conflicts with staging"; exit 1; }
 
       # Always: the broken-cards check at the end runs even on nights with nothing to merge.
       - uses: actions/setup-node@v5
@@ -133,7 +133,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ needs.sync.outputs.web }}
+          ref: ${{ needs.sync.outputs.merged }}
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
@@ -170,9 +170,9 @@ jobs:
             echo "::warning::Forge changed files under .github, look them over: $(echo $changed)"
           fi
 
-      # --atomic: master and web move together or not at all. If web moved during the run, the push
+      # --atomic: master and staging move together or not at all. If staging moved during the run, the push
       # is refused (never forced) and tomorrow's run merges again.
-      - name: Push master and web
+      - name: Push master and staging
         env:
           KEY: ${{ secrets.FORGE_SYNC_DEPLOY_KEY }}
           UPSTREAM: ${{ needs.sync.outputs.upstream }}
@@ -189,5 +189,5 @@ jobs:
           echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > "$d/known_hosts"
           GIT_SSH_COMMAND="ssh -F /dev/null -i $d/key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$d/known_hosts" \
             git -c core.hooksPath=/dev/null push --atomic "git@github.com:${{ github.repository }}.git" \
-            "$UPSTREAM:refs/heads/master" HEAD:refs/heads/web
+            "$UPSTREAM:refs/heads/master" HEAD:refs/heads/staging
           git log -1 --format='Pushed %h: %s'

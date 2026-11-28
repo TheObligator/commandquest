@@ -79,7 +79,7 @@ and when the dev server starts; a list less than a day old is used as it is.
 
 If Scryfall can't be reached, the build warns and uses the newest list it has: the last one that
 downloaded, or the committed copy in `web/data/card-names.json`. On CI, the last one comes from GitHub's
-build cache. `web` deploys save it (`.github/workflows/web.yml`), and `live` deploys read it too. GitHub
+build cache. `staging` deploys save it (`.github/workflows/web.yml`), and `production` deploys read it too. GitHub
 drops it after 7 days without use, which is when the committed copy matters. The nightly Card names
 workflow keeps both fresh (docs/deploy.md). `npm run cardnames` downloads a new list and updates the copy
 by hand; do that and commit it whenever `CARD_NAMES_VERSION` goes up (`npm test` fails until you do).
