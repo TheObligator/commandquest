@@ -64,3 +64,44 @@ test("turnStart jumps between turns", () => {
 test("a newer replay version is refused", () => {
   assert.throws(() => parseReplay({ version: 2, meta, frames: [] }), /newer version/);
 });
+
+test("bookmarks: commander cast, big hit, wipe, knockout and winner", () => {
+  const p = (over: object, b = base.players[0]) => ({ ...b, commanderCasts: 0, ...over });
+  const cmd = { "30": { id: 30, name: "Atraxa", zone: "command", owner: "1", controller: "1", commander: true } };
+  const start = { ...base, cards: { ...base.cards, ...cmd }, players: [p({ command: [30] }), p({}, base.players[1])] };
+  const r = parseReplay({
+    version: 1,
+    meta: { ...meta, winner: "A" },
+    frames: [
+      start,
+      { players: [p({ command: [], commanderCasts: 1 }), p({}, base.players[1])], logAdd: ["A casts Atraxa"] },
+      { turn: 2, players: [p({ command: [], commanderCasts: 1, battlefield: [1, 2, 3, 4] }), p({ life: 38 }, base.players[1])], logAdd: ["x"] },
+      { stack: [{ id: 9, name: "Wrath of God" }], logAdd: ["y"] },
+      { stack: [], players: [p({ command: [], commanderCasts: 1, battlefield: [4] }), p({ life: 31 }, base.players[1])], logAdd: ["z"] },
+      { players: [p({ command: [], commanderCasts: 1, battlefield: [4] }), p({ life: 0, lost: true }, base.players[1])], logAdd: ["B loses"] },
+    ],
+  });
+  const marks = r.bookmarks();
+  assert.deepEqual(marks.map((m) => [m.frame, m.events.map((e) => e.kind)]), [
+    [1, ["commander"]],
+    [4, ["wipe", "hit"]],
+    [5, ["win", "out", "hit"]],
+  ]);
+  assert.equal(marks[0].events[0].text, "A casts Atraxa");
+  assert.equal(marks[1].events[0].text, "Board wipe (Wrath of God): 3 permanents gone");
+  assert.equal(marks[1].events[1].text, "B loses 7 life (38 → 31)");
+  assert.deepEqual(r.turnStarts(), [{ turn: 1, frame: 0 }, { turn: 2, frame: 2 }]);
+});
+
+test("bookmarks skip a rewind", () => {
+  const r = parseReplay({
+    version: 1,
+    meta,
+    frames: [
+      { ...base, logAdd: ["a"] },
+      { players: [base.players[0], { ...base.players[1], life: 30 }], logAdd: ["hit"] },
+      { logCut: 1, players: base.players, logAdd: ["Rewound"] },
+    ],
+  });
+  assert.deepEqual(r.bookmarks().map((m) => m.frame), [1], "the rewind's life gain back isn't marked, and the hit is");
+});

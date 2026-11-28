@@ -80,6 +80,34 @@ export class Replay {
     return { ...(s as unknown as GameView), viewer: players[0]?.id ?? viewer, players, log: log.slice(-80) };
   }
 
+  /** The first frame of each turn, with its turn number (for marks along the timeline). */
+  turnStarts(): { turn: number; frame: number }[] {
+    const out: { turn: number; frame: number }[] = [];
+    for (let k = 0; k < this.frames.length; k++) if (k === 0 || this.turn(k) !== this.turn(k - 1)) out.push({ turn: this.turn(k), frame: k });
+    return out;
+  }
+
+  /** The moments worth jumping to, found by comparing each frame with the one before. */
+  bookmarks(): Bookmark[] {
+    const out: Bookmark[] = [];
+    for (let k = 1; k < this.frames.length; k++) {
+      const f = this.frames[k];
+      // A rewind took the game back: what changed isn't something that happened.
+      if (f.log.version !== this.frames[k - 1].log.version) continue;
+      const events = momentEvents(this.frames[k - 1].state, f.state);
+      if (events.length) out.push({ frame: k, turn: this.turn(k), events });
+    }
+    const end = this.frames.length - 1;
+    if (end > 0 && this.meta.winner) {
+      const win: BookmarkEvent = { kind: "win", text: `${this.meta.winner} wins` };
+      const lastMark = out[out.length - 1];
+      if (lastMark?.frame === end) lastMark.events.unshift(win);
+      else out.push({ frame: end, turn: this.turn(end), events: [win] });
+    }
+    for (const b of out) b.events.sort((x, y) => KIND_ORDER.indexOf(x.kind) - KIND_ORDER.indexOf(y.kind));
+    return out;
+  }
+
   /** The first frame of the turn after (or before, `dir` -1) frame `i`'s turn. */
   turnStart(i: number, dir: 1 | -1): number {
     const t = this.turn(i);
@@ -96,6 +124,67 @@ export class Replay {
     while (k > 0 && this.turn(k - 1) === prev) k--;
     return k;
   }
+}
+
+export type BookmarkKind = "win" | "out" | "wipe" | "commander" | "hit";
+
+/** The most important first. */
+export const KIND_ORDER: BookmarkKind[] = ["win", "out", "wipe", "commander", "hit"];
+
+export interface BookmarkEvent {
+  kind: BookmarkKind;
+  text: string;
+}
+
+export interface Bookmark {
+  frame: number;
+  turn: number;
+  /** Most important first. */
+  events: BookmarkEvent[];
+}
+
+/** Life lost in one moment that counts as a big hit. */
+export const BIG_HIT = 5;
+/** Permanents leaving the battlefield in one moment that count as a board wipe. */
+export const WIPE = 3;
+
+/** What happened between two frames that's worth a bookmark. */
+function momentEvents(before: Obj, after: Obj): BookmarkEvent[] {
+  const events: BookmarkEvent[] = [];
+  const pb = (before.players ?? []) as Obj[];
+  const pa = (after.players ?? []) as Obj[];
+  const cards = (after.cards ?? {}) as Obj;
+  const cardName = (id: Json) => String((cards[String(id)] as Obj | undefined)?.name ?? "a card");
+  const ids = (z: Json) => (Array.isArray(z) ? z.map(String) : []);
+  let knockedOut = false;
+  for (const a of pa) {
+    const b = pb.find((p) => p.id === a.id);
+    if (!b) continue;
+    const name = String(a.name);
+    const out = (p: Obj) => p.lost === true || Number(p.life) <= 0;
+    if (out(a) && !out(b)) {
+      knockedOut = true;
+      events.push({ kind: "out", text: `${name} is out` });
+    }
+    if (Number(a.commanderCasts ?? 0) > Number(b.commanderCasts ?? 0)) {
+      const left = ids(b.command).filter((id) => !ids(a.command).includes(id));
+      events.push({ kind: "commander", text: `${name} casts ${left.length ? left.map(cardName).join(" and ") : "their commander"}` });
+    }
+    const lost = Number(b.life) - Number(a.life);
+    if (lost >= BIG_HIT) events.push({ kind: "hit", text: `${name} loses ${lost} life (${b.life} → ${a.life})` });
+  }
+  // A player leaving takes their permanents along: that isn't a wipe.
+  if (!knockedOut) {
+    const onField = (ps: Obj[]) => new Set(ps.flatMap((p) => ids(p.battlefield)));
+    const now = onField(pa);
+    const gone = [...onField(pb)].filter((id) => !now.has(id));
+    if (gone.length >= WIPE) {
+      const stack = (before.stack ?? []) as Obj[];
+      const cause = stack.length ? ` (${String(stack[stack.length - 1].name)})` : "";
+      events.push({ kind: "wipe", text: `Board wipe${cause}: ${gone.length} permanents gone` });
+    }
+  }
+  return events;
 }
 
 /** A JSON merge patch that copies only what changes, so frames share everything else. */
