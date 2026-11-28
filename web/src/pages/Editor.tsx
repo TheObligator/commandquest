@@ -26,6 +26,7 @@ import { PackagesPane } from "../components/PackagesPane";
 import { MAX_PACKAGE_NAME, MAX_PACKAGE_NOTE } from "../../convex/model/packageRules";
 import { cardKey, copiesIn, type PackageEntry } from "../packages";
 import { DeckCombos } from "../components/DeckCombos";
+import { FoldSection } from "../components/Collapsible";
 import { DeckAbilities } from "../components/DeckAbilities";
 import { DeckTokens } from "../components/DeckTokens";
 import { FlipButton, useFlips } from "../components/FlipButton";
@@ -1806,10 +1807,9 @@ function DeckView(props: {
         const laid = (groups: Group[]) => (view === "stacked" ? packed(groups) : view === "spread" ? rows(groups) : flat(groups));
         const isDropTarget = (k: string) => (k === "deck" || k === "main" ? dropTo === "main" : dropTo === k);
         const section = (k: string, title: string, cards: DeckCard[], body: React.ReactNode) => (
-          <section key={k} className={`board${isDropTarget(k) ? " drop-target" : ""}`} data-board={k}>
-            <h2>{title}<span className="muted"> {sum(cards)}</span></h2>
+          <FoldSection key={k} id={`board:${k}`} className={isDropTarget(k) ? "drop-target" : undefined} data-board={k} title={<>{title}<span className="muted"> {sum(cards)}</span></>}>
             {body}
-          </section>
+          </FoldSection>
         );
         const other = (b: Board) => {
           const cards = deck.cards.filter((c) => c.board === b);
@@ -1842,10 +1842,9 @@ function DeckView(props: {
             {besideCommander ? (
               <div className="top-row">
                 {commanderBoard}
-                <section className="board walkers">
-                  <h2>Planeswalkers<span className="muted"> {sum(walkers)} · main deck</span></h2>
+                <FoldSection id="board:walkers" className="walkers" title={<>Planeswalkers<span className="muted"> {sum(walkers)} · main deck</span></>}>
                   {plain(walkers.sort((a, z) => (scry.cached(a)?.cmc ?? 0) - (scry.cached(z)?.cmc ?? 0) || a.name.localeCompare(z.name)))}
-                </section>
+                </FoldSection>
               </div>
             ) : (
               commanderBoard
@@ -1970,8 +1969,7 @@ function Stats({ deck, count, onExtraColor }: { deck: Draft; count: (b?: Board) 
   const identity = [...new Set(commanders.flatMap((c) => c.color_identity))];
   const extraFor = deck.format === "commander" || deck.format === "conquest" ? extraColorChoice(commanders) : undefined;
   return (
-    <section className="board stats">
-      <h2>Stats</h2>
+    <FoldSection id="stats" className="stats" title="Stats">
       <div className="stats-body">
         <ManaCurve cards={main} />
         <div className="stat-list">
@@ -2023,7 +2021,7 @@ function Stats({ deck, count, onExtraColor }: { deck: Draft; count: (b?: Board) 
           <p><span className="muted">Sideboard / maybe </span>{count("side")} / {count("maybe")}</p>
         </div>
       </div>
-    </section>
+    </FoldSection>
   );
 }
 

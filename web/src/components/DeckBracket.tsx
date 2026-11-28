@@ -1,6 +1,7 @@
 // Under the deck: the Commander bracket the player gives the deck (with their reasons), what its
 // cards say about the lowest bracket it fits, and counts of the cards that matter at a glance
 // (Game Changers, tutors, fast mana, removal…). See src/brackets.ts and src/cardtags.ts.
+import { FoldSection } from "./Collapsible";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DeckCard } from "../../convex/model/deckRules";
 import { MAX_BRACKET_TAG_LENGTH, MAX_BRACKET_TAGS } from "../../convex/model/deckRules";
@@ -84,8 +85,7 @@ export function DeckBracket(props: {
   const floor = bracketFloor({ gameChangers: count("gameChanger"), massLandDenial: count("massLandDenial"), extraTurns: count("extraTurn") });
 
   return (
-    <section className="board glance-panel">
-      <h2>{props.commander ? "Bracket and key cards" : "Key cards"}</h2>
+    <FoldSection id="bracket" className="glance-panel" title={props.commander ? "Bracket and key cards" : "Key cards"}>
       {props.commander && (
         <div className="bracket-line">
           <BracketMenu
@@ -155,7 +155,7 @@ export function DeckBracket(props: {
       <p className="muted small glance-source">
         Game Changers from Scryfall; other counts from <a href="https://tagger.scryfall.com/" target="_blank" rel="noopener">Scryfall Tagger</a>, where players tag cards, so they can miss a card or two.
       </p>
-    </section>
+    </FoldSection>
   );
 }
 

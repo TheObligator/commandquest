@@ -1,5 +1,6 @@
 // The deck editor's Tokens section: every token the deck makes, with the printing games will use.
 // Click one to pick another printing for this deck (stored in Convex; "Default" goes back).
+import { FoldSection } from "./Collapsible";
 import { useMutation, useQuery } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
@@ -23,10 +24,9 @@ export function DeckTokens({ deckId, cards }: { deckId?: string; cards: DeckCard
 
   if (!tokens.length) {
     return loading ? (
-      <section className="board deck-tokens">
-        <h2>Tokens</h2>
+      <FoldSection id="tokens" className="deck-tokens" title="Tokens">
         <p className="small"><Waiting text="Finding the tokens this deck makes…" slow="Still finding the tokens this deck makes… Scryfall is slow right now." /></p>
-      </section>
+      </FoldSection>
     ) : null;
   }
 
@@ -40,10 +40,7 @@ export function DeckTokens({ deckId, cards }: { deckId?: string; cards: DeckCard
   }
 
   return (
-    <section className="board deck-tokens">
-      <h2>
-        Tokens<span className="muted"> {tokens.length}</span>
-      </h2>
+    <FoldSection id="tokens" className="deck-tokens" title={<>Tokens<span className="muted"> {tokens.length}</span></>}>
       <p className="muted small">
         The tokens this deck makes, with the art games use. By default that's the commander's version, else the newest card's. Click one to
         pick another printing for this deck.
@@ -71,7 +68,7 @@ export function DeckTokens({ deckId, cards }: { deckId?: string; cards: DeckCard
           onClose={() => setPicking(null)}
         />
       )}
-    </section>
+    </FoldSection>
   );
 }
 

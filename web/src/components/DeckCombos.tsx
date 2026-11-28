@@ -1,4 +1,5 @@
 // The deck editor's Combos: the deck's combos from Commander Spellbook, and the ones it's a card away from.
+import { FoldSection } from "./Collapsible";
 import { useState } from "react";
 import { comboCards, comboUrl, guideSteps, resultsText, type SpellbookCombo } from "../game/spellbook";
 import { useDeckCombos } from "../useDeckCombos";
@@ -16,10 +17,7 @@ export function DeckCombos({ deckId }: { deckId?: string }) {
   const away = found?.near ?? [];
   const shown = all ? combos : combos.slice(0, SHOWN);
   return (
-    <section className="board deck-combos">
-      <h2>
-        Combos{found && <span className="muted"> {combos.length}</span>}
-      </h2>
+    <FoldSection id="combos" className="deck-combos" title={<>Combos{found && <span className="muted"> {combos.length}</span>}</>}>
       {looking && <p className="muted small"><Waiting text={found ? "Checking again for this deck's combos…" : "Looking up this deck's combos…"} /></p>}
       {error && (
         <p className="muted small">
@@ -59,7 +57,7 @@ export function DeckCombos({ deckId }: { deckId?: string }) {
       <p className="muted small dc-credit">
         Combos from <a href="https://commanderspellbook.com" target="_blank" rel="noreferrer">Commander Spellbook</a>. In a game, a combo that's ready shows in the left rail.
       </p>
-    </section>
+    </FoldSection>
   );
 }
 

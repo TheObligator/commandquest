@@ -1,5 +1,6 @@
 // The deck editor's Saved abilities: the auto-yield and always yes / no settings saved with this deck
 // from a game ("Save with this deck" in an ability's right-click menu), to look over and remove.
+import { FoldSection } from "./Collapsible";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -21,10 +22,7 @@ export function DeckAbilities({ deckId }: { deckId?: string }) {
   const remove = (card: string, text: string) =>
     setAbility({ id: deckId as Id<"decks">, card, text, autoYield: false, decision: "ASK" }).catch((e) => toast(errorMessage(e), "error"));
   return (
-    <section className="board deck-abilities">
-      <h2>
-        Saved abilities<span className="muted"> {saved.length + later.length}</span>
-      </h2>
+    <FoldSection id="abilities" className="deck-abilities" title={<>Saved abilities<span className="muted"> {saved.length + later.length}</span></>}>
       <p className="muted small">Used whenever you play this deck. Add one in a game: right-click a card, pick the ability, and tick “Save with this deck”.</p>
       <ul>
         {saved.map((a) => (
@@ -48,6 +46,6 @@ export function DeckAbilities({ deckId }: { deckId?: string }) {
           </li>
         ))}
       </ul>
-    </section>
+    </FoldSection>
   );
 }

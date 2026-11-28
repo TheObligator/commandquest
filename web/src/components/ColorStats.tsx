@@ -2,6 +2,7 @@
 // the deck's costs and a bar for its share of what the deck's mana sources can make, so the two
 // can be compared. Colors the deck doesn't use are greyed out. Colorless shows too when a card's
 // cost has {C}, which only colorless mana can pay.
+import { FoldSection } from "./Collapsible";
 import type { DeckCard } from "../../convex/model/deckRules";
 import { WUBRG, WUBRGC, colorPips, fetchReach, manaProduction, type Color } from "../colorstats";
 import * as scry from "../scryfall";
@@ -53,8 +54,7 @@ export function ColorStats({ cards, identity }: { cards: DeckCard[]; /** The com
   const used = (c: Color) => pips[c] > 0 || !!identity?.includes(c);
 
   return (
-    <section className="board color-stats">
-      <h2>Colors</h2>
+    <FoldSection id="colors" className="color-stats" title="Colors">
       <div className="color-grid">
         {shown.map((c) => (
           <div key={c} className={`color-col${used(c) ? "" : " unused"}`}>
@@ -79,6 +79,6 @@ export function ColorStats({ cards, identity }: { cards: DeckCard[]; /** The com
         mana sources can make: lands, rocks, dorks, rituals and Treasure makers.
         {fetchTotal > 0 && " + Fetch: the Mana bar with your fetch lands (and lands like Evolving Wilds) added for each color they can find, the lighter part; on the same scale, so it can pass 100%."}
       </p>
-    </section>
+    </FoldSection>
   );
 }

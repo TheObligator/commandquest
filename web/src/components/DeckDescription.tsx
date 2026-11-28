@@ -2,6 +2,7 @@
 // one, then the text, which its owner clicks (or Edit) to change in the rich text box.
 import { lazy, Suspense, useMemo, useState } from "react";
 import { parseDescription } from "../../convex/model/richText";
+import { FoldHeading, useCollapsed } from "./Collapsible";
 import { RichText } from "./RichText";
 import { Spinner } from "./Spinner";
 
@@ -9,6 +10,7 @@ const DescriptionEditor = lazy(() => import("./DescriptionEditor"));
 
 export function DeckDescription({ value, onChange }: { value: string | undefined; onChange: (json: string | undefined) => void }) {
   const [editing, setEditing] = useState(false);
+  const [closed, toggle] = useCollapsed("description");
   const doc = useMemo(() => {
     try {
       return parseDescription(value);
@@ -33,17 +35,23 @@ export function DeckDescription({ value, onChange }: { value: string | undefined
       </div>
     );
   }
+  // Once written, it folds away under a Description heading like the editor's other sections.
   return (
-    <div className="deck-description">
-      <div
-        className="description-text"
-        title="Click to edit the description"
-        // A click on a link or a card name does that instead.
-        onClick={(e) => !(e.target as Element).closest("a, button") && !window.getSelection()?.toString() && setEditing(true)}
-      >
-        <RichText doc={doc} />
-      </div>
-      <button type="button" className="link small edit-description" onClick={() => setEditing(true)}>Edit</button>
+    <div className={`board deck-description${closed ? " folded" : ""}`}>
+      <FoldHeading closed={closed} onToggle={toggle}>Description</FoldHeading>
+      {!closed && (
+        <>
+          <div
+            className="description-text"
+            title="Click to edit the description"
+            // A click on a link or a card name does that instead.
+            onClick={(e) => !(e.target as Element).closest("a, button") && !window.getSelection()?.toString() && setEditing(true)}
+          >
+            <RichText doc={doc} />
+          </div>
+          <button type="button" className="link small edit-description" onClick={() => setEditing(true)}>Edit</button>
+        </>
+      )}
     </div>
   );
 }
