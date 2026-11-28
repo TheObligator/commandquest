@@ -622,6 +622,8 @@ export function useLiveGame() {
     /** Use one of the card's abilities (from `actions`). */
     useAbility: (id: number, a: CardAction) => send({ t: "ability", id, ability: a.ability, label: a.label }),
     clickPlayer: (id: string) => send({ t: "player", id: Number(id) }),
+    /** Pick a spell or ability on the stack (by its stack id) as a target: a counterspell's. */
+    clickStack: (id: number) => send({ t: "stack", id }),
     concede: () => send({ t: "concede" }),
     /** Ask to rewind to a point of `view.rewind.options` (everyone else in the game has to agree). */
     rewindTo: (point: number, kind: "timeline" | "attackers" | "blockers" = "timeline") => press(sending.rewind, `ask:${kind}:${point}`, { t: "rewind", action: "ask", point, kind }, true),

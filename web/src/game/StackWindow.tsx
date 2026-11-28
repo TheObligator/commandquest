@@ -53,9 +53,18 @@ export function StackWindow(props: {
   chosen?: Set<number>;
   /** Picks a spell's card (as a click on it would). */
   onPick?: (cardId: number) => void;
+  /** Stack items (by stack id) the current prompt lets you target: Negate, Stifle… */
+  stackSelectable?: Set<number>;
+  /** Stack items chosen so far for the current prompt. */
+  stackChosen?: Set<number>;
+  /** Picks a stack item by its stack id. */
+  onPickStack?: (stackId: number) => void;
 }) {
-  const { view, nameOf, colorOf, selectable, chosen, onPick } = props;
-  const pickable = (s: StackItemView) => s.cardId !== undefined && !!onPick && !!selectable?.has(s.cardId);
+  const { view, nameOf, colorOf, selectable, chosen, onPick, stackSelectable, stackChosen, onPickStack } = props;
+  // Forge offers stack targets either as the stack item itself (spells-only targets, like Negate) or
+  // as the spell's card (targets that can be a spell or a permanent). The item wins when it's offered.
+  const pickStack = (s: StackItemView) => !!onPickStack && !!(stackSelectable?.has(s.id) || stackChosen?.has(s.id));
+  const pickCard = (s: StackItemView) => s.cardId !== undefined && !!onPick && !!(selectable?.has(s.cardId) || chosen?.has(s.cardId));
   const { box, ref, startDrag, onResizeEnd } = useFloatingBox(KEY, defaultBox);
   const [open, setOpen] = useState<{ id: number; x: number; y: number } | null>(null);
   const setPreview = usePreview();
@@ -96,20 +105,22 @@ export function StackWindow(props: {
             const whole = fullCard(s, "normal");
             const n = numberOf(view, s);
             const targets = s.targets ?? [];
-            const pick = pickable(s);
-            const picked = s.cardId !== undefined && !!chosen?.has(s.cardId);
+            const viaStack = pickStack(s);
+            const pick = viaStack || pickCard(s);
+            const picked = !!stackChosen?.has(s.id) || (s.cardId !== undefined && !!chosen?.has(s.cardId));
             return (
               <li
                 key={s.id}
-                className={`stk-item${open?.id === s.id ? " open" : ""}${pick ? " selectable" : ""}${picked ? " chosen" : ""}`}
+                className={`stk-item${open?.id === s.id ? " open" : ""}${pick && !picked ? " selectable" : ""}${picked ? " chosen" : ""}`}
                 data-stack-id={s.id}
                 style={{ "--seat": colorOf(s.controller) } as React.CSSProperties}
-                title={pick ? `Target ${s.name}` : undefined}
+                title={pick ? (picked ? `Untarget ${s.name}` : `Target ${s.name}`) : undefined}
                 onClick={(e) => {
                   if (!pick) return openItem(e, s);
                   e.stopPropagation();
                   setOpen(null);
-                  onPick!(s.cardId!);
+                  if (viaStack) onPickStack!(s.id);
+                  else onPick!(s.cardId!);
                 }}
                 onContextMenu={(e) => openItem(e, s)}
                 onMouseEnter={() => s.card && setPreview({ card: s.card })}

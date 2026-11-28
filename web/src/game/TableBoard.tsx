@@ -162,6 +162,8 @@ export function TableBoard(props: {
   selectable?: Set<number>;
   /** Cards chosen so far for the current prompt. */
   chosen?: Set<number>;
+  /** Stack items (stack ids) the current prompt lets you target, those chosen, and the click on one. */
+  stackTargets?: { selectable: Set<number>; chosen: Set<number>; onPick: (stackId: number) => void };
   /** Over the top of the table: what you're choosing on it (TargetBar). */
   banner?: React.ReactNode;
   /** Players the current prompt lets you choose. */
@@ -390,6 +392,9 @@ export function TableBoard(props: {
             selectable={props.selectable}
             chosen={props.chosen}
             onPick={props.onCardClick}
+            stackSelectable={props.stackTargets?.selectable}
+            stackChosen={props.stackTargets?.chosen}
+            onPickStack={props.stackTargets?.onPick}
           />
           <div
             className={`game-table layout-${layout}`}

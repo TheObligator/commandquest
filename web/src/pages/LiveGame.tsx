@@ -566,6 +566,11 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
     () => new Set([...(sel?.chosen ?? []), ...boardPicked].filter((x): x is number => typeof x === "number")),
     [sel, boardPicked],
   );
+  // Spells and abilities on the stack you can target (Negate…), picked in the stack window.
+  const stackTargets = useMemo(
+    () => (sel?.stack.length || sel?.chosenStack?.length ? { selectable: new Set(sel.stack), chosen: new Set(sel.chosenStack ?? []), onPick: game.clickStack } : undefined),
+    [sel, game.clickStack],
+  );
   const targetPlayers = useMemo(() => new Set([...(sel?.players ?? []), ...(board?.players.keys() ?? [])]), [sel, board]);
   // Choosing cards from a pile (a graveyard, a library…): the pick window, until you hide it for this prompt.
   const piles = useMemo(() => (game.prompt && !game.prompt.pay && !game.ask ? pickPiles(view) : []), [view, game.prompt, game.ask]);
@@ -1285,6 +1290,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
       playable={playable}
       selectable={selectable}
       chosen={chosen}
+      stackTargets={stackTargets}
       targetPlayers={targetPlayers}
       attack={attacking ? { candidates: attackCandidates, declare: declareAttack } : undefined}
       menuFor={menuFor}

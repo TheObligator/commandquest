@@ -557,7 +557,7 @@ public final class BrowserSeat implements IRemote {
 
     /**
      * Forge's selection as ids: {@code cards} you may pick, {@code players} and {@code stack} items
-     * you may target, what's {@code chosen} so far, and {@code actionable} cards (while paying mana:
+     * you may target, what's {@code chosen} so far (stack items in {@code chosenStack}), and {@code actionable} cards (while paying mana:
      * the sources that can pay). Null when there's nothing to mark.
      */
     private ObjectNode selectionJson(GameView gv, forge.gamemodes.match.Selection s) {
@@ -615,11 +615,14 @@ public final class BrowserSeat implements IRemote {
             }
         }
         ArrayNode chosen = o.putArray("chosen");
+        ArrayNode chosenStack = o.putArray("chosenStack");
         for (Object t : s.chosen()) {
             if (t instanceof CardView c) {
                 chosen.add(c.getId());
             } else if (t instanceof PlayerView p) {
                 chosen.add(ViewJson.id(p));
+            } else if (t instanceof StackItemView si) {
+                chosenStack.add(si.getId());
             }
         }
         ArrayNode actionable = o.putArray("actionable");

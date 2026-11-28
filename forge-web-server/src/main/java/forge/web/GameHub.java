@@ -302,6 +302,22 @@ public final class GameHub {
                     }
                 });
             }
+            case "stack" -> {
+                // A spell or ability on the stack, picked as a target (Negate and other counterspells).
+                int id = m.path("id").asInt();
+                act(c, ctl -> {
+                    Game g = game(c);
+                    if (g == null) {
+                        return;
+                    }
+                    for (forge.game.spellability.SpellAbilityStackInstance si : g.getStack()) {
+                        if (si.getId() == id) {
+                            ctl.selectStackItem(si.getView());
+                            return;
+                        }
+                    }
+                });
+            }
             case "answer" -> {
                 BrowserSeat seat = seat(c);
                 if (seat != null) {

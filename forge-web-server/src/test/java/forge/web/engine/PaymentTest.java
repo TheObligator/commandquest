@@ -53,7 +53,7 @@ public class PaymentTest {
         return r.get(10, TimeUnit.SECONDS);
     }
 
-    private static <T> T onUiThread(Supplier<T> f) throws Exception {
+    static <T> T onUiThread(Supplier<T> f) throws Exception {
         CompletableFuture<T> r = new CompletableFuture<>();
         FThreads.invokeInEdtLater(() -> {
             try {
@@ -65,7 +65,7 @@ public class PaymentTest {
         return r.get(10, TimeUnit.SECONDS);
     }
 
-    private static void waitFor(BooleanSupplier cond, String what) throws InterruptedException {
+    static void waitFor(BooleanSupplier cond, String what) throws InterruptedException {
         long end = System.currentTimeMillis() + 15_000;
         while (!cond.getAsBoolean()) {
             if (System.currentTimeMillis() > end) {
@@ -213,7 +213,7 @@ public class PaymentTest {
     }
 
     /** Your lands and rocks already in play are tapped, so only the ones a test makes can pay. */
-    private static void tapTheRest(Player me) {
+    static void tapTheRest(Player me) {
         for (Card c : me.getCardsIn(ZoneType.Battlefield)) {
             if (c.isUntapped() && (c.isLand() || c.isArtifact())) {
                 c.setTapped(true);
