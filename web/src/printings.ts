@@ -108,3 +108,19 @@ export function choosePrinting<T extends Print>(prints: T[], pref: PrintingPref,
   const low = Math.min(...priced.map((p) => price(p)!));
   return newestOf(firstTier(priced.filter((p) => price(p) === low), tiers));
 }
+
+/** How many printings a printings window shows at first, and how many more each "Show more" adds. */
+export const PRINTINGS_STEP = 24;
+
+/**
+ * The first `limit` printings, plus the one the card has now (`selected`) when it's further down the
+ * list, so the window always shows what you've got.
+ */
+export function shownPrintings<T extends { id: string }>(prints: T[], limit: number, selected?: string): T[] {
+  const shown = prints.slice(0, limit);
+  if (selected && !shown.some((p) => p.id === selected)) {
+    const sel = prints.find((p) => p.id === selected);
+    if (sel) shown.push(sel);
+  }
+  return shown;
+}

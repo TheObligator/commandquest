@@ -107,3 +107,13 @@ test("a token with the card's name is never a printing of it", () => {
   ];
   for (const pref of ["newest", "cheapest", "oldest"] as const) assert.equal(choosePrinting(angel, pref, "2026-11-17")?.id, "akh");
 });
+
+test("shownPrintings: the first few, plus the chosen printing when it's further down", async () => {
+  const { shownPrintings } = await import("../src/printings.ts");
+  const list = ["a", "b", "c", "d", "e"].map((id) => ({ id }));
+  assert.deepEqual(shownPrintings(list, 2).map((p) => p.id), ["a", "b"]);
+  assert.deepEqual(shownPrintings(list, 2, "b").map((p) => p.id), ["a", "b"]);
+  assert.deepEqual(shownPrintings(list, 2, "d").map((p) => p.id), ["a", "b", "d"]);
+  assert.deepEqual(shownPrintings(list, 2, "zzz").map((p) => p.id), ["a", "b"]);
+  assert.deepEqual(shownPrintings(list, 10).map((p) => p.id), ["a", "b", "c", "d", "e"]);
+});

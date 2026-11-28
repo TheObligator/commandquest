@@ -38,6 +38,7 @@ import { useCardCategories } from "../useCardCategories";
 import { ManaCost } from "../components/ManaCost";
 import { CardImg, CardWait } from "../components/CardImg";
 import { KnownPrintings } from "../components/KnownPrintings";
+import { MorePrintings, useShownPrintings } from "../components/MorePrintings";
 import { BusyLabel, Loading, ScryfallWaiting, Spinner } from "../components/Spinner";
 import { CONQUEST } from "../formats/conquest";
 import { checkDeck, identityTest } from "../deckcheck";
@@ -2029,12 +2030,14 @@ function Stats({ deck, count, onExtraColor }: { deck: Draft; count: (b?: Board) 
 
 function Printings({ card, onPick, onClose }: { card: DeckCard; onPick: (p: scry.ScryCard) => void; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
-  const [prints, setPrints] = useState<scry.ScryCard[] | null>(null);
+  const [page, setPage] = useState<scry.SearchPage | null>(null);
+  const prints = page?.cards ?? null;
   const [error, setError] = useState("");
   const flips = useFlips();
+  const { shown, more } = useShownPrintings(prints, card.scryfallId, page?.total ?? 0, page?.nextPage);
   useEffect(() => {
     ref.current?.showModal();
-    scry.printings(card.name).then(setPrints).catch((e) => setError(errorMessage(e)));
+    scry.printings(card.name).then(setPage).catch((e) => setError(errorMessage(e)));
   }, [card.name]);
   return (
     <dialog ref={ref} className="printings" onClose={onClose} onClick={(e) => closeOnBackdrop(e.nativeEvent, ref.current)}>
@@ -2048,7 +2051,7 @@ function Printings({ card, onPick, onClose }: { card: DeckCard; onPick: (p: scry
         <div className="results"><KnownPrintings cards={[scry.cachedExact(card) ?? scry.cached(card)]} selected={card.scryfallId} /></div>
       ) : (
         <div className="results">
-          {prints.map((p) => (
+          {shown.map((p) => (
             <div key={p.id} className="flip-host">
               <button
                 className={p.id === card.scryfallId ? "result-img selected" : "result-img"}
@@ -2065,6 +2068,7 @@ function Printings({ card, onPick, onClose }: { card: DeckCard; onPick: (p: scry
               <FlipButton card={p} face={flips.face(p)} onFlip={flips.toggle} />
             </div>
           ))}
+          <MorePrintings {...more} />
         </div>
       )}
     </dialog>

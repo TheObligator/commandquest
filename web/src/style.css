@@ -1315,3 +1315,4 @@ dialog.share-dialog { width: min(440px, calc(100vw - 32px)); display: grid; gap:
 .browse-hit { color: var(--ok); margin-top: 4px !important; }
 .browse-stats { display: flex; gap: 12px; align-items: center; margin-top: 6px !important; }
 .browse-more { justify-content: center; margin-top: 18px; }
+.printings-more { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 12px; padding: 6px 0 4px; }

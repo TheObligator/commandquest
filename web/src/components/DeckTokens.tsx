@@ -11,6 +11,7 @@ import { closeOnBackdrop } from "../carddetails";
 import { toast } from "../dom";
 import { CardImg, CardWait } from "./CardImg";
 import { KnownPrintings } from "./KnownPrintings";
+import { MorePrintings, useShownPrintings } from "./MorePrintings";
 import { ScryfallWaiting, Waiting } from "./Spinner";
 import * as scry from "../scryfall";
 import type { DeckToken } from "../tokens";
@@ -86,7 +87,12 @@ function ownPrintings(token: DeckToken): scry.ScryCard[] {
 function TokenPrintings({ token, onPick, onClose }: { token: DeckToken; onPick: (id: string) => void; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [prints, setPrints] = useState<scry.ScryCard[] | null>(null);
+  const [page, setPage] = useState<{ total: number; next?: string }>({ total: 0 });
   const [error, setError] = useState("");
+  // A double-sided promo token with this one on the back (F17's Pirate // Treasure) matches a search for
+  // Treasure, but shows its front: only printings whose front face is this token.
+  const isThis = (c: scry.ScryCard) => (c.card_faces?.[0]?.name ?? c.name).toLowerCase() === token.name.toLowerCase();
+  const { shown, more } = useShownPrintings(prints, token.id, page.total, page.next, isThis);
   useEffect(() => {
     ref.current?.showModal();
     const [, colors, pt] = token.identity.split("|");
@@ -97,7 +103,9 @@ function TokenPrintings({ token, onPick, onClose }: { token: DeckToken; onPick: 
       .then((page) => {
         const own = ownPrintings(token);
         const seen = new Set(own.map((c) => c.id));
-        setPrints([...own, ...page.cards.filter((c) => !seen.has(c.id))]);
+        const rest = page.cards.filter((c) => !seen.has(c.id) && isThis(c));
+        setPrints([...own, ...rest]);
+        setPage({ total: own.length + rest.length + (page.nextPage ? page.total - page.cards.length : 0), next: page.nextPage });
       })
       .catch((e) => setError(errorMessage(e)));
   }, [token.identity]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -114,7 +122,7 @@ function TokenPrintings({ token, onPick, onClose }: { token: DeckToken; onPick: 
         <div className="results"><KnownPrintings cards={ownPrintings(token)} selected={token.id} /></div>
       ) : (
         <div className="results">
-          {prints.map((p) => (
+          {shown.map((p) => (
             <button
               key={p.id}
               className={p.id === token.id ? "result-img selected" : "result-img"}
@@ -132,6 +140,7 @@ function TokenPrintings({ token, onPick, onClose }: { token: DeckToken; onPick: 
               {scry.artistOf(p) && <span className="small muted">{scry.artistOf(p)}</span>}
             </button>
           ))}
+          <MorePrintings {...more} />
         </div>
       )}
     </dialog>

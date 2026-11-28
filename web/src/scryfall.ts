@@ -496,9 +496,9 @@ export function rulings(name: string): Promise<Ruling[]> {
 }
 
 /** All printings of a card, newest first. */
-export async function printings(name: string): Promise<ScryCard[]> {
-  const res = await search(`!"${name.replace(/"/g, "")}"`, "prints");
-  return res.cards;
+/** A card's printings, newest first: Scryfall's first page (up to 175), with where the rest are. */
+export async function printings(name: string): Promise<SearchPage> {
+  return search(`!"${name.replace(/"/g, "")}"`, "prints");
 }
 
 /**
