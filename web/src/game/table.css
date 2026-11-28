@@ -475,14 +475,15 @@ dialog.counter-dialog { width: min(360px, calc(100vw - 32px)); background: var(-
 .replay-info p { margin: 2px 0; }
 .replay-player:not(:last-child)::after { content: " · "; color: var(--muted); }
 /* Replay: the controls and timeline run under the whole table. */
-.replay-bar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 18px; align-items: center; padding: 8px 14px 6px; border-top: 1px solid var(--accent); border-radius: 8px; background: linear-gradient(#171b26, #11141c); }
-.replay-now p { margin: 4px 0 0; white-space: nowrap; }
+.replay-bar { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "line line" "now set"; gap: 2px 18px; align-items: center; padding: 8px 14px 6px; border-top: 1px solid var(--accent); border-radius: 8px; background: linear-gradient(#171b26, #11141c); }
+.replay-now { grid-area: now; min-width: 0; display: flex; align-items: center; gap: 14px; }
+.replay-now p { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .replay-buttons { display: flex; gap: 4px; }
 .replay-buttons .ar-btn { justify-content: center; width: 34px; padding: 5px 0; }
 .replay-buttons .ar-btn.mark { background: #1b2234; border-color: #41506d; color: #9db4e0; }
-.replay-settings { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; max-width: 380px; font-size: .8rem; }
+.replay-settings { grid-area: set; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; font-size: .8rem; }
 .replay-settings select { width: auto; padding: 4px 8px; }
-.replay-timeline { position: relative; min-width: 0; padding: 0 9px; }
+.replay-timeline { grid-area: line; position: relative; min-width: 0; }
 .replay-timeline input[type="range"] { width: 100%; margin: 0; display: block; accent-color: var(--accent); }
 .rt-marks, .rt-turns { position: relative; margin: 0 9px; }
 .rt-marks { height: 26px; }
