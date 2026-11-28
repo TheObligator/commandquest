@@ -420,7 +420,7 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
                   >
                     <CardFace card={c} knownFaceDown={c.faceDown && !c.hidden} />
                     <CardBadges card={c} />
-                    {n > 1 && <span className="pile-count">×{n}</span>}
+                    {n > 1 && <span className="pile-count" title={`${n} cards in this pile`}><small>×</small>{n}</span>}
                   </div>
                   {c.blocking && <span className="blk-badge" title={`Blocking ${c.blocking}`}>🛡 {c.blocking}</span>}
                   {c.attacking && <span className="atk-badge" title={`Attacking ${nameOf(c.attacking)}`}>⚔ {c.attacking === props.viewer ? "you" : nameOf(c.attacking)}</span>}
