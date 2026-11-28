@@ -49,7 +49,7 @@ public class CombosTest {
     }
 
     /** A person at the table, seen through the messages their browser gets. */
-    private static final class Person {
+    static final class Person {
         final List<JsonNode> got = new CopyOnWriteArrayList<>();
         final BrowserSeat seat = new BrowserSeat(JSON, s -> {
             try {
@@ -157,7 +157,7 @@ public class CombosTest {
         }
     }
 
-    private static void edt(Runnable r) throws Exception {
+    static void edt(Runnable r) throws Exception {
         CompletableFuture<Void> done = new CompletableFuture<>();
         FThreads.invokeInEdtLater(() -> {
             try {
@@ -171,7 +171,7 @@ public class CombosTest {
     }
 
     /** A game against AI, stopped in your first main phase with nothing on the stack. */
-    private static Person table(int seed, int rewind) throws Exception {
+    static Person table(int seed, int rewind) throws Exception {
         MyRandom.setRandom(new Random(seed));
         Person p = new Person();
         p.session = GameSession.startCommander(List.of(

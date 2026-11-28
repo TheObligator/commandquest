@@ -495,4 +495,61 @@ public class PaymentTest {
             session.abort();
         }
     }
+
+    /** The newest pay prompt the browser got after {@code from} messages, once {@code ok} holds for it. */
+    private static com.fasterxml.jackson.databind.JsonNode payPrompt(CombosTest.Person p, int from,
+            java.util.function.Predicate<com.fasterxml.jackson.databind.JsonNode> ok, String what) throws InterruptedException {
+        long end = System.currentTimeMillis() + 10_000;
+        while (System.currentTimeMillis() < end) {
+            List<com.fasterxml.jackson.databind.JsonNode> got = p.got;
+            for (int i = got.size() - 1; i >= from; i--) {
+                com.fasterxml.jackson.databind.JsonNode m = got.get(i);
+                if ("prompt".equals(m.path("t").asText()) && m.has("pay")) {
+                    if (ok.test(m)) {
+                        return m;
+                    }
+                    break;
+                }
+            }
+            Thread.sleep(10);
+        }
+        throw new AssertionError("the browser never got " + what + ": " + p.got.subList(from, p.got.size()));
+    }
+
+    @Test(timeOut = 240_000)
+    public void theBrowserGetsConfirmAfterAutoPayAndAutoPayAfterUndo() throws Exception {
+        CombosTest.Person p = CombosTest.table(5, 0);
+        try {
+            Player me = p.me();
+            Card[] cards = onGameThread(p.game(), () -> {
+                tapTheRest(me);
+                return new Card[] {make(me, "Forest", ZoneType.Battlefield), make(me, "Llanowar Elves", ZoneType.Hand)};
+            });
+            int from = p.got.size();
+            CombosTest.edt(() -> p.ctl().selectCard(cards[1].getView(), null, null));
+            payPrompt(p, from, m -> !m.path("pay").has("autoPaid"), "the pay window");
+
+            from = p.got.size();
+            CombosTest.edt(() -> Payment.ok(p.ctl(), me));
+            var held = payPrompt(p, from, m -> m.path("pay").has("autoPaid"), "Confirm after Auto-pay");
+            Assert.assertEquals(held.path("pay").path("autoPaid").asText(), "Forest");
+            Assert.assertEquals(held.path("ok").path("label").asText(), "Confirm");
+            Assert.assertEquals(held.path("cancel").path("label").asText(), "Undo auto-pay");
+
+            from = p.got.size();
+            CombosTest.edt(() -> Payment.cancel(p.ctl(), me));
+            var back = payPrompt(p, from, m -> !m.path("pay").has("autoPaid"), "the pay window again after Undo");
+            Assert.assertTrue(back.path("ok").path("enabled").asBoolean(), "Auto-pay can be pressed again");
+            Assert.assertNotEquals(back.path("ok").path("label").asText(), "Confirm");
+            Assert.assertFalse(cards[0].isTapped(), "the Forest untapped");
+
+            from = p.got.size();
+            CombosTest.edt(() -> Payment.ok(p.ctl(), me));
+            payPrompt(p, from, m -> m.path("pay").has("autoPaid"), "Confirm after the second Auto-pay");
+            CombosTest.edt(() -> Payment.ok(p.ctl(), me));
+            waitFor(() -> !p.game().getStack().isEmpty(), "Llanowar Elves on the stack");
+        } finally {
+            p.session.abort();
+        }
+    }
 }

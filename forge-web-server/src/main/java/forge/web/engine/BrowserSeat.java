@@ -69,6 +69,9 @@ public final class BrowserSeat implements IRemote {
      * and to a browser that reconnects ({@link #replay()}).
      */
     private volatile ObjectNode lastPrompt;
+    /** The prompt's own buttons, as Forge last set them (before the payment's Confirm / Undo auto-pay). */
+    private volatile ObjectNode forgeOk;
+    private volatile ObjectNode forgeCancel;
     /** What Forge's current prompt lets you click (Forge's setSelection), for the table's highlights. */
     private volatile forge.gamemodes.match.Selection selection = forge.gamemodes.match.Selection.NONE;
     /** Cards Forge is showing you right now (e.g. an opponent revealing their hand), until it hides them. */
@@ -262,6 +265,8 @@ public final class BrowserSeat implements IRemote {
                 o.put("message", promptMessage);
                 o.set("ok", button((String) a[1], (Boolean) a[3]));
                 o.set("cancel", button((String) a[2], (Boolean) a[4]));
+                forgeOk = (ObjectNode) o.get("ok").deepCopy();
+                forgeCancel = (ObjectNode) o.get("cancel").deepCopy();
                 payment(o);
                 lastPrompt = o;
                 emitPrompt(o);
@@ -656,6 +661,26 @@ public final class BrowserSeat implements IRemote {
                 }
             }
         }
+    }
+
+    /**
+     * Sends the payment prompt again with what's paying it now: Auto-pay floating mana (or undoing it) taps sources
+     * outside Forge's payment input, which doesn't update its prompt for that.
+     */
+    public void repromptPayment() {
+        ObjectNode last = lastPrompt;
+        ObjectNode ok = forgeOk;
+        ObjectNode cancel = forgeCancel;
+        if (last == null || !last.has("pay") || ok == null || cancel == null) {
+            return;
+        }
+        ObjectNode o = last.deepCopy();
+        o.remove("pay");
+        o.set("ok", ok.deepCopy());
+        o.set("cancel", cancel.deepCopy());
+        payment(o);
+        lastPrompt = o;
+        emitPrompt(o);
     }
 
     /** Sends the view again (e.g. after a yield setting changed, which isn't a game event). */

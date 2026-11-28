@@ -190,6 +190,7 @@ public final class AutoPay {
     private static void refresh(IGameController ctl) {
         if (ctl instanceof WebPlayerController w && w.seat() != null) {
             w.seat().refresh();
+            w.seat().repromptPayment();   // Confirm / Undo auto-pay, or back to Auto-pay
         }
     }
 
