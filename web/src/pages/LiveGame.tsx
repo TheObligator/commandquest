@@ -49,7 +49,7 @@ import { ShownWindow } from "../game/CardWindow";
 import { TopLayer } from "../game/TopLayer";
 import { RestartBanner } from "../game/RestartBanner";
 import { CostDialog } from "../game/CostDialog";
-import { isAttackPrompt, type AttackTarget } from "../game/AttackArrows";
+import { attackersOf, isAttackPrompt, isBlockPrompt, type AttackTarget } from "../game/AttackArrows";
 
 /** Combat steps once attackers are declared: when a creature can be put into combat attacking. */
 const AFTER_ATTACKERS = new Set<string>(["COMBAT_DECLARE_ATTACKERS", "COMBAT_DECLARE_BLOCKERS", "COMBAT_FIRST_STRIKE_DAMAGE", "COMBAT_DAMAGE"]);
@@ -621,6 +621,29 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
       const already = "card" in to ? c.attackingCard === to.card : c.attacking === to.player && c.attackingCard === undefined;
       if (!already) game.clickCard(c.id);
     }
+  };
+
+  // Declaring blockers (Forge's InputBlock): drag your creatures onto the attacker they block. Forge
+  // blocks whichever attacker was clicked last, so a drag clicks the attacker, then each creature.
+  // Clicking a creature that already blocks the clicked attacker takes it back out, so a creature
+  // blocking something else is first taken off that, then put on the new one.
+  const blocking = !!game.prompt && !game.ask && isBlockPrompt(game.prompt);
+  const blockCandidates = useMemo(
+    () => new Set(blocking ? view.players[0].battlefield.filter((c) => c.types?.includes("Creature") && (!c.tapped || c.blockingIds?.length)).map((c) => c.id) : []),
+    [blocking, view.players],
+  );
+  const blockTargets = useMemo(() => new Set(blocking ? attackersOf(view, view.viewer).map((c) => c.id) : []), [blocking, view]);
+  const declareBlock = (ids: number[], to: AttackTarget) => {
+    const mine = view.players[0].battlefield;
+    const cards = ids.map((id) => mine.find((c) => c.id === id)).filter((c): c is CardView => !!c);
+    const target = to && "card" in to ? to.card : null;
+    for (const c of cards) {
+      if (target !== null && c.blockingIds?.includes(target)) continue;
+      for (const a of c.blockingIds ?? []) (game.clickCard(a), game.clickCard(c.id));
+    }
+    if (target === null) return;
+    game.clickCard(target);
+    for (const c of cards) if (!c.blockingIds?.includes(target)) game.clickCard(c.id);
   };
 
   // Right-click menus. Forge's abilities for the card (enabled when you can use them now), then
@@ -1295,7 +1318,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
       chosen={chosen}
       stackTargets={stackTargets}
       targetPlayers={targetPlayers}
-      attack={attacking ? { candidates: attackCandidates, declare: declareAttack } : undefined}
+      attack={attacking ? { candidates: attackCandidates, declare: declareAttack } : blocking ? { mode: "block", candidates: blockCandidates, targets: blockTargets, declare: declareBlock } : undefined}
       menuFor={menuFor}
       detailsFor={game.details}
       gameMenu={gameMenu}
@@ -1321,10 +1344,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
 }
 
 /** Forge's "you have priority" prompt (InputPassPriority): OK, and End Turn or Undo. */
-/** Declaring blockers (Forge's InputBlock): clicked on the board, like attackers. */
-function isBlockPrompt(p: { message: string }) {
-  return p.message.startsWith("Select creatures to block") || p.message.startsWith("Select another attacker to declare blockers");
-}
+
 
 function isPriorityPrompt(p: { ok: { label: string }; cancel: { label: string } }) {
   return p.ok.label === "OK" && (p.cancel.label === "End Turn" || p.cancel.label.startsWith("Undo"));

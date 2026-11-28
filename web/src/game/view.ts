@@ -46,6 +46,8 @@ export interface CardState {
   attackingCard?: number;
   /** The attacker this creature blocks (its name). */
   blocking?: string;
+  /** Every attacker this creature blocks, by card id. */
+  blockingIds?: number[];
   /** Keywords and abilities other effects gave it, not printed on it (on the battlefield, in your hand, in graveyards…). */
   gained?: Gained[];
 }
@@ -119,6 +121,8 @@ export interface CardView {
   /** The planeswalker or battle it attacks (`attacking` is its controller). */
   attackingCard?: number;
   blocking?: string;
+  /** The attackers it blocks, by card id. */
+  blockingIds?: number[];
   /** Live games: you tapped it for mana that's still unspent in your pool; clicking it untaps it and takes that mana back. */
   undoMana?: boolean;
   /** For a face-down card: the players who may look at it. Public, even when the face is hidden. */
@@ -279,6 +283,7 @@ function redactFace(card: CardState, viewer: string): CardView {
     if (card.attacking) v.attacking = card.attacking;
     if (card.attackingCard !== undefined) v.attackingCard = card.attackingCard;
     if (card.blocking) v.blocking = card.blocking;
+    if (card.blockingIds) v.blockingIds = [...card.blockingIds];
   }
   return v;
 }
@@ -358,7 +363,7 @@ export interface Pile {
 
 function pileKey(c: CardView): string {
   if (c.hidden || c.commander) return `#${c.id}`;
-  return JSON.stringify([c.name, !!c.tapped, !!c.token, !!c.sick, c.power, c.toughness, c.counters ?? null, c.attacking ?? null, c.attackingCard ?? null, c.blocking ?? null, c.gained?.map((g) => g.text) ?? null, !!c.undoMana]);
+  return JSON.stringify([c.name, !!c.tapped, !!c.token, !!c.sick, c.power, c.toughness, c.counters ?? null, c.attacking ?? null, c.attackingCard ?? null, c.blocking ?? null, c.blockingIds ?? null, c.gained?.map((g) => g.text) ?? null, !!c.undoMana]);
 }
 
 /**

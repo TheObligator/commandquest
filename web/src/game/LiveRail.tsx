@@ -2,7 +2,7 @@
 // prompt (with Forge's own button labels) or question, and the auto-pass skips.
 import { useEffect, useState } from "react";
 import { AUTO_PASS } from "./ActionRail";
-import { isAttackPrompt } from "./AttackArrows";
+import { attackersOf, isAttackPrompt, isBlockPrompt } from "./AttackArrows";
 import { manaChoiceFor } from "./manaOptions";
 import { CombosPanel } from "./CombosPanel";
 import type { MyZones, SpellbookCombo } from "./spellbook";
@@ -62,6 +62,8 @@ export function LiveRail(props: {
         <AskPanel ask={game.ask} game={game} nameOf={nameOf} />
       ) : game.prompt && isAttackPrompt(game.prompt) && game.view?.active === game.view?.viewer ? (
         <AttackPanel game={game} nameOf={nameOf} />
+      ) : game.prompt && isBlockPrompt(game.prompt) ? (
+        <BlockPanel game={game} nameOf={nameOf} />
       ) : (
         <PromptPanel game={game} nameOf={nameOf} onShowPick={props.onShowPick} />
       )}
@@ -213,6 +215,53 @@ function AttackPanel({ game, nameOf }: { game: LiveGame; nameOf: (id: string) =>
         <PressButton what="ok" sent={game.sent} className="ar-btn primary" disabled={!p.ok.enabled} onClick={game.ok} hint={<Kbd action="ok" />}>{counts.size ? "Attack" : "No attack"}</PressButton>
         {p.cancel.label && (
           <PressButton what="cancel" sent={game.sent} className="ar-btn" disabled={!p.cancel.enabled} onClick={game.cancel} hint={<Kbd action="cancel" />}>{p.cancel.label}</PressButton>
+        )}
+      </div>
+      <SlowServer game={game} />
+    </section>
+  );
+}
+
+/**
+ * Declaring blockers: how to (drag), what's coming at you and what blocks it so far, with Forge's OK.
+ */
+function BlockPanel({ game, nameOf }: { game: LiveGame; nameOf: (id: string) => string }) {
+  const p = game.prompt!;
+  const v = game.view!;
+  useHotkeys({
+    ok: () => (p.ok.enabled ? game.ok() : false),
+    cancel: () => (p.cancel.enabled ? game.cancel() : false),
+  });
+  const reason = p.message.split("\n\n").slice(1).join("\n\n").trim();
+  const mine = v.players[0].battlefield;
+  const attackers = attackersOf(v, v.viewer);
+  const blockersOf = (id: number) => mine.filter((c) => c.blockingIds?.includes(id));
+  const any = mine.some((c) => c.blockingIds?.length);
+  const label = (c: CardView) => c.name ?? "Face-down creature";
+  return (
+    <section className="ar-decision live">
+      <div className="ar-ribbon">Decision</div>
+      <h3>Declare blockers</h3>
+      <p className="ar-prompt-text">
+        Drag from one of your creatures onto an attacker to block it. Select several first (drag a box, or Shift-click) to block with them together. Drag back onto your board to stop blocking.
+      </p>
+      {attackers.length > 0 && (
+        <ul className="atk-summary">
+          {attackers.map((a) => {
+            const bs = blockersOf(a.id);
+            return (
+              <li key={a.id}>
+                ⚔ <strong>{label(a)}</strong> ({nameOf(a.controller)}) ← {bs.length ? <>🛡 {bs.map(label).join(", ")}</> : <span className="ar-sub">unblocked</span>}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {reason && <p className="ar-prompt-text atk-reason">{reason}</p>}
+      <div className="ar-actions">
+        <PressButton what="ok" sent={game.sent} className="ar-btn primary" disabled={!p.ok.enabled} onClick={game.ok} hint={<Kbd action="ok" />}>{any ? "Block" : "No blocks"}</PressButton>
+        {p.cancel.label && p.cancel.enabled && (
+          <PressButton what="cancel" sent={game.sent} className="ar-btn" onClick={game.cancel} hint={<Kbd action="cancel" />}>{p.cancel.label}</PressButton>
         )}
       </div>
       <SlowServer game={game} />

@@ -8,7 +8,7 @@ import { api } from "../../convex/_generated/api";
 import { errorMessage } from "../app/errors";
 import { toast } from "../dom";
 import { Log } from "./ActionRail";
-import { CombatArrows, useAttackDrag, type AttackTarget } from "./AttackArrows";
+import { CombatArrows, useAttackDrag, type AttackTarget, type CombatDragMode } from "./AttackArrows";
 import { ContextMenu, type ContextMenuState } from "../components/ContextMenu";
 import type { MenuSection } from "../components/CardMenu";
 import { PreviewContext, type Preview } from "./cards";
@@ -182,8 +182,10 @@ export function TableBoard(props: {
    *  right-click menus, and the ☰ button. Live games, where the page has no toolbar. */
   gameMenu?: MenuSection[];
   /** Live games, while you declare attackers: your creatures that can attack, and what to do when
-   *  you drag them to a player or planeswalker (or back to your board: null). */
-  attack?: { candidates: Set<number>; declare: (ids: number[], to: AttackTarget) => void };
+   *  you drag them to a player or planeswalker (or back to your board: null). Declaring blockers
+   *  (mode "block"): your creatures that can block, the attackers they can block (`targets`), and
+   *  what to do when you drag them onto one (or back: null). */
+  attack?: { mode?: CombatDragMode; candidates: Set<number>; targets?: Set<number>; declare: (ids: number[], to: AttackTarget) => void };
 }) {
   const { view: v, layout, stops: st } = props;
   const me = v.viewer;
@@ -218,8 +220,8 @@ export function TableBoard(props: {
     return () => window.removeEventListener("keydown", on);
   }, [marked.size]);
 
-  const attackDrag = useAttackDrag({ view: v, candidates: props.attack?.candidates, marked, onDeclare: (ids, to) => props.attack?.declare(ids, to) });
-  const attack = props.attack && { candidates: props.attack.candidates, begin: attackDrag.begin, dragging: attackDrag.dragging, hover: attackDrag.hover };
+  const attackDrag = useAttackDrag({ view: v, mode: props.attack?.mode, candidates: props.attack?.candidates, marked, onDeclare: (ids, to) => props.attack?.declare(ids, to) });
+  const attack = props.attack && { mode: props.attack.mode ?? "attack", candidates: props.attack.candidates, targets: props.attack.targets, begin: attackDrag.begin, dragging: attackDrag.dragging, hover: attackDrag.hover };
 
   const seatOf = (id: string) => v.players.find((p) => p.id === id);
   const nameOf = (id: string) => (id === me ? "you" : seatOf(id)?.name ?? id);

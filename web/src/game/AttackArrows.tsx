@@ -3,12 +3,22 @@
 // several selected cards (marks.tsx), all the selected creatures that can attack go together, one
 // arrow each. Drag back onto your own board to call them back. A plain click still does what Forge
 // does with it. Once attackers are declared, arrows show who attacks whom for the rest of combat.
+//
+// Declaring blockers works the same way (mode "block"): drag from your creature onto a creature
+// attacking you (or your planeswalker) to block it, back onto your board to stop blocking. Blue
+// arrows from each blocker to what it blocks stay up for the rest of combat.
 import { useEffect, useRef, useState } from "react";
 import type { CardView, GameView } from "./view";
 import { center, findEl, type Spot, spotOf } from "./locate";
 
 /** Who an attack goes to: a player, or a planeswalker or battle (by card id). Null: call them back. */
 export type AttackTarget = { player: string } | { card: number } | null;
+
+/** Attacking or blocking. */
+export type CombatDragMode = "attack" | "block";
+
+/** What a blocker goes to: an attacker (by card id). Null: stop blocking. */
+export type BlockTarget = { card: number } | null;
 
 /** What the pointer is over during a drag, for the boards' highlight. */
 export interface AttackHover {
@@ -20,6 +30,7 @@ export interface AttackHover {
 
 interface Drag {
   ids: number[];
+  mode: CombatDragMode;
   from: { x: number; y: number }[];
   to: { x: number; y: number };
   hover: AttackHover | null;
@@ -28,6 +39,14 @@ interface Drag {
 /** Forge's declare-attackers prompt (InputAttack: "Select creatures to attack <defender> or select player/card…"). */
 export const isAttackPrompt = (p: { message: string }) => p.message.startsWith("Select creatures to attack");
 
+/** Forge's declare-blockers prompt (InputBlock). */
+export const isBlockPrompt = (p: { message: string }) =>
+  p.message.startsWith("Select creatures to block") || p.message.startsWith("Select another attacker to declare blockers");
+
+/** Creatures attacking `viewer` (or their planeswalkers and battles): the ones they can block. */
+export const attackersOf = (view: GameView, viewer: string) =>
+  view.players.flatMap((p) => p.battlefield).filter((c) => c.attacking === viewer);
+
 const isDefenderCard = (c: CardView) => !!c.types?.some((t) => t === "Planeswalker" || t === "Battle");
 
 /** A creature's slot on a battlefield (piles list every id), on the enlarged board if it's there. */
@@ -35,9 +54,12 @@ const slotOf = (id: number) => findEl(`.battlefield [data-card-ids~="${id}"]`);
 
 export function useAttackDrag(opts: {
   view: GameView;
-  /** Your creatures that can attack now; undefined when you're not declaring attackers. */
+  /** Attacking (the default) or blocking. */
+  mode?: CombatDragMode;
+  /** Your creatures that can attack (or block) now; undefined when you're not declaring them. */
   candidates?: Set<number>;
   marked: ReadonlySet<number>;
+  /** Attacking: an AttackTarget. Blocking: a BlockTarget. */
   onDeclare: (ids: number[], to: AttackTarget) => void;
 }) {
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -52,9 +74,16 @@ export function useAttackDrag(opts: {
     const seat = board?.dataset.seat;
     if (!seat) return null;
     if (seat === view.viewer) return { back: true };
+    const ids = el?.closest("[data-card-ids]")?.getAttribute("data-card-ids")?.split(" ").map(Number) ?? [];
+    if (live.current.mode === "block") {
+      // An attacker coming at you. In a pile of them, the first one nothing of yours blocks yet.
+      const attackers = attackersOf(view, view.viewer).filter((c) => ids.includes(c.id));
+      if (!attackers.length) return null;
+      const blocked = new Set(view.players[0].battlefield.flatMap((c) => c.blockingIds ?? []));
+      return { seat, card: (attackers.find((c) => !blocked.has(c.id)) ?? attackers[0]).id };
+    }
     const p = view.players.find((x) => x.id === seat);
     if (!p || p.lost) return null;
-    const ids = el?.closest("[data-card-ids]")?.getAttribute("data-card-ids")?.split(" ").map(Number) ?? [];
     const card = p.battlefield.find((c) => ids.includes(c.id) && isDefenderCard(c));
     return card ? { seat, card: card.id } : { seat };
   };
@@ -62,6 +91,7 @@ export function useAttackDrag(opts: {
   /** Start a drag from a pile of yours (pointerdown on it). A press that doesn't move stays a click. */
   const begin = (e: React.PointerEvent, pileIds: number[]) => {
     const { candidates, marked } = live.current;
+    const mode = live.current.mode ?? "attack";
     if (!candidates || e.button !== 0) return;
     const fromSelection = pileIds.some((id) => marked.has(id));
     const ids = (fromSelection ? [...marked] : pileIds).filter((id) => candidates.has(id));
@@ -86,7 +116,7 @@ export function useAttackDrag(opts: {
       moved = true;
       ev.preventDefault();
       hover = hoverAt(ev.clientX, ev.clientY);
-      setDrag({ ids, from, to: { x: ev.clientX, y: ev.clientY }, hover });
+      setDrag({ ids, mode, from, to: { x: ev.clientX, y: ev.clientY }, hover });
     };
     const up = () => {
       window.removeEventListener("pointermove", move);
@@ -137,6 +167,16 @@ function targetPoint(hover: AttackHover): Spot | null {
   return el ? spotOf(el) : null;
 }
 
+/** Where a line from `from` to the middle of `r` crosses its edge (a little inside, so the head shows on the card). */
+function edgeToward(r: DOMRect, from: { x: number; y: number }) {
+  const c = center(r);
+  const dx = from.x - c.x, dy = from.y - c.y;
+  if (!dx && !dy) return c;
+  const hw = r.width / 2 - 4, hh = r.height / 2 - 4;
+  const t = Math.min(Math.abs(dx) ? hw / Math.abs(dx) : Infinity, Math.abs(dy) ? hh / Math.abs(dy) : Infinity, 1);
+  return { x: c.x + dx * t, y: c.y + dy * t };
+}
+
 const curve = (a: { x: number; y: number }, b: { x: number; y: number }) => {
   const dx = b.x - a.x, dy = b.y - a.y;
   const len = Math.hypot(dx, dy) || 1;
@@ -150,8 +190,9 @@ function DragArrows({ drag }: { drag: Drag }) {
   const snap = drag.hover && !drag.hover.back ? targetPoint(drag.hover) : null;
   const to = snap ?? drag.to;
   const back = !!drag.hover?.back;
+  const block = drag.mode === "block";
   return (
-    <svg className={`attack-arrows dragging${back ? " back" : ""}${snap ? " locked" : ""}`} aria-hidden>
+    <svg className={`attack-arrows dragging${block ? " block" : ""}${back ? " back" : ""}${snap ? " locked" : ""}`} aria-hidden>
       <defs>
         <marker id="atk-head-drag" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
           <path d="M0,0 L10,5 L0,10 z" />
@@ -165,8 +206,8 @@ function DragArrows({ drag }: { drag: Drag }) {
       ))}
       {drag.ids.length > 1 && (
         <g transform={`translate(${drag.to.x + 14},${drag.to.y + 18})`}>
-          <rect x="-4" y="-11" rx="8" width={back ? 70 : 34} height="16" />
-          <text x={back ? 31 : 13} dy="1">{back ? "call back" : `×${drag.ids.length}`}</text>
+          <rect x="-4" y="-11" rx="8" width={back ? (block ? 86 : 70) : 34} height="16" />
+          <text x={back ? (block ? 39 : 31) : 13} dy="1">{back ? (block ? "stop blocking" : "call back") : `×${drag.ids.length}`}</text>
         </g>
       )}
     </svg>
@@ -177,9 +218,13 @@ interface Line {
   key: string;
   d: string;
   color: string;
+  block?: boolean;
 }
 
-/** Arrows from each attacking creature to what it attacks, while attackers are in combat. */
+/**
+ * Arrows from each attacking creature to what it attacks, while attackers are in combat, and from
+ * each blocker to the attacker it blocks (blue, once blockers are being declared).
+ */
 export function CombatArrows({ view, colorOf, hide }: { view: GameView; colorOf: (id: string) => string; hide?: boolean }) {
   const [lines, setLines] = useState<Line[]>([]);
   const viewRef = useRef(view);
@@ -210,6 +255,25 @@ export function CombatArrows({ view, colorOf, hide }: { view: GameView; colorOf:
         if (!a || (a.away && to.away)) continue; // both under the enlarged board
         next.push({ key: `${c.id}`, d: curve(a, to), color: colorRef.current(c.controller) });
       }
+      // Blocks: one arrow per blocker (or pile of them) and attacker. Into the attacker's card, not
+      // its middle, so it doesn't cover the attack arrow leaving it.
+      const blockDone = new Set<string>();
+      for (const p of v.players) for (const c of p.battlefield) {
+        if (!c.blockingIds?.length) continue;
+        const el = slotOf(c.id);
+        const r = el?.getBoundingClientRect();
+        if (!el || !r?.width) continue;
+        const a = center(r);
+        for (const target of c.blockingIds) {
+          const tel = slotOf(target);
+          const tr = tel?.getBoundingClientRect();
+          if (!tel || !tr?.width) continue;
+          const k = `${(el.dataset.cardIds ?? c.id)}>${tel.dataset.cardIds ?? target}`;
+          if (blockDone.has(k)) continue;
+          blockDone.add(k);
+          next.push({ key: `b${c.id}>${target}`, d: curve(a, edgeToward(tr, a)), color: colorRef.current(c.controller), block: true });
+        }
+      }
       const key = next.map((l) => l.key + l.d).join("|");
       if (key !== lastKey) {
         lastKey = key;
@@ -228,11 +292,14 @@ export function CombatArrows({ view, colorOf, hide }: { view: GameView; colorOf:
         <marker id="atk-head" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
           <path d="M0,0 L10,5 L0,10 z" />
         </marker>
+        <marker id="blk-head" className="blk" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" />
+        </marker>
       </defs>
       {lines.map((l) => (
-        <g key={l.key} style={{ "--seat": l.color } as React.CSSProperties}>
+        <g key={l.key} className={l.block ? "blk" : undefined} style={{ "--seat": l.color } as React.CSSProperties}>
           <path className="aa-glow" d={l.d} />
-          <path className="aa-line" d={l.d} markerEnd="url(#atk-head)" />
+          <path className="aa-line" d={l.d} markerEnd={l.block ? "url(#blk-head)" : "url(#atk-head)"} />
         </g>
       ))}
     </svg>

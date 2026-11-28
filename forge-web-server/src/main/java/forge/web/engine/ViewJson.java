@@ -275,12 +275,17 @@ public final class ViewJson {
                 o.put("attacking", id(cd.getController()));
                 o.put("attackingCard", cd.getId());   // the planeswalker or battle it attacks
             }
-            // Blocking (also while blockers are being declared): the attacker it blocks, by name.
+            // Blocking (also while blockers are being declared): the attacker it blocks, by name, and
+            // every attacker it blocks by id (for the block arrows; a few creatures block several).
+            ArrayNode blockingIds = null;
             for (CardView attacker : combat.getAttackers()) {
                 if (combat.getBlockers(attacker) != null && combat.getBlockers(attacker).contains(c)) {
-                    boolean attackerSeen = seeAll || attacker.canBeShownTo(viewer) && !attacker.isFaceDown();
-                    o.put("blocking", attackerSeen ? attacker.getCurrentState().getName() : "a creature");
-                    break;
+                    if (blockingIds == null) {
+                        boolean attackerSeen = seeAll || attacker.canBeShownTo(viewer) && !attacker.isFaceDown();
+                        o.put("blocking", attackerSeen ? attacker.getCurrentState().getName() : "a creature");
+                        blockingIds = o.putArray("blockingIds");
+                    }
+                    blockingIds.add(attacker.getId());
                 }
             }
         }
