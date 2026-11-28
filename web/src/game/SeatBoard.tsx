@@ -34,6 +34,9 @@ const ROW_GAP = 6;
 const CARD_GAP = 5;
 /** Free cells kept at the end of each row, to drop cards into. */
 const SPARE = 1;
+/** A tapped card lies sideways at full size, so its cell is a card height (1.4 widths) wide. */
+const TAP_EXTRA = 0.4;
+const tappedCount = (row: Pile[]) => row.filter((p) => p.cards[0].tapped).length;
 
 /**
  * Picks the card width that fits every shown row in the box: each row gets an equal share of the
@@ -42,13 +45,16 @@ const SPARE = 1;
  */
 function fitWidth(rows: Pile[][], w: number, h: number, max: number, line = false): number {
   const cols = rows.map((r) => usedCols(r) + SPARE);
+  // Row widths in card widths: tapped cards take a wider cell.
+  const units = rows.map((r, i) => cols[i] + TAP_EXTRA * tappedCount(r));
   let cw: number;
   if (line) {
     const total = cols.reduce((a, b) => a + b, 0);
-    cw = Math.min(h / 1.4, (w - CARD_GAP * total - 16 * 2) / total);
+    const totalUnits = units.reduce((a, b) => a + b, 0);
+    cw = Math.min(h / 1.4, (w - CARD_GAP * total - 16 * 2) / totalUnits);
   } else {
     cw = (h - ROW_GAP * (rows.length - 1)) / rows.length / 1.4;
-    for (const n of cols) cw = Math.min(cw, (w - CARD_GAP * (n - 1)) / n);
+    cols.forEach((n, i) => (cw = Math.min(cw, (w - CARD_GAP * (n - 1)) / units[i])));
   }
   return Math.max(MIN_CW, Math.min(max, Math.floor(cw)));
 }
@@ -298,18 +304,31 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
   const packed = arrange(p.battlefield, arrangement);
   const shown = shownRows(packed);
   const cw = fitWidth(shown.map((r) => packed[r]), box.w, box.h, props.maxCard, props.line);
-  const width = props.line ? 0 : Math.max(1, Math.floor((box.w - 8 + CARD_GAP) / (cw + CARD_GAP)));
+  // Leave room for the widest tapped cells so the row holding them still fits across.
+  const tapRoom = Math.max(0, ...shown.map((r) => tappedCount(packed[r]))) * TAP_EXTRA * cw;
+  const width = props.line ? 0 : Math.max(1, Math.floor((box.w - 8 + CARD_GAP - tapRoom) / (cw + CARD_GAP)));
   const rows = props.line ? packed : arrange(p.battlefield, arrangement, width);
+  /** Each column's width in a row: a card width, or a card height under a tapped card. */
+  const colWidths = (piles: Pile[], cols: number) => {
+    const tapped = new Set(piles.filter((x) => x.cards[0].tapped).map((x) => x.col));
+    return Array.from({ length: cols }, (_, i) => (tapped.has(i) ? cw * (1 + TAP_EXTRA) : cw));
+  };
   const accepts = (d: DragData | null) => !!d && ((d.from === "battlefield" && d.seat === p.id) || (d.from === "hand" && isMe));
   /** The cell under the pointer in a row's grid. */
-  const cellAt = (e: React.DragEvent, el: HTMLElement) => {
-    const x = e.clientX - el.getBoundingClientRect().left - 4;
-    return Math.max(0, Math.floor((x + CARD_GAP / 2) / (cw + CARD_GAP)));
+  const cellAt = (e: React.DragEvent, el: HTMLElement, r: Row) => {
+    let x = e.clientX - el.getBoundingClientRect().left - 4 + CARD_GAP / 2;
+    const piles = rows[r];
+    const widths = colWidths(piles, usedCols(piles));
+    for (let i = 0; i < widths.length; i++) {
+      if (x < widths[i] + CARD_GAP) return i;
+      x -= widths[i] + CARD_GAP;
+    }
+    return widths.length + Math.max(0, Math.floor(x / (cw + CARD_GAP)));
   };
 
   const onDrop = (e: React.DragEvent, row: Row) => {
     const d = currentDrag;
-    const col = cellAt(e, e.currentTarget as HTMLElement);
+    const col = cellAt(e, e.currentTarget as HTMLElement, row);
     setDropAt(null);
     if (!accepts(d) || !d) return;
     e.preventDefault();
@@ -336,15 +355,16 @@ function Battlefield(props: Parameters<typeof SeatBoard>[0] & { isMe: boolean; h
       {shown.map((r) => {
         const piles = rows[r];
         const cols = Math.max(width, usedCols(piles) + SPARE);
+        const widths = colWidths(piles, cols);
         return (
           <div
             key={r}
             className={`bf-row${piles.length ? "" : " empty"}${dropAt?.row === r ? " drop" : ""}`}
-            style={{ "--cols": cols, flexGrow: props.line ? cols : undefined } as React.CSSProperties}
+            style={{ gridTemplateColumns: widths.map((w) => `${w}px`).join(" "), flexGrow: props.line ? cols + TAP_EXTRA * tappedCount(piles) : undefined } as React.CSSProperties}
             onDragOver={(e) => {
               if (!accepts(currentDrag)) return;
               e.preventDefault();
-              const col = cellAt(e, e.currentTarget);
+              const col = cellAt(e, e.currentTarget, r as Row);
               if (dropAt?.row !== r || dropAt.col !== col) setDropAt({ row: r as Row, col });
             }}
             onDragLeave={(e) => {

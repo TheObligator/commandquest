@@ -70,7 +70,7 @@ button.zone-tile:hover .zt-card { outline: 2px solid var(--accent-2); }
 /* Each shown row takes an equal share of the board's height and is a grid of card cells. */
 .bf-row {
   position: relative; flex: 1 1 0; min-height: var(--ch); display: grid; align-content: center;
-  grid-template-columns: repeat(var(--cols), var(--cw)); grid-auto-rows: var(--ch); gap: 5px; padding: 0 4px;
+  grid-auto-columns: var(--cw); grid-auto-rows: var(--ch); gap: 5px; padding: 0 4px;
   border-radius: 6px; transition: background .1s; background: rgb(255 255 255 / 1.5%);
 }
 .battlefield.line { flex-direction: row; gap: 16px; }
@@ -80,8 +80,9 @@ button.zone-tile:hover .zt-card { outline: 2px solid var(--accent-2); }
 .bf-ghost { grid-row: 1; width: var(--cw); height: var(--ch); border-radius: 6px; border: 2px dashed var(--seat); background: color-mix(in srgb, var(--seat) 18%, transparent); }
 .slot { position: relative; grid-row: 1; width: var(--cw); height: var(--ch); cursor: grab; }
 .bf-card { position: absolute; left: 0; top: 0; width: var(--cw); height: var(--ch); border-radius: 5% / 3.6%; transition: transform .18s ease, box-shadow .15s; }
-/* Tapped: turned sideways and scaled to fit its cell, so it never covers the next card. */
-.slot.tapped .bf-card { transform: rotate(90deg) scale(.714); }
+/* Tapped: turned sideways at full size; its cell is a card height wide, so it never covers the next card. */
+.slot.tapped { width: var(--ch); }
+.slot.tapped .bf-card { left: calc((var(--ch) - var(--cw)) / 2); transform: rotate(90deg); }
 .slot:hover .bf-card { box-shadow: 0 0 0 2px var(--accent-2), 0 8px 18px rgb(0 0 0 / 50%); z-index: 2; }
 .bf-card.pile { box-shadow: 3px -3px 0 -1px #2c3242, 6px -6px 0 -2px #222735; }
 .bf-card.sick .card-face img { filter: saturate(.7) brightness(.9); }
