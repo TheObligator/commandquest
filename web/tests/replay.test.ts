@@ -105,3 +105,22 @@ test("bookmarks skip a rewind", () => {
   });
   assert.deepEqual(r.bookmarks().map((m) => m.frame), [1], "the rewind's life gain back isn't marked, and the hit is");
 });
+
+test("minor marks: spells cast and attacks declared", () => {
+  const bear = (over: object) => ({ "40": { id: 40, name: "Bear", zone: "battlefield", owner: "1", controller: "1", ...over } });
+  const r = parseReplay({
+    version: 1,
+    meta,
+    frames: [
+      { ...base, cards: { ...base.cards, ...bear({}) }, logAdd: ["a"] },
+      { stack: [{ id: 7, name: "Shock", kind: "Spell", controller: "2" }, { id: 8, name: "Trigger", kind: "Triggered ability", controller: "1" }], logAdd: ["b"] },
+      { stack: [], logAdd: ["c"] },
+      { cards: bear({ attacking: "2" }), logAdd: ["d"] },
+      { logAdd: ["e"] },
+    ],
+  });
+  assert.deepEqual(r.minorMarks().map((m) => [m.frame, m.events.map((e) => e.text)]), [
+    [1, ["B casts Shock"]],
+    [3, ["A attacks B with 1 creature"]],
+  ]);
+});

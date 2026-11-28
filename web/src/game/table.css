@@ -487,7 +487,13 @@ dialog.counter-dialog { width: min(360px, calc(100vw - 32px)); background: var(-
 .rt-marks, .rt-turns { position: relative; margin: 0 9px; }
 .rt-marks { height: 26px; }
 .rt-turns { height: 14px; }
-.rt-mark { position: absolute; bottom: 4px; transform: translateX(-50%); width: 22px; height: 20px; padding: 0; display: grid; place-items: center; font-size: 12px; line-height: 1; border-radius: 4px; border: 1px solid currentColor; background: #1e2433; cursor: pointer; }
+.rt-minor { position: relative; height: 9px; margin: 0 9px; }
+.rt-small { position: absolute; top: 1px; width: 3px; height: 7px; margin-left: -1.5px; padding: 0; border: 0; border-radius: 1px; background: currentColor; opacity: .55; cursor: pointer; }
+.rt-small::before { content: ""; position: absolute; inset: -4px -3px; }
+.rt-small:hover, .rt-small.on { opacity: 1; height: 9px; top: 0; z-index: 1; }
+.rt-small.k-spell { color: #6fa8dc; }
+.rt-small.k-attack { color: #e07a5f; }
+.rt-mark { position: absolute; bottom: 4px; z-index: 1; transform: translateX(-50%); width: 22px; height: 20px; padding: 0; display: grid; place-items: center; font-size: 12px; line-height: 1; border-radius: 4px; border: 1px solid currentColor; background: #1e2433; cursor: pointer; }
 .rt-mark::after { content: ""; position: absolute; top: 100%; left: 50%; width: 1px; height: 5px; background: currentColor; opacity: .7; }
 .rt-mark:hover, .rt-mark:focus-visible, .rt-mark.on { background: #2b3348; box-shadow: 0 0 8px currentColor; z-index: 2; }
 .rt-count { position: absolute; top: -7px; right: -7px; min-width: 13px; height: 13px; padding: 0 2px; border-radius: 7px; background: currentColor; font-size: 9px; line-height: 13px; font-weight: 700; }

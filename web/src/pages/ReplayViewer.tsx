@@ -178,14 +178,15 @@ function Player({ replay }: { replay: Replay }) {
   );
 }
 
-const ICONS: Record<BookmarkKind, string> = { win: "🏆", out: "☠", wipe: "✹", commander: "♛", hit: "⚔" };
+const ICONS: Record<BookmarkKind, string> = { win: "🏆", out: "☠", wipe: "✹", commander: "♛", hit: "⚔", attack: "➶", spell: "✧" };
 
 /** Marks closer than this (share of the track) draw as one. */
 const CLUSTER = 0.012;
 
 /** The scrubber across the bottom: turn ticks below, bookmarks above. */
 function Timeline({ replay, marks, i, last, onSeek }: { replay: Replay; marks: Bookmark[]; i: number; last: number; onSeek: (i: number) => void }) {
-  const [hover, setHover] = useState<number | null>(null);
+  const [hover, setHover] = useState<Bookmark[] | null>(null);
+  const minor = useMemo(() => replay.minorMarks(), [replay]);
   const at = (frame: number) => (last > 0 ? frame / last : 0);
   const turns = useMemo(() => replay.turnStarts(), [replay]);
   const every = Math.max(1, Math.ceil(turns.length / 24));
@@ -198,12 +199,12 @@ function Timeline({ replay, marks, i, last, onSeek }: { replay: Replay; marks: B
     }
     return out;
   }, [marks, last]);
-  const shown = hover === null ? null : clusters[hover];
+  const shown = hover;
 
   return (
     <div className="replay-timeline" style={{ "--at": `${at(i) * 100}%` } as React.CSSProperties}>
       <div className="rt-marks">
-        {clusters.map((c, k) => {
+        {clusters.map((c) => {
           const kind = c.flatMap((m) => m.events).sort((x, y) => KIND_ORDER.indexOf(x.kind) - KIND_ORDER.indexOf(y.kind))[0].kind;
           return (
             <button
@@ -211,9 +212,9 @@ function Timeline({ replay, marks, i, last, onSeek }: { replay: Replay; marks: B
               className={`rt-mark k-${kind}${c.some((m) => m.frame === i) ? " on" : ""}`}
               style={{ left: `${at(c[0].frame) * 100}%` }}
               onClick={() => onSeek(c[0].frame)}
-              onMouseEnter={() => setHover(k)}
+              onMouseEnter={() => setHover(c)}
               onMouseLeave={() => setHover(null)}
-              onFocus={() => setHover(k)}
+              onFocus={() => setHover(c)}
               onBlur={() => setHover(null)}
               aria-label={c.flatMap((m) => m.events.map((e) => e.text)).join("; ")}
             >
@@ -235,6 +236,20 @@ function Timeline({ replay, marks, i, last, onSeek }: { replay: Replay; marks: B
             ))}
           </div>
         )}
+      </div>
+      <div className="rt-minor">
+        {minor.map((m) => (
+          <button
+            key={m.frame}
+            tabIndex={-1}
+            className={`rt-small k-${m.events[0].kind}${m.frame === i ? " on" : ""}`}
+            style={{ left: `${at(m.frame) * 100}%` }}
+            onClick={() => onSeek(m.frame)}
+            onMouseEnter={() => setHover([m])}
+            onMouseLeave={() => setHover(null)}
+            aria-label={m.events.map((e) => e.text).join("; ")}
+          />
+        ))}
       </div>
       <input
         type="range"

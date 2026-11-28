@@ -87,6 +87,18 @@ export class Replay {
     return out;
   }
 
+  /** The everyday moments (spells cast, attacks declared), drawn smaller than bookmarks. */
+  minorMarks(): Bookmark[] {
+    const out: Bookmark[] = [];
+    for (let k = 1; k < this.frames.length; k++) {
+      const f = this.frames[k];
+      if (f.log.version !== this.frames[k - 1].log.version) continue;
+      const events = minorEvents(this.frames[k - 1].state, f.state);
+      if (events.length) out.push({ frame: k, turn: this.turn(k), events });
+    }
+    return out;
+  }
+
   /** The moments worth jumping to, found by comparing each frame with the one before. */
   bookmarks(): Bookmark[] {
     const out: Bookmark[] = [];
@@ -126,10 +138,10 @@ export class Replay {
   }
 }
 
-export type BookmarkKind = "win" | "out" | "wipe" | "commander" | "hit";
+export type BookmarkKind = "win" | "out" | "wipe" | "commander" | "hit" | "spell" | "attack";
 
 /** The most important first. */
-export const KIND_ORDER: BookmarkKind[] = ["win", "out", "wipe", "commander", "hit"];
+export const KIND_ORDER: BookmarkKind[] = ["win", "out", "wipe", "commander", "hit", "attack", "spell"];
 
 export interface BookmarkEvent {
   kind: BookmarkKind;
@@ -183,6 +195,29 @@ function momentEvents(before: Obj, after: Obj): BookmarkEvent[] {
       const cause = stack.length ? ` (${String(stack[stack.length - 1].name)})` : "";
       events.push({ kind: "wipe", text: `Board wipe${cause}: ${gone.length} permanents gone` });
     }
+  }
+  return events;
+}
+
+/** Spells put on the stack and attacks declared between two frames. */
+function minorEvents(before: Obj, after: Obj): BookmarkEvent[] {
+  const events: BookmarkEvent[] = [];
+  const nameOf = (id: Json) => String(((after.players ?? []) as Obj[]).find((p) => p.id === id)?.name ?? "Someone");
+  const had = new Set(((before.stack ?? []) as Obj[]).map((x) => x.id));
+  for (const x of (after.stack ?? []) as Obj[]) {
+    if (x.kind === "Spell" && !had.has(x.id)) events.push({ kind: "spell", text: `${nameOf(x.controller)} casts ${String(x.name)}` });
+  }
+  const cb = (before.cards ?? {}) as Obj;
+  const attacks = new Map<string, number>(); // "attacker→defender" → creatures
+  for (const [id, c] of Object.entries((after.cards ?? {}) as Obj)) {
+    const card = c as Obj;
+    if (card.attacking == null || (cb[id] as Obj | undefined)?.attacking != null) continue;
+    const key = `${String(card.controller)}→${String(card.attacking)}`;
+    attacks.set(key, (attacks.get(key) ?? 0) + 1);
+  }
+  for (const [key, n] of attacks) {
+    const [from, to] = key.split("→");
+    events.push({ kind: "attack", text: `${nameOf(from)} attacks ${nameOf(to)} with ${n} creature${n === 1 ? "" : "s"}` });
   }
   return events;
 }
