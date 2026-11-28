@@ -3,6 +3,7 @@
 // both are remembered in this browser. Click a tile, its "⋯" or right-click it for the full text
 // and (live games) its auto-yield settings. Lines run from each item to what it targets.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type Box, useFloatingBox } from "./floatingBox";
 import type { MenuSection } from "../components/CardMenu";
 import { CardImg } from "../components/CardImg";
 import { cached, imageUrl } from "../scryfall";
@@ -11,24 +12,8 @@ import { AbilityMarks } from "./AbilityMenu";
 import { stackText } from "./stackText";
 import type { GameView, StackItemView } from "./view";
 
-interface Box {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
 const KEY = "cq.stack.box";
 const DEFAULT_BOX: Box = { x: 12, y: 12, w: 250, h: 400 };
-
-function loadBox(): Box {
-  try {
-    const b = JSON.parse(localStorage.getItem(KEY) ?? "null");
-    if (b && [b.x, b.y, b.w, b.h].every((n) => typeof n === "number")) return b;
-  } catch {
-    // no storage: the default place
-  }
-  return DEFAULT_BOX;
-}
 
 function art(s: StackItemView): string | undefined {
   if (!s.card || s.card.hidden) return undefined;
@@ -55,57 +40,9 @@ export function StackWindow(props: {
   itemMenu?: (s: StackItemView) => MenuSection[];
 }) {
   const { view, nameOf, colorOf } = props;
-  const [box, setBox] = useState<Box>(loadBox);
+  const { box, ref, startDrag, onResizeEnd } = useFloatingBox(KEY, () => DEFAULT_BOX);
   const [open, setOpen] = useState<{ id: number; x: number; y: number } | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
   const setPreview = usePreview();
-
-  const save = (b: Box) => {
-    try {
-      localStorage.setItem(KEY, JSON.stringify(b));
-    } catch {
-      // not remembered
-    }
-  };
-
-  // Keep it inside the table when the window shrinks.
-  useLayoutEffect(() => {
-    const parent = ref.current?.offsetParent as HTMLElement | null;
-    if (!parent) return;
-    const maxX = Math.max(0, parent.clientWidth - 120);
-    const maxY = Math.max(0, parent.clientHeight - 60);
-    if (box.x > maxX || box.y > maxY) setBox((b) => ({ ...b, x: Math.min(b.x, maxX), y: Math.min(b.y, maxY) }));
-  });
-
-  // Remember a resize (CSS `resize`), measured when the pointer is let go.
-  const onResizeEnd = () => {
-    const el = ref.current;
-    if (!el) return;
-    const next = { ...box, w: el.offsetWidth, h: el.offsetHeight };
-    if (next.w !== box.w || next.h !== box.h) {
-      setBox(next);
-      save(next);
-    }
-  };
-
-  const startDrag = (e: React.PointerEvent) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    const sx = e.clientX - box.x;
-    const sy = e.clientY - box.y;
-    let last = box;
-    const move = (ev: PointerEvent) => {
-      last = { ...box, x: Math.max(0, ev.clientX - sx), y: Math.max(0, ev.clientY - sy) };
-      setBox(last);
-    };
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-      save(last);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-  };
 
   const openItem = (e: React.MouseEvent, s: StackItemView) => {
     e.preventDefault();

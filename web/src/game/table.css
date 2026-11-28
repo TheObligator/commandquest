@@ -693,3 +693,21 @@ dialog.decision-window.wide { width: min(860px, calc(100vw - 32px)); }
 .combo-checks .no::before { content: "!"; color: #ef6b6b; font-weight: 700; }
 .combo-checks .unknown { color: var(--muted); }
 .combo-window .dc-text { padding: 0; max-height: 40vh; overflow-y: auto; }
+
+/* Revealed cards: a small floating window, like the stack's (drag the title bar, resize the corner) */
+.reveal-window {
+  position: fixed; z-index: 32; display: flex; flex-direction: column; min-width: 170px; min-height: 150px;
+  max-width: calc(100vw - 8px); max-height: calc(100vh - 8px);
+  resize: both; overflow: hidden; border: 1px solid #3b3424; border-radius: 12px; background: rgb(18 16 12 / 94%);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 55%); backdrop-filter: blur(3px); color: var(--text);
+}
+.reveal-window .stk-head h3 { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reveal-window .stk-count { margin-left: 0; }
+.rw-close { flex: none; background: none; border: 0; color: #a39a85; font-size: 1.3rem; line-height: 1; padding: 0 4px; border-radius: 5px; cursor: pointer; }
+.rw-close:hover { background: #2c2719; color: #f1e9d6; }
+.rw-next { flex: none; background: #2c2719; border: 1px solid #5a4a2a; color: #e7dcc0; font-size: .72rem; padding: 2px 7px; border-radius: 6px; cursor: pointer; }
+.rw-next:hover { background: #3b3424; }
+.rw-body { flex: 1; overflow: auto; padding: 10px 10px 14px; }
+.rw-body p { margin: 0 0 8px; }
+.reveal-window .zv-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+.reveal-window .zv-card { --cw: 120px; }
