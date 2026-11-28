@@ -403,7 +403,8 @@ function DeckEditor({ initial, initialGroupBy }: { initial: Draft; initialGroupB
         return d;
       });
       setCardData((n) => n + 1);
-      toast(`Added ${found.length} cards${board === "main" ? "" : " to " + BOARDS.find((b) => b.id === board)!.label.toLowerCase()}${lost ? ` (${lost} not found on Scryfall)` : ""}`);
+      const copies = found.reduce((n, f) => n + f.quantity, 0);
+      toast(`Added ${copies} cards${board === "main" ? "" : " to " + BOARDS.find((b) => b.id === board)!.label.toLowerCase()}${lost ? ` (${lost} not found on Scryfall)` : ""}`);
       if (wereCommanders.length) offerCommanders(wereCommanders, board);
     } else toast("Couldn't find those cards on Scryfall", "error");
   }
@@ -1150,7 +1151,7 @@ function dragPile(dt: DataTransfer, cards: DeckCard[]) {
   });
   const count = document.createElement("span");
   count.className = "drag-count";
-  count.textContent = String(cards.length);
+  count.textContent = String(cards.reduce((n, c) => n + c.quantity, 0)); // copies, not entries: a stack of 4 counts 4
   pile.append(count);
   document.body.append(pile);
   dt.setDragImage(pile, 60, 60);
