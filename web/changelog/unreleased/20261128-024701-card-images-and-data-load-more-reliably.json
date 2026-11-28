@@ -1,0 +1,6 @@
+{
+  "category": "improved",
+  "title": "Card images and data load more reliably",
+  "body": "Tabs share one request schedule with Scryfall and back off when it's busy, and cards look up by name from our own data.",
+  "date": "2026-11-28T02:47:01.000Z"
+}

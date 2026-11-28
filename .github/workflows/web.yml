@@ -73,6 +73,12 @@ jobs:
       - name: Unit tests
         run: npm test
         working-directory: web
+      # Promotion goes through `npm run release`, which rolls the changelog's unreleased entries into a
+      # version. A bare `git push origin staging:production` leaves them behind and stops here.
+      - name: Changelog is released
+        if: github.ref_name == 'production'
+        run: npm run changelog:check
+        working-directory: web
       - name: Type-check Convex functions
         run: npx tsc -p convex --noEmit
         working-directory: web

@@ -6,6 +6,7 @@ import { DeckList } from "../pages/DeckList";
 import { Editor, PackageEditor } from "../pages/Editor";
 import { Landing } from "../pages/Landing";
 import { About, Privacy, Terms } from "../pages/Legal";
+import { Changelog } from "../pages/Changelog";
 import { Packages } from "../pages/Packages";
 import { Play } from "../pages/Play";
 import { Precons } from "../pages/Precons";
@@ -67,6 +68,7 @@ export function App() {
   else if (route.path === "/about") page = <About />;
   else if (route.path === "/privacy") page = <Privacy />;
   else if (route.path === "/terms") page = <Terms />;
+  else if (route.path === "/changelog") page = <Changelog />;
   else if (route.path === "/play") page = <Play />;
   else if (route.path === "/table") page = <Table />;
   else if (route.path === "/settings") page = <Settings />;

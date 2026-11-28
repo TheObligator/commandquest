@@ -8,3 +8,9 @@ interface ImportMetaEnv {
 
 /** This build's id (vite.config.ts), matching the `build` field of the `/version.json` it ships with. */
 declare const __BUILD_ID__: string;
+
+/** web/changelog/ compiled in by vite.config.ts (src/changelog.ts). */
+declare module "virtual:changelog" {
+  const changelog: import("./changelog").Changelog;
+  export default changelog;
+}

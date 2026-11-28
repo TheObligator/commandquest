@@ -25,6 +25,10 @@ declared in `web/wrangler.jsonc`, and the first deploy creates both Workers and 
 so there's nothing to create in the Cloudflare dashboard first. `npx wrangler@<version> deploy --dry-run`
 in `web/` (after a build) checks the config without deploying.
 
+Promote `staging` to `production` with `npm run release` in `web/`, which also makes the changelog's new
+version (`web/changelog/README.md`). On `production` pushes the frontend job also runs `npm run changelog:check`,
+which fails if the changelog has entries that aren't in a release, i.e. the push skipped `npm run release`.
+
 A newer push cancels an older run's tests, but a deploy that has started always finishes.
 `Actions → Web → Run workflow` redeploys a branch by hand.
 

@@ -128,6 +128,24 @@ label.inline select { width: auto; padding: 5px 8px; }
 .legal-box { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin: 0 0 6px; }
 .legal-box p { margin: 0; }
 
+/* ---- What's new (#/changelog) ---- */
+.site-changelog .release { padding: 18px 0 8px; border-top: 1px solid var(--line); }
+.site-changelog .release-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; margin-bottom: 10px; }
+.site-changelog h2.release-version { margin: 0; padding: 0; border: 0; font-size: 1.15rem; color: var(--accent-2); }
+.site-changelog .release-date { color: var(--muted); font-size: .8rem; }
+.release-tag { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; padding: 2px 7px; border-radius: 5px; }
+.tag-hotfix { color: var(--danger); background: rgb(239 107 107 / 12%); border: 1px solid rgb(239 107 107 / 40%); }
+.tag-staging { color: var(--accent); background: rgb(224 168 79 / 10%); border: 1px dashed rgb(224 168 79 / 50%); }
+.site-changelog .release.unreleased { border: 1px dashed rgb(224 168 79 / 35%); background: rgb(224 168 79 / 4%); border-radius: var(--radius); padding: 12px 14px 4px; margin-bottom: 8px; }
+.site-changelog ul.site-changes { list-style: none; padding: 0; margin: 0 0 6px; }
+.site-changes li { display: flex; gap: 12px; }
+.change-cat { flex: none; width: 70px; padding-top: 3px; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+.cat-new { color: var(--ok); }
+.cat-improved { color: var(--type-instant); }
+.cat-fixed { color: var(--accent); }
+.change-body { display: block; color: var(--muted); font-size: .85rem; }
+.footer-links a.footer-version { color: var(--muted); }
+
 /* ---- Landing ---- */
 .hero {
   position: relative; overflow: hidden;

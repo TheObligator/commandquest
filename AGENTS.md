@@ -24,7 +24,9 @@ would create a new branch that nothing deploys, so push to `staging`.
   `staging` when it's done and passing. (`staging/<feature>` is impossible: git can't have both a `staging`
   branch and `staging/...` branches.) Older topic branches are named `web-<feature>`.
 - **Never commit to `production` directly**, including fixes. Fix on `staging`, check it on the staging site, then
-  promote with `git push origin staging:production`. That push only succeeds as a fast-forward, which is the point.
+  promote with `npm run release` in `web/` (from a clean checkout of `origin/staging`). It turns the changelog's
+  unreleased entries into a version, commits that to `staging`, then pushes `staging:production`, which only
+  succeeds as a fast-forward, which is the point. CI refuses a production push that skipped this step.
 - Never push to the `upstream` remote. Never force-push. Never rewrite history on `master`, `staging` or `production`.
 - Before starting work, confirm the current branch with `git branch --show-current`. If it's
   `master` or `production`, stop and switch to `staging` (or a topic branch off it) before changing anything.
@@ -40,6 +42,14 @@ Neither site is hosted yet. Until they are, the only running copy is the local d
   edited after they ship. Staging runs a migration first, and promoting to `production` runs it on
   production, so back up the production database before promoting a release that adds one.
 - A change can be on staging for as long as it needs. Only promote once it works there.
+
+## Changelog
+
+Every user-facing change gets a changelog entry, added in the same commit:
+`npm run changelog:add -- --category new|improved|fixed --title "..." [--body "..."]` (in `web/`). Write it for
+players: what they'll notice, not how it was built. Internal changes (refactors, tests, docs, CI) need none, and
+one entry can cover several commits of the same feature. The staging site lists these at `#/changelog` as "not live
+yet" until a release. Details: `web/changelog/README.md`.
 
 ## Where code goes
 

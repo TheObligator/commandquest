@@ -7,6 +7,7 @@ import { UpdateNotice } from "./UpdateNotice";
 import { CreateMenu } from "../components/CreateMenu";
 import { BrandMark } from "../components/BrandMark";
 import { CONTACT_EMAIL } from "../pages/Legal";
+import { SITE_VERSION } from "../pages/Changelog";
 
 /** `full`: the page uses the whole window width (the game table). */
 export function Layout({ children, full }: { children: React.ReactNode; full?: boolean }) {
@@ -35,7 +36,14 @@ export function Layout({ children, full }: { children: React.ReactNode; full?: b
           <a href="#/about">About</a>
           <a href="#/privacy">Privacy</a>
           <a href="#/terms">Terms</a>
+          <a href="#/changelog">What's new</a>
           <a href={`mailto:${CONTACT_EMAIL}`}>Contact</a>
+          {SITE_VERSION && (
+            <a href="#/changelog" className="footer-version">
+              v{SITE_VERSION}
+              {import.meta.env.MODE !== "production" && "+staging"}
+            </a>
+          )}
         </nav>
         Rules engine by <a href="https://github.com/Card-Forge/forge" target="_blank" rel="noopener">Forge</a>. Card data and images from{" "}
         <a href="https://scryfall.com" target="_blank" rel="noopener">Scryfall</a> (not endorsed by Scryfall).
