@@ -324,6 +324,12 @@ public final class BrowserSeat implements IRemote {
             info.sources().forEach(sources::add);
             ArrayNode usable = pay.putArray("pool");
             info.pool().forEach(usable::add);
+            if (info.autoPaid() != null) {
+                // Auto-paid mana waits in the pool: OK spends it, Cancel undoes it.
+                pay.put("autoPaid", info.autoPaid());
+                prompt.set("ok", button("Confirm", true));
+                prompt.set("cancel", button("Undo auto-pay", true));
+            }
         } catch (RuntimeException e) {
             Logger.debug(e, "Couldn't describe the payment");
         }

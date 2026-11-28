@@ -1,6 +1,7 @@
 // The pay window: when a spell or ability you're casting needs mana, choose Auto-pay (Forge taps
 // your sources for you, basics before dual lands), tap your lands yourself, Cancel the cast, or in
-// a free-play game pay nothing. It floats over the table without blocking it, so you can still
+// a free-play game pay nothing. After Auto-pay the window shows what it tapped: Confirm (Space)
+// spends that mana, Undo auto-pay (Esc) untaps it to pay another way. It floats over the table without blocking it, so you can still
 // click your own mana sources.
 import { ManaCost } from "../components/ManaCost";
 import { Waiting } from "../components/Spinner";
@@ -20,6 +21,27 @@ export function PayPrompt({ prompt, game, pool }: {
   // only the floating mana that can pay some of this (colorless can't pay {W/U})
   const floating = Object.entries(pool ?? {}).filter(([x, n]) => n > 0 && (!pay.pool || pay.pool.includes(x)));
   const what = pay.kind === "spell" ? "Cast" : pay.kind === "ability" ? "Activate" : "Pay for";
+  if (pay.autoPaid) {
+    return (
+      <div className="pay-prompt" role="dialog" aria-label={`Confirm paying for ${pay.card}`}>
+        <header>
+          <span className="pay-what">{what}</span>
+          <strong>{pay.card || "this"}</strong>
+          <ManaCost cost={pay.cost} font />
+        </header>
+        <p className="pay-tapped">Auto-pay tapped <b>{pay.autoPaid}</b>.</p>
+        <div className="pay-btns">
+          <PressButton what="ok" sent={game.sent} className="ar-btn primary" title="Pay with this mana" onClick={game.ok} hint={<Kbd action="ok" />}>
+            Confirm
+          </PressButton>
+          <PressButton what="cancel" sent={game.sent} className="ar-btn" title="Untap them and choose the mana yourself" onClick={game.cancel} hint={<Kbd action="cancel" />}>
+            Undo auto-pay
+          </PressButton>
+        </div>
+        <p className="pay-hint">{game.sent?.slow ? <Waiting text="Waiting for the game server…" className="" /> : "Or click a land to undo and tap it yourself."}</p>
+      </div>
+    );
+  }
   return (
     <div className="pay-prompt" role="dialog" aria-label={`Pay for ${pay.card}`}>
       <header>

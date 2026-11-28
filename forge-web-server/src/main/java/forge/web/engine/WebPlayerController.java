@@ -309,6 +309,11 @@ public class WebPlayerController extends PlayerControllerHuman {
         return chosen;
     }
 
+    /** The browser seat this controller answers for (null in some tests). */
+    public BrowserSeat seat() {
+        return seat;
+    }
+
     // ---- Combos: while recording or running one, nothing is skipped or answered for the player ----
 
     private boolean comboActive() {

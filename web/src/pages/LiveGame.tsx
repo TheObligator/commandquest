@@ -1123,6 +1123,7 @@ function LiveTable({ game, view, layout, gameMenu }: { game: ReturnType<typeof u
     if (game.busy()) return;
     if (hideEndTurn) return;
     if (priorityPrompt && game.prompt?.cancel.label === "End Turn" && !landCheck("skip")) return;
+    if (game.prompt?.pay?.autoPaid) return void game.cancel(); // Undo auto-pay: still casting
     castFrom.current = null;
     castDone.current = false;
     game.cancel();

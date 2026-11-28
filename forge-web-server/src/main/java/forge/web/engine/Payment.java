@@ -29,7 +29,7 @@ public final class Payment {
      * What you're paying for right now, or null when Forge isn't waiting for your mana. {@code pool}: the kinds of
      * floating mana (W U B R G C) that can pay some of it (colorless can't pay {W/U}, say).
      */
-    public record Info(String cost, String card, int cardId, String kind, List<Integer> sources, List<String> pool) {
+    public record Info(String cost, String card, int cardId, String kind, List<Integer> sources, List<String> pool, String autoPaid) {
     }
 
     /** Forge's current input for this seat, if it's a mana payment. */
@@ -43,12 +43,22 @@ public final class Payment {
         return null;
     }
 
-    /** OK: while {@code me} is paying mana it's Auto-pay (our planner, else Forge's); otherwise Forge's OK. Forge's UI thread. */
+    /**
+     * OK: while {@code me} is paying mana it's Auto-pay (our planner, else Forge's), which waits for a second press
+     * to spend the mana it tapped ({@link AutoPay#press}); otherwise Forge's OK. Forge's UI thread.
+     */
     public static void ok(IGameController ctl, Player me) {
         if (input(ctl) != null && me != null) {
-            AutoPay.run(ctl, me, ctl::selectButtonOk);
+            AutoPay.press(ctl, me, ctl::selectButtonOk);
         } else {
             ctl.selectButtonOk();
+        }
+    }
+
+    /** Cancel: while auto-paid mana waits for a second press it's Undo, otherwise Forge's Cancel. Forge's UI thread. */
+    public static void cancel(IGameController ctl, Player me) {
+        if (me == null || !AutoPay.undo(ctl, me)) {
+            ctl.selectButtonCancel();
         }
     }
 
@@ -112,7 +122,9 @@ public final class Payment {
                 pool.add(sym);
             }
         }
-        return new Info(cost.toString(), host == null ? "" : host.getName(), host == null ? 0 : host.getId(), kind, sources, pool);
+        AutoPay.Held held = AutoPay.held(ctl);
+        return new Info(cost.toString(), host == null ? "" : host.getName(), host == null ? 0 : host.getId(), kind, sources, pool,
+                held == null ? null : held.names());
     }
 
     /**
@@ -122,6 +134,7 @@ public final class Payment {
      * click. Returns false if Forge isn't waiting for this player's mana.
      */
     public static boolean payFree(IGameController ctl, Game g, Player me) {
+        AutoPay.undo(ctl, me);   // auto-paid mana waiting: untap it, this pays with nothing instead
         Info info = info(ctl, me);
         if (info == null) {
             return false;

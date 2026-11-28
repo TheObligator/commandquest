@@ -261,7 +261,7 @@ public final class GameHub {
             });
             case "cancel" -> act(c, ctl -> {
                 note(c, m);
-                ctl.selectButtonCancel();
+                forge.web.engine.Payment.cancel(ctl, me(c));
             });
             case "combo" -> combo(c, m);
             case "concede" -> {
@@ -724,6 +724,9 @@ public final class GameHub {
             });
             return;
         }
+        if (who != null) {
+            forge.web.engine.AutoPay.undo(ctl, who);   // a click while auto-paid mana waits: take that back first
+        }
         if (who != null && priorityInput(ctl) && Explain.noTargets(card, who, ability, label)) {
             notice(c, "Nothing it can target right now.");
             return;
@@ -1115,9 +1118,14 @@ public final class GameHub {
 
     /** OK: while you're paying mana it's Auto-pay (our planner, else Forge's); otherwise Forge's OK. */
     private void ok(Conn c, IGameController ctl) {
+        Payment.ok(ctl, me(c));
+    }
+
+    /** This connection's player in its game, or null. */
+    private Player me(Conn c) {
         BrowserSeat seat = seat(c);
         Game g = game(c);
-        Payment.ok(ctl, g == null || seat == null || seat.player() == null ? null : g.getPlayer(seat.player().getId()));
+        return g == null || seat == null || seat.player() == null ? null : g.getPlayer(seat.player().getId());
     }
 
     /** Is free play on in this game? If not, tells the browser that manual overrides are off. */

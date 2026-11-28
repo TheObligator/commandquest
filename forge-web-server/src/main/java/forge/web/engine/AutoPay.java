@@ -4,6 +4,7 @@ import forge.card.MagicColor;
 import forge.card.mana.ManaAtom;
 import forge.card.mana.ManaCostShard;
 import forge.game.ability.ApiType;
+import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.cost.CostPart;
 import forge.game.cost.CostTap;
@@ -35,6 +36,10 @@ import org.tinylog.Logger;
  * uncastable that the damage keeps castable. It taps them
  * through Forge's own payment, in an order where each tap's color is unambiguous. When it can't plan a payment (hybrid or Phyrexian
  * costs, floating mana, only sources with drawbacks left), Forge's own auto-payment does it.
+ *
+ * <p>From the browser's Auto-pay button ({@link #press}), the planned sources are first tapped with their mana left
+ * floating, and the payment waits: pressing it again ({@link #confirm}) spends that mana (and taps any pain lands in
+ * the plan, so no damage is taken before then); Undo ({@link #undo}) untaps them and the payment is back as it was.
  */
 public final class AutoPay {
 
@@ -55,22 +60,192 @@ public final class AutoPay {
     record Tap(Source source, SpellAbility ability, byte color) {
     }
 
+    /** Auto-paid mana floating for a payment, waiting for a second press or Undo. */
+    record Held(List<Card> tapped, List<Tap> later, String names) {
+    }
+
+    private static final Map<InputPayMana, Held> HELD = java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+    /** Payments whose auto-paid mana is being tapped right now: presses wait for it. */
+    private static final Set<InputPayMana> FLOATING = java.util.Collections.synchronizedSet(java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>()));
+
+    /** The auto-paid mana waiting for this seat's payment, or null. */
+    public static Held held(IGameController ctl) {
+        InputPayMana input = Payment.input(ctl);
+        return input == null ? null : HELD.get(input);
+    }
+
+    /**
+     * The Auto-pay button. First press: taps the plan with the mana left floating, to be confirmed or undone (straight
+     * through when a combo is recording or running, or nothing could float). Second press: {@link #confirm}. Forge's UI
+     * thread.
+     */
+    public static void press(IGameController ctl, Player me, Runnable fallback) {
+        if (held(ctl) != null) {
+            confirm(ctl, me, fallback);
+            return;
+        }
+        if (FLOATING.contains(Payment.input(ctl))) {
+            return;   // the first press is still tapping
+        }
+        boolean combo = ctl instanceof WebPlayerController w && w.seat() != null && w.seat().combos().active();
+        InputPayMana input = Payment.input(ctl);
+        List<Tap> plan = combo ? null : plan(ctl, me, input);
+        List<Tap> now = new ArrayList<>();
+        List<Tap> later = new ArrayList<>();
+        if (plan != null) {
+            for (Tap t : plan) {
+                (painful(t) ? later : now).add(t);
+            }
+        }
+        if (now.isEmpty()) {
+            run(ctl, me, fallback);
+            return;
+        }
+        Game g = me.getGame();
+        List<Card> tapped = new ArrayList<>();
+        FLOATING.add(input);
+        g.getAction().invoke(() -> {   // on the game thread, like tapping for mana (tapForMana)
+            try {
+                for (Tap t : now) {
+                    if (floatMana(g, me, t)) {
+                        tapped.add(t.source().card());
+                    }
+                }
+                StringBuilder names = new StringBuilder();
+                for (Card c : tapped) {
+                    names.append(names.length() == 0 ? "" : ", ").append(c.getName());
+                }
+                if (tapped.size() < now.size()) {
+                    Logger.warn("Auto-pay floated {} of {} taps", tapped.size(), now.size());
+                }
+                if (!tapped.isEmpty()) {
+                    HELD.put(input, new Held(tapped, later, names.toString()));
+                }
+            } finally {
+                FLOATING.remove(input);
+                refresh(ctl);
+            }
+        });
+    }
+
+    /** Second press: spend the floating mana, tap what was left for now (pain lands), and finish. Forge's UI thread. */
+    public static void confirm(IGameController ctl, Player me, Runnable fallback) {
+        InputPayMana input = Payment.input(ctl);
+        Held h = input == null ? null : HELD.remove(input);
+        if (h == null) {
+            return;
+        }
+        Payment.payPool(ctl, me, "all");
+        if (input.isPaid() || Payment.input(ctl) != input) {
+            return;
+        }
+        SpellAbility paidFor = me.getPaidForSA();
+        ManaCostBeingPaid cost = paidFor == null ? null : paidFor.getManaCostBeingPaid();
+        if (cost == null || cost.isPaid()) {
+            return;
+        }
+        List<Tap> rest = h.later();
+        Thread t = new Thread(() -> execute(input, me, cost, rest, fallback), "auto-pay");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /**
+     * Undo: untaps the auto-paid sources and takes their mana back; the payment is as it was. Returns once they're
+     * untapped (false: there was nothing to undo). Forge's UI thread.
+     */
+    public static boolean undo(IGameController ctl, Player me) {
+        InputPayMana input = Payment.input(ctl);
+        Held h = input == null ? null : HELD.remove(input);
+        if (h == null) {
+            return false;
+        }
+        Game g = me.getGame();
+        java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+        g.getAction().invoke(() -> {
+            try {
+                for (int i = h.tapped().size() - 1; i >= 0; i--) {
+                    if (!ManaUndo.untap(g, me, h.tapped().get(i))) {
+                        Logger.warn("Couldn't untap {} after auto-pay", h.tapped().get(i));
+                    }
+                }
+            } finally {
+                done.countDown();   // before refreshing: whoever waits may be on the thread a refresh needs
+                refresh(ctl);
+            }
+        });
+        try {
+            done.await(5, java.util.concurrent.TimeUnit.SECONDS);   // a click right after acts on the untapped lands
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        return true;
+    }
+
+    private static void refresh(IGameController ctl) {
+        if (ctl instanceof WebPlayerController w && w.seat() != null) {
+            w.seat().refresh();
+        }
+    }
+
+    /** Would this tap deal damage? */
+    private static boolean painful(Tap t) {
+        return t.source().painful().contains(t.color() == 0 ? (byte) ManaAtom.COLORLESS : t.color());
+    }
+
+    /** Taps for this mana, leaving it in the pool (not paying anything yet). Game thread. */
+    private static boolean floatMana(Game g, Player me, Tap t) {
+        SpellAbility sa = t.ability();
+        Card c = t.source().card();
+        if (c.isTapped() || !clean(sa, c)) {
+            return false;
+        }
+        sa.setActivatingPlayer(me);
+        AbilityManaPart mp = sa.getManaPart();
+        if (mp.isComboMana() || mp.isAnyMana()) {
+            byte color = t.color();
+            if (color == 0) {   // generic: any color it makes
+                for (byte col : COLORS) {
+                    if (sa.canProduce(MagicColor.toShortString(col))) {
+                        color = col;
+                        break;
+                    }
+                }
+            }
+            if (color == 0) {
+                return false;
+            }
+            mp.setExpressChoice(MagicColor.toShortString(color));
+        }
+        for (CostPart part : sa.getPayCosts().getCostParts()) {
+            part.payAsDecided(me, null, sa, false);
+        }
+        g.getStack().add(sa); // a mana ability resolves right away
+        g.getAction().checkStaticAbilities();
+        return true;
+    }
+
+    private static List<Tap> plan(IGameController ctl, Player me, InputPayMana input) {
+        SpellAbility paidFor = me == null ? null : me.getPaidForSA();
+        ManaCostBeingPaid cost = paidFor == null ? null : paidFor.getManaCostBeingPaid();
+        try {
+            if (input != null && cost != null && me.getManaPool().isEmpty() && !paidFor.tracksManaSpent()) {
+                UseLater later = ctl instanceof WebPlayerController w ? w.later() : null;
+                return plan(sources(me, paidFor, later), shards(cost), keep(me, paidFor, later));
+            }
+        } catch (RuntimeException e) {
+            Logger.debug(e, "Couldn't plan the payment");
+        }
+        return null;
+    }
+
     private static final byte[] COLORS = {MagicColor.WHITE, MagicColor.BLUE, MagicColor.BLACK, MagicColor.RED, MagicColor.GREEN};
 
     /** Pays what {@code me} is paying now; {@code fallback} is Forge's auto-pay. Call on Forge's UI thread. */
     public static void run(IGameController ctl, Player me, Runnable fallback) {
         InputPayMana input = Payment.input(ctl);
-        SpellAbility paidFor = me == null ? null : me.getPaidForSA();
-        ManaCostBeingPaid cost = paidFor == null ? null : paidFor.getManaCostBeingPaid();
-        List<Tap> plan = null;
-        try {
-            if (input != null && cost != null && me.getManaPool().isEmpty() && !paidFor.tracksManaSpent()) {
-                UseLater later = ctl instanceof WebPlayerController w ? w.later() : null;
-                plan = plan(sources(me, paidFor, later), shards(cost), keep(me, paidFor, later));
-            }
-        } catch (RuntimeException e) {
-            Logger.debug(e, "Couldn't plan the payment");
-        }
+        List<Tap> plan = plan(ctl, me, input);
+        ManaCostBeingPaid cost = plan == null ? null : me.getPaidForSA().getManaCostBeingPaid();
         if (plan == null) {
             fallback.run();
             return;

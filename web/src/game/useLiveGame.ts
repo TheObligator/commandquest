@@ -41,6 +41,11 @@ export interface LivePay {
   sources?: number[];
   /** The kinds of floating mana in your pool that can pay some of it ("W", "C"…). */
   pool?: string[];
+  /**
+   * Auto-pay tapped these (names, comma-separated) and their mana floats: OK confirms the payment,
+   * Cancel undoes the taps.
+   */
+  autoPaid?: string;
 }
 
 export interface AskOption {

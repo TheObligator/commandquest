@@ -341,4 +341,116 @@ public class PaymentTest {
             Assert.assertTrue(cards[1].isTapped() && cards[2].isTapped() && cards[3].isTapped(), "the Forge and both Mountains paid");
         });
     }
+
+    @Test(timeOut = 240_000)
+    public void autoPayWaitsForASecondPressAndCanBeUndone() throws Exception {
+        MyRandom.setRandom(new Random(5));
+        GameSessionTest.ScriptedBrowser browser = new GameSessionTest.ScriptedBrowser();
+        GameSession session = GameSession.startCommander(List.of(
+                new GameSession.Seat("You", deck("Narset, Enlightened Master", "Mountain"), browser),
+                new GameSession.Seat("AI 1", deck("Talrand, Sky Summoner", "Island"), null)));
+        try {
+            PlayerView meView = untilMyMain(session, browser);
+            IGameController controller = session.controller("You", meView);
+            Game g = session.game();
+            Player me = g.getPlayer(meView.getId());
+            Card[] cards = onGameThread(g, () -> {
+                tapTheRest(me);
+                return new Card[] {
+                    make(me, "Command Tower", ZoneType.Battlefield),
+                    make(me, "Battlefield Forge", ZoneType.Battlefield),
+                    make(me, "Mountain", ZoneType.Battlefield),
+                    make(me, "Mountain", ZoneType.Battlefield),
+                    make(me, "Guinan, Ancient Advisor", ZoneType.Hand),
+                };
+            });
+            make(me, "Opt", ZoneType.Hand);   // so the Forge pays {W} with 1 damage, on the second press
+            int life = me.getLife();
+            onUiThread(() -> controller.selectCard(cards[4].getView(), null, null));
+            waitFor(() -> Payment.info(controller, me) != null, "the mana payment");
+
+            // First press: the painless part is tapped, its mana floats, nothing is paid yet.
+            onUiThread(() -> {
+                Payment.ok(controller, me);
+                return null;
+            });
+            waitFor(() -> AutoPay.held(controller) != null, "the auto-paid mana");
+            Assert.assertTrue(cards[2].isTapped() && cards[3].isTapped(), "both Mountains tapped");
+            Assert.assertFalse(cards[1].isTapped(), "the pain land waits for the second press");
+            Assert.assertEquals(me.getManaPool().totalMana(), 2, "their mana floats");
+            Assert.assertEquals(Payment.info(controller, me).autoPaid(), "Mountain, Mountain");
+            Assert.assertTrue(g.getStack().isEmpty(), "not cast yet");
+
+            // Undo: untapped, the payment is as it was.
+            onUiThread(() -> {
+                Payment.cancel(controller, me);
+                return null;
+            });
+            Assert.assertNull(AutoPay.held(controller), "nothing held");
+            Assert.assertFalse(cards[2].isTapped() || cards[3].isTapped(), "the Mountains are untapped again");
+            Assert.assertEquals(me.getManaPool().totalMana(), 0, "the mana is gone");
+            Assert.assertNotNull(Payment.info(controller, me), "still paying");
+            Assert.assertEquals(Payment.info(controller, me).cost(), "{2}{W}");
+
+            // Press, then confirm.
+            onUiThread(() -> {
+                Payment.ok(controller, me);
+                return null;
+            });
+            waitFor(() -> AutoPay.held(controller) != null, "the auto-paid mana again");
+            Assert.assertEquals(me.getLife(), life, "no damage before confirming");
+            onUiThread(() -> {
+                Payment.ok(controller, me);
+                return null;
+            });
+            waitFor(() -> Payment.info(controller, me) == null && !g.getStack().isEmpty(), "Guinan on the stack");
+            Assert.assertEquals(me.getLife(), life - 1, "the Forge's damage on confirming");
+            Assert.assertFalse(cards[0].isTapped(), "Command Tower stays up for Opt");
+            Assert.assertEquals(me.getManaPool().totalMana(), 0, "all the floating mana was spent");
+        } finally {
+            session.abort();
+        }
+    }
+
+    @Test(timeOut = 240_000)
+    public void autoPayFloatsCommandTowersColorAndConfirms() throws Exception {
+        MyRandom.setRandom(new Random(5));
+        GameSessionTest.ScriptedBrowser browser = new GameSessionTest.ScriptedBrowser();
+        GameSession session = GameSession.startCommander(List.of(
+                new GameSession.Seat("You", deck("Narset, Enlightened Master", "Mountain"), browser),
+                new GameSession.Seat("AI 1", deck("Talrand, Sky Summoner", "Island"), null)));
+        try {
+            PlayerView meView = untilMyMain(session, browser);
+            IGameController controller = session.controller("You", meView);
+            Game g = session.game();
+            Player me = g.getPlayer(meView.getId());
+            Card[] cards = onGameThread(g, () -> {
+                tapTheRest(me);
+                return new Card[] {
+                    make(me, "Command Tower", ZoneType.Battlefield),
+                    make(me, "Battlefield Forge", ZoneType.Battlefield),
+                    make(me, "Mountain", ZoneType.Battlefield),
+                    make(me, "Island", ZoneType.Battlefield),
+                    make(me, "Talisman of Conviction", ZoneType.Battlefield),
+                    make(me, "Guinan, Ancient Advisor", ZoneType.Hand),
+                };
+            });
+            onUiThread(() -> controller.selectCard(cards[5].getView(), null, null));
+            waitFor(() -> Payment.info(controller, me) != null, "the mana payment");
+            onUiThread(() -> {
+                Payment.ok(controller, me);
+                return null;
+            });
+            waitFor(() -> AutoPay.held(controller) != null, "the auto-paid mana");
+            Assert.assertEquals(me.getManaPool().getAmountOfColor(forge.card.MagicColor.WHITE), 1, "Command Tower made {W}");
+            onUiThread(() -> {
+                Payment.ok(controller, me);
+                return null;
+            });
+            waitFor(() -> Payment.info(controller, me) == null && !g.getStack().isEmpty(), "Guinan on the stack");
+            Assert.assertEquals(me.getManaPool().totalMana(), 0, "all the floating mana was spent");
+        } finally {
+            session.abort();
+        }
+    }
 }
