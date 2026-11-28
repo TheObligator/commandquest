@@ -1,0 +1,6 @@
+{
+  "category": "improved",
+  "title": "Same mana popup for every land",
+  "date": "2026-11-28T08:58:49.923Z",
+  "body": "Tapping a land that can make more than one kind of mana (dual lands, pain lands, any-color lands) now always shows the same small mana popup by the card, in one step. Pain lands show which mana deals damage to you."
+}

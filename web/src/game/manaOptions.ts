@@ -4,7 +4,12 @@
 
 /** One way to answer: the mana it makes, as symbols ("{W}{U}"), and the answer to send. */
 export interface ManaChoiceOption {
+  /** The mana as symbols; empty when the option is an ability's text (`label`). */
   cost: string;
+  /** Without `cost`: what the button says (an ability we can't show as mana, a filter land's). */
+  label?: string;
+  /** What it costs you besides tapping ("1 damage to you"). */
+  note?: string;
   /** distribute: how much of each option; choose: the option's index. */
   answer: number[];
 }
@@ -13,6 +18,10 @@ export interface ManaChoiceOption {
 export interface ManaOptionLike {
   mana?: string;
   max?: number;
+  /** Several symbols at once ("{C}{C}"), when the server spells them out. */
+  cost?: string;
+  label?: string;
+  note?: string;
 }
 
 const COLOR_NAMES: Record<string, string> = { White: "W", Blue: "U", Black: "B", Red: "R", Green: "G", Colorless: "C" };
@@ -52,7 +61,10 @@ export function combos(options: ManaOptionLike[], amount: number): ManaChoiceOpt
 
 /** One mana of one of these colors: a button each. */
 export function singles(options: ManaOptionLike[]): ManaChoiceOption[] {
-  return options.map((o, i) => ({ cost: `{${o.mana}}`, answer: [i] }));
+  return options.map((o, i) => {
+    const cost = o.cost ?? (o.mana ? `{${o.mana}}` : "");
+    return { cost, answer: [i], ...(cost ? {} : { label: o.label ?? "?" }), ...(o.note ? { note: o.note } : {}) };
+  });
 }
 
 /** The bits of a question or prompt this looks at (LiveAsk, LivePrompt). */

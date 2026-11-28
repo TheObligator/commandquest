@@ -3,6 +3,7 @@
 // a question in the rail. Choices come from manaOptions.ts.
 import { useLayoutEffect, useRef, useState } from "react";
 import { ManaCost } from "../components/ManaCost";
+import { SymText } from "./GainedMarks";
 import type { ManaChoiceView } from "./manaOptions";
 
 const GAP = 10;
@@ -49,8 +50,10 @@ export function ManaChoice({ choice, anchorId, onPick, onCancel }: {
       <p className="mana-choice-title">{choice.title}</p>
       <div className="mana-choice-btns">
         {choice.choices.map((c, i) => (
-          <button key={i} className="mana-choice-btn" autoFocus={i === 0} title={`Add ${c.cost}`} onClick={() => onPick(c.answer)}>
-            <ManaCost cost={c.cost} font />
+          <button key={i} className={`mana-choice-btn${c.cost ? "" : " text"}`} autoFocus={i === 0}
+            title={`${c.cost ? `Add ${c.cost}` : c.label}${c.note ? ` (${c.note})` : ""}`} onClick={() => onPick(c.answer)}>
+            {c.cost ? <ManaCost cost={c.cost} font /> : <SymText text={c.label ?? ""} />}
+            {c.note && <small className="mana-choice-note">{c.note}</small>}
           </button>
         ))}
       </div>

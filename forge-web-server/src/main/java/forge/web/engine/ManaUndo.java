@@ -25,7 +25,7 @@ public final class ManaUndo {
     }
 
     /** The mana ability of {@code card} that {@code me} can take back now, or null. */
-    static SpellAbility undoable(Game g, Player me, Card card) {
+    public static SpellAbility undoable(Game g, Player me, Card card) {
         MagicStack stack = g.getStack();
         if (card == null || me == null || !card.isTapped() || card.getController() != me || !stack.canUndo(me)) {
             return null;

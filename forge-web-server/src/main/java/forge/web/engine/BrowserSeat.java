@@ -772,9 +772,32 @@ public final class BrowserSeat implements IRemote {
                 if (options.size() == 1) {
                     return options.get(0); // you clicked the card to do the only thing it can do
                 }
-                o.put("message", "Choose an ability");
+                List<ManaOpt> mana = manaOptions(options);
+                if (mana != null) {
+                    // Only mana abilities (a dual land, a pain land): ask which mana, like any other mana choice.
+                    options = mana;
+                    o.put("message", "Which mana?");
+                    SpellAbilityView first = (SpellAbilityView) mana.get(0).view();
+                    if (gv != null && first.getHostCard() != null) {
+                        o.set("card", views.card(gv, first.getHostCard(), me));
+                    }
+                    ArrayNode arr = o.putArray("options");
+                    for (ManaOpt m : mana) {
+                        ObjectNode e = arr.addObject();
+                        e.put("label", m.label());
+                        e.put("mana", m.mana());
+                        if (!m.mana().isEmpty()) {
+                            e.put("cost", "{" + String.join("}{", m.mana().split("")) + "}");
+                        }
+                        if (m.harm() != null) {
+                            e.put("note", m.harm());
+                        }
+                    }
+                } else {
+                    o.put("message", "Choose an ability");
+                    o.set("options", options(gv, options, null));
+                }
                 min = 0;
-                o.set("options", options(gv, options, null));
             }
             case chooseSingleEntityForEffect -> {
                 o.put("message", str(a[0]));
@@ -910,6 +933,13 @@ public final class BrowserSeat implements IRemote {
         // a reveal shows cards outright; any other question may let you look at some (scry, a hand)
         sawCards("info".equals(o.path("kind").asText()) ? options : null);
         Object answer = waitFor(o, options, ev);
+        if (answer instanceof ManaOpt m) {
+            // The mana picked: that ability, making that color (Forge then doesn't ask which color).
+            if (m.sa() != null && !m.choice().isEmpty() && m.sa().getManaPart() != null) {
+                m.sa().getManaPart().setExpressChoice(m.choice());
+            }
+            return m.view();
+        }
         return answer == NO_ANSWER ? defaultAnswer(ev) : answer;
     }
 
@@ -1001,6 +1031,68 @@ public final class BrowserSeat implements IRemote {
         ArrayNode a = o.putArray("cards");
         cards.forEach(c -> a.add(views.card(gv, c, me, true)));
         emit(o);
+    }
+
+    /** One mana an ability can make: {@code choice} is the color to make when the ability lets you pick ("" for fixed mana). */
+    private record ManaOpt(Object view, forge.game.spellability.SpellAbility sa, String choice, String mana, String label, String harm) {
+    }
+
+    /**
+     * Forge asking which of a card's abilities to use, when all of them make mana: each mana they can
+     * make, one option each ({G}, {U}; a pain land's {C}, {W}, {U}), so the browser shows its mana
+     * buttons. An ability we can't spell out that way (a filter land's) is one option with its text.
+     * Null when any option isn't a mana ability. Game thread.
+     */
+    private List<ManaOpt> manaOptions(List<?> items) {
+        Game g = game.get();
+        if (g == null || me == null || items.isEmpty()) {
+            return null;
+        }
+        forge.game.player.Player player = g.getPlayer(me.getId());
+        Card card = null;
+        List<forge.game.spellability.SpellAbility> sas = new ArrayList<>();
+        for (Object item : items) {
+            if (!(item instanceof SpellAbilityView v) || v.getHostCard() == null) {
+                return null;
+            }
+            Card host = g.findById(v.getHostCard().getId());
+            if (host == null || card != null && host != card) {
+                return null;
+            }
+            card = host;
+            forge.game.spellability.SpellAbility sa = null;
+            for (forge.game.spellability.SpellAbility m : host.getManaAbilities()) {
+                if (m.getId() == v.getId()) {
+                    sa = m;
+                }
+            }
+            if (sa == null) {
+                return null;   // not a mana ability
+            }
+            sas.add(sa);
+        }
+        List<forge.game.spellability.SpellAbility> all = new ArrayList<>(card.getManaAbilities());
+        List<ManaTaps.Pick> picks = player == null ? List.of() : ManaTaps.options(g, player, List.of(card)).getOrDefault(card.getId(), List.of());
+        List<ManaOpt> out = new ArrayList<>();
+        for (int i = 0; i < items.size(); i++) {
+            forge.game.spellability.SpellAbility sa = sas.get(i);
+            int index = all.indexOf(sa);
+            boolean any = false;
+            for (ManaTaps.Pick p : picks) {
+                if (p.source() == card.getId() && p.ability() == index && p.via() == null) {
+                    any = true;
+                    String harm = p.damage() > 0 ? p.damage() + " damage to you" : p.life() > 0 ? "Pay " + p.life() + " life" : null;
+                    out.add(new ManaOpt(items.get(i), sa, p.choice(), p.mana(), "Add " + p.mana(), harm));
+                }
+            }
+            if (!any) {
+                String text = ((SpellAbilityView) items.get(i)).getDescription();
+                out.add(new ManaOpt(items.get(i), sa, "", "", text == null ? "Use it" : text, null));
+            }
+        }
+        // Colors in the usual order (W U B R G), then colorless; text-only options last.
+        out.sort(java.util.Comparator.comparingInt(m -> m.mana().isEmpty() ? 99 : "WUBRGC".indexOf(m.mana().charAt(0)) & 0xff));
+        return out.size() > 1 ? out : null;
     }
 
     private ArrayNode options(GameView gv, List<?> items, FSerializableFunction<Object, String> display) {

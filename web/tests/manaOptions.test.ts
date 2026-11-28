@@ -40,3 +40,11 @@ test("asked by the card: a filter land's mana, a color, Forge's two-color prompt
   assert.equal(manaChoiceFor(null, two)!.via, "prompt");
   assert.equal(manaChoiceFor(null, { message: "", ok: { label: "OK" }, cancel: { label: "End Turn" } }), null);
 });
+
+test("mana options the server spells out: several symbols, an ability's text, what it costs you", () => {
+  assert.deepEqual(singles([{ mana: "CC", cost: "{C}{C}" }, { mana: "W", cost: "{W}", note: "1 damage to you" }, { mana: "", label: "{W/U}, {T}: Add {W}{W}." }]), [
+    { cost: "{C}{C}", answer: [0] },
+    { cost: "{W}", answer: [1], note: "1 damage to you" },
+    { cost: "", answer: [2], label: "{W/U}, {T}: Add {W}{W}." },
+  ]);
+});
