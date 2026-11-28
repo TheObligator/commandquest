@@ -2,6 +2,8 @@
 // its art, kind, rules text and targets. Drag it by its title bar and resize it from the corner;
 // both are remembered in this browser. Click a tile, its "⋯" or right-click it for the full text
 // and (live games) its auto-yield settings. Lines run from each item to what it targets.
+// While you're choosing targets (a counterspell), spells you can target glow, and clicking one
+// targets it; "⋯" and right-click still open it.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { type Box, useFloatingBox } from "./floatingBox";
 import type { MenuSection } from "../components/CardMenu";
@@ -38,8 +40,15 @@ export function StackWindow(props: {
   colorOf: (id: string) => string;
   /** Live games: an item's auto-yield settings. */
   itemMenu?: (s: StackItemView) => MenuSection[];
+  /** Cards the current prompt lets you pick: a spell whose card is one is a target you can click. */
+  selectable?: Set<number>;
+  /** Cards chosen so far for the current prompt. */
+  chosen?: Set<number>;
+  /** Picks a spell's card (as a click on it would). */
+  onPick?: (cardId: number) => void;
 }) {
-  const { view, nameOf, colorOf } = props;
+  const { view, nameOf, colorOf, selectable, chosen, onPick } = props;
+  const pickable = (s: StackItemView) => s.cardId !== undefined && !!onPick && !!selectable?.has(s.cardId);
   const { box, ref, startDrag, onResizeEnd } = useFloatingBox(KEY, () => DEFAULT_BOX);
   const [open, setOpen] = useState<{ id: number; x: number; y: number } | null>(null);
   const setPreview = usePreview();
@@ -80,13 +89,21 @@ export function StackWindow(props: {
             const whole = fullCard(s, "normal");
             const n = numberOf(view, s);
             const targets = s.targets ?? [];
+            const pick = pickable(s);
+            const picked = s.cardId !== undefined && !!chosen?.has(s.cardId);
             return (
               <li
                 key={s.id}
-                className={`stk-item${open?.id === s.id ? " open" : ""}`}
+                className={`stk-item${open?.id === s.id ? " open" : ""}${pick ? " selectable" : ""}${picked ? " chosen" : ""}`}
                 data-stack-id={s.id}
                 style={{ "--seat": colorOf(s.controller) } as React.CSSProperties}
-                onClick={(e) => openItem(e, s)}
+                title={pick ? `Target ${s.name}` : undefined}
+                onClick={(e) => {
+                  if (!pick) return openItem(e, s);
+                  e.stopPropagation();
+                  setOpen(null);
+                  onPick!(s.cardId!);
+                }}
                 onContextMenu={(e) => openItem(e, s)}
                 onMouseEnter={() => s.card && setPreview({ card: s.card })}
                 onMouseLeave={() => setPreview(null)}

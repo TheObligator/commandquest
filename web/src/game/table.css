@@ -320,6 +320,9 @@ dialog.zone-viewer { width: min(980px, calc(100vw - 32px)); max-height: 86vh; ba
   cursor: pointer; overflow: visible; transition: box-shadow .12s;
 }
 .stk-item:hover, .stk-item.open { box-shadow: 0 0 0 1px var(--seat), 0 0 14px -4px var(--seat); }
+/* A spell you can target right now (a counterspell's prompt), and one you've chosen. */
+.stk-item.selectable { box-shadow: 0 0 0 2px var(--accent-2, #ffd27a), 0 0 12px rgb(255 210 122 / 45%); }
+.stk-item.chosen { box-shadow: 0 0 0 3px #7fd1ff, 0 0 14px rgb(127 209 255 / 55%); }
 .stk-name { padding: 6px 8px 5px 30px; font-weight: 700; font-size: .84rem; color: #f1e9d6; background: color-mix(in srgb, var(--seat) 16%, #2a241a); border-radius: 8px 8px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stk-art { display: block; width: 100%; aspect-ratio: 626 / 457; object-fit: cover; max-height: 120px; }
 /* A spell: the whole card, not just its art. */

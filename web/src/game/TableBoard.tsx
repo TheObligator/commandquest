@@ -382,7 +382,15 @@ export function TableBoard(props: {
 
         <div className="game-center">
           {props.banner}
-          <StackWindow view={v} nameOf={nameOf} colorOf={colorOf} itemMenu={props.stackItemMenu} />
+          <StackWindow
+            view={v}
+            nameOf={nameOf}
+            colorOf={colorOf}
+            itemMenu={props.stackItemMenu}
+            selectable={props.selectable}
+            chosen={props.chosen}
+            onPick={props.onCardClick}
+          />
           <div
             className={`game-table layout-${layout}`}
             style={{ gridTemplateAreas: g.areas.map((a) => `"${a}"`).join(" "), gridTemplateRows: g.rows }}
