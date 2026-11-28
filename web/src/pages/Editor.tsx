@@ -1698,6 +1698,7 @@ function DeckView(props: {
       {!isPlainList(deck.format) && <DeckBracket
         cards={deck.cards}
         commander={deck.format === "commander"}
+        format={deck.format}
         bracket={deck.bracket}
         tags={deck.bracketTags ?? []}
         onBracket={props.onBracket}

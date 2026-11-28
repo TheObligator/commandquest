@@ -67,7 +67,7 @@ export interface GlanceCategory {
 export const GLANCE: GlanceCategory[] = [
   { id: "gameChanger", label: "Game Changers", hint: "On the official Game Changers list. Exhibition and Core allow none, Upgraded up to 3." },
   { id: "tutor", label: "Tutors", query: "otag:tutor -otag:ramp -t:land", hint: "Search your library for a card (land searches don't count)." },
-  { id: "fastMana", label: "Fast mana", hint: "Cards that make more mana than they cost, early (a fixed list: Sol Ring, Mana Crypt, rituals, Moxen…)." },
+  { id: "fastMana", label: "Fast mana", hint: "Cards that make more mana than they cost, early (a fixed list)." },
   { id: "massLandDenial", label: "Mass land denial", query: "otag:mass-land-denial", hint: "Destroys or locks down many lands. Only Optimized and cEDH allow it." },
   { id: "extraTurn", label: "Extra turns", query: "otag:extra-turn", hint: "Exhibition allows none; Core and Upgraded only a few, never chained." },
   { id: "interaction", label: "Interaction", hint: "Removal, board wipes and counterspells together (each card once)." },
@@ -77,6 +77,27 @@ export const GLANCE: GlanceCategory[] = [
   { id: "ramp", label: "Ramp", query: "otag:ramp", hint: "Puts more mana or lands into play." },
   { id: "draw", label: "Card draw", query: "otag:draw", hint: "Draws cards." },
 ];
+
+/**
+ * Example fast mana for the hint, legal in each format, so the hint never names a banned card
+ * (Mana Crypt is only legal in Vintage; Conquest also bans Sol Ring). Formats not listed get none.
+ */
+const FAST_MANA_EXAMPLES: Record<string, string> = {
+  vintage: "Sol Ring, Mana Crypt, rituals, Moxen",
+  commander: "Sol Ring, Ancient Tomb, rituals, Mox Diamond",
+  other: "Sol Ring, Ancient Tomb, rituals, Mox Diamond",
+  conquest: "Lotus Petal, rituals, Mox Diamond",
+  legacy: "Lotus Petal, Ancient Tomb, rituals, Chrome Mox",
+  modern: "rituals, Chrome Mox, Simian Spirit Guide",
+  pauper: "Dark Ritual, Lotus Petal",
+};
+
+/** A category's hint for a deck in `format`. */
+export function glanceHint(cat: GlanceCategory, format: string): string {
+  if (cat.id !== "fastMana") return cat.hint;
+  const examples = FAST_MANA_EXAMPLES[format];
+  return examples ? cat.hint.replace("a fixed list", `a fixed list: ${examples}…`) : cat.hint;
+}
 
 /** Scryfall-tag categories that make up Interaction. */
 const INTERACTION = ["removal", "boardWipe", "counterspell"];

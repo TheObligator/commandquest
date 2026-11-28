@@ -5,7 +5,7 @@ import { FoldSection } from "./Collapsible";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DeckCard } from "../../convex/model/deckRules";
 import { MAX_BRACKET_TAG_LENGTH, MAX_BRACKET_TAGS } from "../../convex/model/deckRules";
-import { GLANCE, REASON_TAGS, bracketFloor, bracketName, glance, total, type GlanceCard } from "../brackets";
+import { GLANCE, REASON_TAGS, bracketFloor, bracketName, glance, glanceHint, total, type GlanceCard } from "../brackets";
 import { knownTags, lookUpTags, pendingQueries } from "../cardtags";
 import { errorMessage } from "../app/errors";
 import { BracketMenu } from "./BracketMenu";
@@ -17,6 +17,8 @@ export function DeckBracket(props: {
   cards: DeckCard[];
   /** Commander decks get the bracket picker; every deck gets the counts. */
   commander: boolean;
+  /** The deck's format, so hints only name cards legal in it. */
+  format: string;
   bracket?: number;
   tags: string[];
   onBracket: (b: number | undefined) => void;
@@ -119,7 +121,7 @@ export function DeckBracket(props: {
             <button
               key={c.id}
               className={`glance-tile${open === c.id ? " open" : ""}${n === 0 ? " zero" : ""} is-${c.id}`}
-              title={c.hint}
+              title={glanceHint(c, props.format)}
               aria-expanded={open === c.id}
               onClick={() => setOpen(open === c.id ? null : c.id)}
             >
@@ -132,7 +134,7 @@ export function DeckBracket(props: {
       {openCat && (
         <div className="glance-list">
           <p className="muted small">
-            {openCat.hint}
+            {glanceHint(openCat, props.format)}
             {openCat.query && (
               <>
                 {" "}

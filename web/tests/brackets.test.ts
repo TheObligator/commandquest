@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { batchQueries, bracketFloor, glance, total } from "../src/brackets.ts";
+import { GLANCE, batchQueries, bracketFloor, glance, glanceHint, total } from "../src/brackets.ts";
+import { BANNED as CONQUEST_BANNED } from "../src/formats/conquest.ts";
 
 test("bracketFloor: Game Changers, mass land denial and extra turns set the lowest bracket", () => {
   assert.deepEqual(bracketFloor({ gameChangers: 0, massLandDenial: 0, extraTurns: 0 }), { bracket: 1, reasons: [] });
@@ -43,4 +44,13 @@ test("batchQueries splits names into exact-name queries that fit Scryfall's leng
   assert.deepEqual(qs.flatMap((q) => q.names), names);
   assert.equal(batchQueries("otag:ramp", ['Say "Hi"'])[0].query, 'otag:ramp (!"Say Hi")');
   assert.equal(batchQueries("otag:ramp", ["Sol Ring", "Fire // Ice"])[0].query, 'otag:ramp (!"Sol Ring" or !"Fire // Ice")');
+});
+
+test("glanceHint: fast mana examples only name cards legal in the deck's format", () => {
+  const fast = GLANCE.find((c) => c.id === "fastMana")!;
+  assert.match(glanceHint(fast, "vintage"), /Mana Crypt/);
+  for (const f of ["commander", "other", "conquest", "legacy", "modern", "pauper", "standard", "pioneer"]) assert.doesNotMatch(glanceHint(fast, f), /Mana Crypt/, f);
+  const conquest = glanceHint(fast, "conquest").toLowerCase();
+  for (const name of CONQUEST_BANNED) assert.ok(!conquest.includes(name), name);
+  assert.equal(glanceHint(fast, "standard"), fast.hint);
 });
