@@ -139,15 +139,21 @@ export const get = query({
 });
 
 /**
- * A shared deck as the editor's link import takes it (convex/importDeck.ts): public, unlisted or
- * yours, else null. Like the share page, its game settings and folder stay private.
+ * A deck as the editor's link import takes it (convex/importDeck.ts), else null. By share key: the
+ * share page's rules (public, unlisted or yours). By deck id (an editor link): yours, or public.
+ * An unlisted deck needs its share link. Like the share page, game settings and folder stay private.
  */
 export const forImport = internalQuery({
-  args: { key: v.string() },
-  handler: async (ctx, { key }) => {
-    const found = await sharedDeck(ctx, key);
-    if (!found) return null;
-    const d = found.deck;
+  args: { shareKey: v.optional(v.string()), deckId: v.optional(v.string()) },
+  handler: async (ctx, { shareKey, deckId }) => {
+    let d: Doc<"decks"> | null = null;
+    if (shareKey) d = (await sharedDeck(ctx, shareKey))?.deck ?? null;
+    else if (deckId) {
+      const id = ctx.db.normalizeId("decks", deckId);
+      const deck = id && (await ctx.db.get(id));
+      if (deck && (deck.userId === (await getAuthUserId(ctx)) || visibilityOf(deck.visibility) === "public")) d = deck;
+    }
+    if (!d) return null;
     return {
       name: d.name,
       format: d.format,

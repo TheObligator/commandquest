@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { checkBracket, colorCards, DeckError, MAX_QUANTITY, summarize, validateDeck, withCardsAdded, type DeckCard } from "../convex/model/deckRules.ts";
-import { archidektCategories, deckSource, parseArchidekt, parseMoxfield, shareKeyFromLink } from "../convex/model/importers.ts";
+import { archidektCategories, deckSource, parseArchidekt, parseMoxfield, ourDeckLink } from "../convex/model/importers.ts";
 import { cleanFolderName, FolderError, MAX_FOLDER_NAME } from "../convex/model/folderRules.ts";
 
 test("validateDeck trims, defaults the format and board, and clips printing fields", () => {
@@ -53,15 +53,19 @@ test("summarize counts main + commander and picks the commander's art", () => {
   assert.deepEqual(s, { cardCount: 11, commanders: ["Atraxa"], coverScryfallId: "d0d33d52-3d28-4635-b985-51e126289259" });
 });
 
-test("shareKeyFromLink reads CommandQuest share links and bare keys", () => {
-  assert.equal(shareKeyFromLink("https://commandquest.app/#/d/aB3dE5gH7k"), "aB3dE5gH7k");
-  assert.equal(shareKeyFromLink("  https://staging.commandquest.app/#/d/aB3dE5gH7k/ "), "aB3dE5gH7k");
-  assert.equal(shareKeyFromLink("http://localhost:5173/?x=1#/d/aB3dE5gH7k?tab=list"), "aB3dE5gH7k");
-  assert.equal(shareKeyFromLink("aB3dE5gH7k"), "aB3dE5gH7k");
-  assert.equal(shareKeyFromLink("https://commandquest.app/#/d/short"), null);
-  assert.equal(shareKeyFromLink("https://commandquest.app/#/decks/aB3dE5gH7k"), null);
-  assert.equal(shareKeyFromLink("https://moxfield.com/decks/aB3dE5gH7k"), null);
-  assert.equal(shareKeyFromLink("aB3dE5gH70"), null); // 0 isn't in share keys
+test("ourDeckLink reads CommandQuest share links, editor links and bare share keys", () => {
+  const id = "k57d2x9y8w7v6u5t4s3r2q1p0n9m8l7k";
+  assert.deepEqual(ourDeckLink("https://commandquest.app/#/d/aB3dE5gH7k"), { shareKey: "aB3dE5gH7k" });
+  assert.deepEqual(ourDeckLink("  https://staging.commandquest.app/#/d/aB3dE5gH7k/ "), { shareKey: "aB3dE5gH7k" });
+  assert.deepEqual(ourDeckLink("http://localhost:5173/?x=1#/d/aB3dE5gH7k?tab=list"), { shareKey: "aB3dE5gH7k" });
+  assert.deepEqual(ourDeckLink("aB3dE5gH7k"), { shareKey: "aB3dE5gH7k" });
+  assert.deepEqual(ourDeckLink(`https://staging.commandquest.app/#/decks/${id}`), { deckId: id });
+  assert.deepEqual(ourDeckLink(`https://commandquest.app/#/decks/${id}?tab=stats`), { deckId: id });
+  assert.equal(ourDeckLink("https://commandquest.app/#/decks/new"), null);
+  assert.equal(ourDeckLink("https://commandquest.app/#/decks/browse"), null);
+  assert.equal(ourDeckLink("https://commandquest.app/#/d/short"), null);
+  assert.equal(ourDeckLink("https://moxfield.com/decks/aB3dE5gH7k"), null);
+  assert.equal(ourDeckLink("aB3dE5gH70"), null); // 0 isn't in share keys
 });
 
 test("deckSource only accepts Moxfield and Archidekt deck links", () => {

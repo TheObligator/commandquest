@@ -38,17 +38,24 @@ export function deckSource(url: string): DeckSource | null {
   return null;
 }
 
-/** A CommandQuest share link (`…/#/d/<key>`, on any of our sites) or a bare share key. */
-const SHARE_LINK = /^https?:\/\/[^/#?\s]+\/?(?:\?[^#]*)?#\/d\/([^/?#\s]+)\/?(?:[?#].*)?$/;
+/** Our deck links, on any of our sites: the share page `…/#/d/<key>` or the editor `…/#/decks/<id>`. */
+const DECK_LINK = /^https?:\/\/[^/#?\s]+\/?(?:\?[^#]*)?#\/(d|decks)\/([^/?#\s]+)\/?(?:[?#].*)?$/;
+/** Convex document ids: lower-case letters and digits. */
+const DECK_ID_RE = /^[a-z0-9]{20,40}$/;
+
+export type OurDeckLink = { shareKey: string } | { deckId: string };
 
 /**
- * The share key in a CommandQuest deck link, else null. The deck is read from our own database
- * (with the share page's visibility rules), so the link's host doesn't matter and nothing is fetched.
+ * The deck a CommandQuest link names (a share link, an editor link or a bare share key), else
+ * null. The deck is read from our own database with its visibility rules, so the link's host
+ * doesn't matter and nothing is fetched.
  */
-export function shareKeyFromLink(url: string): string | null {
+export function ourDeckLink(url: string): OurDeckLink | null {
   const u = url.trim();
-  const key = SHARE_LINK.exec(u)?.[1] ?? u;
-  return SHARE_KEY_RE.test(key) ? key : null;
+  const m = DECK_LINK.exec(u);
+  if (m?.[1] === "decks") return DECK_ID_RE.test(m[2]) ? { deckId: m[2] } : null;
+  const key = m?.[2] ?? u;
+  return SHARE_KEY_RE.test(key) ? { shareKey: key } : null;
 }
 
 const ORDER: Board[] = ["commander", "main", "side", "maybe"];

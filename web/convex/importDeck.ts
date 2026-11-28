@@ -2,10 +2,10 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
-import { deckSource, shareKeyFromLink, parseArchidekt, parseMoxfield, type ImportedDeck } from "./model/importers";
+import { deckSource, ourDeckLink, parseArchidekt, parseMoxfield, type ImportedDeck } from "./model/importers";
 
 /**
- * Imports a deck from a link. A CommandQuest share link is read from our own database. A public
+ * Imports a deck from a link. A CommandQuest share or editor link is read from our own database. A public
  * Moxfield or Archidekt deck is fetched here, on Convex, because those APIs don't allow browser
  * (CORS) requests. Moxfield sometimes blocks unknown clients. Moxfield hands out approved
  * User-Agent strings on request: set it as the MOXFIELD_USER_AGENT environment variable.
@@ -14,10 +14,16 @@ export const fromUrl = action({
   args: { url: v.string() },
   handler: async (ctx, { url }): Promise<ImportedDeck> => {
     if (!(await getAuthUserId(ctx))) throw new ConvexError("Sign in first.");
-    const key = shareKeyFromLink(url);
-    if (key) {
-      const deck: ImportedDeck | null = await ctx.runQuery(internal.sharing.forImport, { key });
-      if (!deck) throw new ConvexError("That CommandQuest deck wasn't found. It may be private, or the link may have changed.");
+    const ours = ourDeckLink(url);
+    if (ours) {
+      const deck: ImportedDeck | null = await ctx.runQuery(internal.sharing.forImport, ours);
+      if (!deck) {
+        throw new ConvexError(
+          "deckId" in ours
+            ? "That CommandQuest deck wasn't found, or it isn't public. Ask its owner for its share link."
+            : "That CommandQuest deck wasn't found. It may be private, or the link may have changed.",
+        );
+      }
       return deck;
     }
     const src = deckSource(url);
