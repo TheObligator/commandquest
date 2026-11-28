@@ -1,0 +1,6 @@
+{
+  "category": "fixed",
+  "title": "Card pictures that fail to load try again by themselves",
+  "date": "2026-11-28T09:15:53.405Z",
+  "body": "A card picture that doesn't load keeps retrying in the background, less and less often, and right away when you come back to the tab or your connection returns, instead of staying blank for the rest of the game."
+}

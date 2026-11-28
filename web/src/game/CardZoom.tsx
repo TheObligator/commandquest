@@ -5,6 +5,7 @@
 //   Scryfall oracle text next to it (every face), plus what's on it in this game.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { manaCost, rulesText } from "../dom";
+import { retryDelay, retryUrl } from "../retry";
 import { cached, imageUrl, isSideways, rulings, type CardFace, type Ruling } from "../scryfall";
 import { NoPicture } from "../components/CardImg";
 import { Spinner, Waiting } from "../components/Spinner";
@@ -72,14 +73,22 @@ function smallImage(card: CardView): string | undefined {
 /** The large image, over the small one (enlarged, with a spinner) until it arrives. */
 function BigImage({ src, small, alt }: { src: string; small?: string; alt: string }) {
   const [state, setState] = useState<"loading" | "here" | "failed">("loading");
+  const [attempt, setAttempt] = useState(0);
   const ref = useRef<HTMLImageElement>(null);
   useLayoutEffect(() => {
+    setAttempt(0);
     setState(ref.current?.complete && ref.current.naturalWidth > 0 ? "here" : "loading");
   }, [src]);
+  // Didn't load: keep trying by itself while it's open (the small image stands in meanwhile).
+  useEffect(() => {
+    if (state !== "failed") return;
+    const t = window.setTimeout(() => (setState("loading"), setAttempt((n) => n + 1)), retryDelay(attempt));
+    return () => clearTimeout(t);
+  }, [state, attempt]);
   return (
     <span className={`big-img ${state}${small ? "" : " shimmer"}`}>
       {state !== "here" && small && <img className="big-img-small" src={small} alt="" />}
-      <img ref={ref} className="big-img-full" src={src} alt={alt} onLoad={() => setState("here")} onError={() => setState("failed")} />
+      <img key={attempt} ref={ref} className="big-img-full" src={retryUrl(src, attempt)} alt={alt} onLoad={() => setState("here")} onError={() => setState("failed")} />
       {state === "loading" && <span className="big-img-spin"><Spinner /></span>}
       {state === "failed" && !small && <NoPicture name={alt} />}
     </span>

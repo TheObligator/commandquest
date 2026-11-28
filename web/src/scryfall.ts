@@ -12,6 +12,7 @@
 //  - Cards looked up by name come from our own copy of Scryfall's bulk data when the site has one
 //    (src/carddata.ts), so most of them need no API request at all.
 
+import { retryDelay } from "./retry";
 import { capJson } from "./app/storageRoom";
 import { CARD_DATA_VERSION, decode, isTokenLike, lookupNames, shardOf, trimCard, type CardDataManifest, type StoredCard } from "./carddata";
 import { createQueue } from "./scryfallQueue";
@@ -610,9 +611,19 @@ const noCard = new Map<string, "missing" | "failed">();
 const watchers = new Set<() => void>();
 let lookups = 0;
 let wanted = new Set<string>();
-const AUTO_RETRY_MS = 15_000;
-const MAX_AUTO_RETRIES = 4;
-let autoRetries = 0;
+/** Failed lookups in a row, by name: how long to wait before asking again by itself (no limit). */
+const lookupFailures = new Map<string, number>();
+/** Back online or back to this tab: ask again now for every card that couldn't be looked up. */
+function retryFailedNow() {
+  if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+  for (const [key, state] of noCard) if (state === "failed") wantCard(failedNames.get(key) ?? key, true);
+}
+/** The name as it was asked for, by its lowercase key. */
+const failedNames = new Map<string, string>();
+if (typeof window !== "undefined") {
+  window.addEventListener("online", retryFailedNow);
+  document.addEventListener("visibilitychange", retryFailedNow);
+}
 
 export const onLookup = (fn: () => void) => {
   watchers.add(fn);
@@ -639,12 +650,18 @@ export function wantCard(name: string, again = false) {
     const done = (state: "missing" | "failed") => {
       const without = names.filter((n) => !cached({ name: n, quantity: 1, board: "main" }));
       for (const n of without) noCard.set(n.toLowerCase(), state);
+      for (const n of names) if (!without.includes(n) || state === "missing") lookupFailures.delete(n.toLowerCase());
       changed();
-      // Couldn't ask: a few more tries by themselves. (The card also offers one.)
-      if (state === "failed" && without.length && autoRetries < MAX_AUTO_RETRIES) {
-        autoRetries++;
-        setTimeout(() => without.forEach((n) => noCard.get(n.toLowerCase()) === "failed" && wantCard(n, true)), AUTO_RETRY_MS);
-      } else if (state === "missing") autoRetries = 0;
+      // Couldn't ask: keep trying by itself, less and less often. (The card also offers to try now.)
+      if (state === "failed") {
+        for (const n of without) {
+          const key = n.toLowerCase();
+          const tries = lookupFailures.get(key) ?? 0;
+          lookupFailures.set(key, tries + 1);
+          failedNames.set(key, n);
+          setTimeout(() => noCard.get(key) === "failed" && wantCard(n, true), retryDelay(tries + 1));
+        }
+      }
     };
     resolve(names.map((n) => ({ name: n, quantity: 1, board: "main" as const }))).then(() => done("missing"), () => done("failed"));
   });
